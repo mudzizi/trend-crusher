@@ -11,9 +11,11 @@ env/
 
 # Project specific
 data/
+artifacts/
 log/
 reports/
 static/
+timeseries/
 *.db
 *.csv
 nohup.out

@@ -47,5 +47,9 @@ CONFIG = {
     # --- Trading Costs ---
     "FEE_RATE": 0.0004,
     "SLIPPAGE": 0.0005,
+    "MAX_TRADE_LOSS_PCT_CAP": None,
     "DATA_DIR": "data",
+    "TIMESERIES_DIR": os.getenv("TIMESERIES_DIR", "timeseries"),
+    "SNAPSHOT_DIR": os.getenv("SNAPSHOT_DIR", "artifacts/research/snapshots"),
+    "ROLLING_TIMESERIES": os.getenv("ROLLING_TIMESERIES", "True").lower() == "true",
 }

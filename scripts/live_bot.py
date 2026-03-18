@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
+from src.risk import calculate_position_size as shared_calculate_position_size
 from src.telegram_utils import TelegramNotifier
 from src.db_manager import DBManager
 from src.visualizer import TradingVisualizer
@@ -180,18 +181,18 @@ class TrendCrusherLive:
                     logger.error(f"❌ Exit Order Failed: {e}")
         else:
             # 1. Calculate Risk-based Quantity
-            risk_amt = self.session_capital * CONFIG["RISK_PER_TRADE"]
             stop_dist = abs(price - self.sl_price)
             if stop_dist == 0: return
-            
-            raw_qty = risk_amt / stop_dist
-            
-            # 2. Apply Maximum Leverage Cap (Margin Safety)
-            max_notional = self.session_capital * CONFIG.get("MAX_LEVERAGE", 5)
-            max_qty = max_notional / price
-            
-            # Final Qty is the minimum of risk-based and max-leverage-based
-            final_qty = min(raw_qty, max_qty)
+
+            raw_qty = shared_calculate_position_size(
+                capital=self.session_capital,
+                price=price,
+                stop_loss_price=self.sl_price,
+                risk_pct=CONFIG["RISK_PER_TRADE"],
+                max_leverage=CONFIG.get("MAX_LEVERAGE"),
+                max_trade_loss_pct_cap=CONFIG.get("MAX_TRADE_LOSS_PCT_CAP"),
+            )
+            final_qty = raw_qty
             
             # 3. Handle Precision & Min Quantity
             try:

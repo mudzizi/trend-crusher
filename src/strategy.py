@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
 from src.config import CONFIG
+from src.risk import calculate_position_size as shared_calculate_position_size
 
 class TrendCrusherV2:
     def __init__(self, config=CONFIG):
@@ -19,9 +20,14 @@ class TrendCrusherV2:
         self.equity_curve = []
 
     def calculate_position_size(self, price, stop_loss_price, risk_pct):
-        risk_amt = self.capital * risk_pct
-        stop_dist = abs(price - stop_loss_price)
-        return risk_amt / stop_dist if stop_dist > 0 else 0
+        return shared_calculate_position_size(
+            capital=self.capital,
+            price=price,
+            stop_loss_price=stop_loss_price,
+            risk_pct=risk_pct,
+            max_leverage=self.c.get("MAX_LEVERAGE"),
+            max_trade_loss_pct_cap=self.c.get("MAX_TRADE_LOSS_PCT_CAP"),
+        )
 
     def run_precision_backtest(self, df_sig, df_trend, df_check, vol_mult=None, atr_trail_mult=None, risk_pct=None, ema_period=None):
         vol_mult = vol_mult if vol_mult is not None else self.c["VOL_MULTIPLIER"]
@@ -94,9 +100,34 @@ class TrendCrusherV2:
             self.trades.append({'time': timestamp, 'type': 'OPEN', 'side': side, 'price': self.entry_price})
 
     def _close_position(self, price, timestamp):
-        pnl = (price - self.entry_price) * self.quantity * self.position
-        fee = price * self.quantity * self.c["FEE_RATE"]
-        self.capital += pnl - fee
-        self.trades.append({'time': timestamp, 'type': 'CLOSE', 'price': price})
+        exit_price = price
+        pnl = (exit_price - self.entry_price) * self.quantity * self.position
+        fee = exit_price * self.quantity * self.c["FEE_RATE"]
+        net_change = pnl - fee
+
+        cap_pct = self.c.get("MAX_TRADE_LOSS_PCT_CAP")
+        cap_applied = False
+        if cap_pct is not None and self.quantity > 0 and self.capital > 0:
+            trade_capital_pct = (net_change / self.capital) * 100
+            if trade_capital_pct < -float(cap_pct):
+                target_net_change = -(self.capital * float(cap_pct) / 100)
+                exit_price = self._solve_capped_exit_price(target_net_change)
+                pnl = (exit_price - self.entry_price) * self.quantity * self.position
+                fee = exit_price * self.quantity * self.c["FEE_RATE"]
+                net_change = pnl - fee
+                cap_applied = True
+
+        self.capital += net_change
+        self.trades.append({
+            'time': timestamp,
+            'type': 'CLOSE',
+            'price': exit_price,
+            'cap_applied': cap_applied,
+        })
         self.position = 0
         self.last_close_time = timestamp
+
+    def _solve_capped_exit_price(self, target_net_change):
+        if self.position == 1:
+            return (self.entry_price + (target_net_change / self.quantity)) / (1 - self.c["FEE_RATE"])
+        return (self.entry_price - (target_net_change / self.quantity)) / (1 + self.c["FEE_RATE"])

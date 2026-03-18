@@ -12,6 +12,8 @@
 - **Volume Burst**: 평균 거래량 대비 설정값 이상의 거래량이 터졌을 때만 신호로 인정하여 가짜 돌파(Fakeout)를 필터링합니다.
 - **Exit Strategy**: ATR(Average True Range) 기반의 초기 손절선과 수익 발생 시 작동하는 **Dynamic Trailing Stop**을 결합하여 이익을 보존합니다.
 
+현재 운영 기준 기본 전략은 [DEFAULT_STRATEGY.md](/Users/k/Projects/trend-crusher/DEFAULT_STRATEGY.md)에 정리되어 있습니다.
+
 ---
 
 ## 📂 프로젝트 구조 (Project Structure)

@@ -64,3 +64,26 @@ def test_close_position_pnl(base_config):
     assert strategy.position == 0
     assert strategy.capital == pytest.approx(10097.96)
     assert len(strategy.trades) == 1
+
+
+def test_close_position_loss_cap(base_config):
+    capped_config = base_config | {"MAX_TRADE_LOSS_PCT_CAP": 2.0}
+    strategy = TrendCrusherV2(config=capped_config)
+    strategy.position = 1
+    strategy.entry_price = 100.0
+    strategy.quantity = 20.0
+    strategy.capital = 10000.0
+
+    strategy._close_position(80.0, pd.Timestamp.now())
+
+    assert strategy.position == 0
+    assert strategy.capital == pytest.approx(9800.0, rel=1e-6)
+    assert strategy.trades[0]["cap_applied"] is True
+
+
+def test_position_size_respects_leverage_and_loss_cap(base_config):
+    capped_config = base_config | {"MAX_LEVERAGE": 1.0, "MAX_TRADE_LOSS_PCT_CAP": 1.0}
+    strategy = TrendCrusherV2(config=capped_config)
+    qty = strategy.calculate_position_size(price=100.0, stop_loss_price=99.0, risk_pct=0.02)
+
+    assert qty == pytest.approx(100.0)
