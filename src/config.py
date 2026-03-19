@@ -48,4 +48,12 @@ CONFIG = {
     "FEE_RATE": 0.0004,
     "SLIPPAGE": 0.0005,
     "DATA_DIR": "data",
+    
+    # --- New Strategy Improvements ---
+    "ADX_FILTER_LEVEL": 20, 
+    "USE_ADAPTIVE_TRAIL": True,
+    "ADAPTIVE_TRAIL_STEPS": [
+        {"pnl_pct": 10, "atr_mult": 3.5},
+        {"pnl_pct": 20, "atr_mult": 2.5}
+    ],
 }

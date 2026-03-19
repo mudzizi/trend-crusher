@@ -33,6 +33,7 @@ class TrendCrusherV2:
         df['upper'], df['lower'] = calculate_donchian(df, period=self.c["DONCHIAN_PERIOD"])
         df['atr'] = calculate_atr(df, period=14)
         df['avg_vol'] = calculate_avg_vol(df, period=20)
+        df['adx'] = calculate_adx(df, period=14)
         
         ema_vals = calculate_ema(df_trend, period=ema_period)
         df_h = pd.DataFrame({'timestamp': df_trend['timestamp'], 'ema_h': ema_vals}).set_index('timestamp')
@@ -46,6 +47,7 @@ class TrendCrusherV2:
             if curr_time not in df_check_idx.index: continue
             
             if self.position != 0:
+                # (중략 - 포지션 관리 로직)
                 tf_delta = pd.to_timedelta(self.c["SIGNAL_TIMEFRAME"])
                 next_bar = curr_time + tf_delta
                 try: intra_data = df_check_idx.loc[curr_time : next_bar]
@@ -54,23 +56,35 @@ class TrendCrusherV2:
                 closed = False
                 for m_time, m_row in intra_data.iterrows():
                     m_close = m_row['close']
+                    
+                    # 1. Adaptive Trailing Stop Mult calculation
+                    curr_atr_mult = atr_trail_mult
+                    if self.c.get("USE_ADAPTIVE_TRAIL", False):
+                        pnl_pct = ((m_close / self.entry_price) - 1) * 100 * self.position
+                        for step in self.c.get("ADAPTIVE_TRAIL_STEPS", []):
+                            if pnl_pct >= step['pnl_pct']:
+                                curr_atr_mult = min(curr_atr_mult, step['atr_mult'])
+
+                    # 2. Trailing Stop / SL Check
                     if self.position == 1:
                         self.max_price_seen = max(self.max_price_seen, m_close)
-                        trail_sl = self.max_price_seen - (row['atr'] * atr_trail_mult)
+                        trail_sl = self.max_price_seen - (row['atr'] * curr_atr_mult)
                         if m_close <= trail_sl or m_close <= self.sl_price:
                             self._close_position(m_close, m_time); closed = True; break
                     else:
                         self.min_price_seen = min(self.min_price_seen, m_close)
-                        trail_sl = self.min_price_seen + (row['atr'] * atr_trail_mult)
+                        trail_sl = self.min_price_seen + (row['atr'] * curr_atr_mult)
                         if m_close >= trail_sl or m_close >= self.sl_price:
                             self._close_position(m_close, m_time); closed = True; break
                 if closed: continue
 
             if self.position == 0 and curr_time > self.last_close_time:
                 is_vol_burst = row['volume'] > (row['avg_vol'] * vol_mult)
-                if is_vol_burst and row['close'] > row['ema_h'] and row['close'] > row['upper']:
+                is_trending = row['adx'] > self.c["ADX_FILTER_LEVEL"]
+
+                if is_vol_burst and is_trending and row['close'] > row['ema_h'] and row['close'] > row['upper']:
                     self._open_position(1, row['close'], row['atr'], curr_time, risk_pct)
-                elif is_vol_burst and row['close'] < row['ema_h'] and row['close'] < row['lower']:
+                elif is_vol_burst and is_trending and row['close'] < row['ema_h'] and row['close'] < row['lower']:
                     self._open_position(-1, row['close'], row['atr'], curr_time, risk_pct)
 
             self.equity_curve.append(self.capital)

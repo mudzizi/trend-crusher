@@ -75,6 +75,7 @@ class TrendCrusherLive:
         df_1h['upper'], df_1h['lower'] = calculate_donchian(df_1h, CONFIG["DONCHIAN_PERIOD"])
         df_1h['atr'] = calculate_atr(df_1h, CONFIG["ATR_PERIOD"])
         df_1h['avg_vol'] = calculate_avg_vol(df_1h, CONFIG["AVG_VOL_PERIOD"])
+        df_1h['adx'] = calculate_adx(df_1h, 14)
         
         ema_4h = calculate_ema(df_4h, CONFIG["EMA_TREND_PERIOD"])
         
@@ -107,6 +108,7 @@ class TrendCrusherLive:
                 upper = row['upper']
                 lower = row['lower']
                 atr = row['atr']
+                adx = row['adx']
                 curr_vol = row['volume']
                 avg_vol = row['avg_vol']
                 vol_ratio = curr_vol / (avg_vol + 1e-10)
@@ -114,24 +116,31 @@ class TrendCrusherLive:
 
                 # Log to both console and file
                 logger.info(f"Price: {c_close:,.2f} | Session Cap: {self.session_capital:,.2f} | Pos: {self.position}")
-                logger.info(f"  Trend: {trend_status} | Vol: {vol_ratio:.2f}x | ST: Up {upper:,.2f} / Dn {lower:,.2f}")
+                logger.info(f"  Trend: {trend_status} | ADX: {adx:.1f} | Vol: {vol_ratio:.2f}x | ST: Up {upper:,.2f} / Dn {lower:,.2f}")
                 
                 if self.position != 0:
                     pnl_now = ((c_close / self.entry_price) - 1) * 100 * self.position
                     
-                    # --- Calculate Current Active SL (Initial vs Trailing) ---
+                    # --- 1. Calculate Adaptive ATR Multiplier ---
+                    curr_atr_mult = CONFIG["TRAILING_ATR_MULT"]
+                    if CONFIG.get("USE_ADAPTIVE_TRAIL", False):
+                        for step in CONFIG.get("ADAPTIVE_TRAIL_STEPS", []):
+                            if pnl_now >= step['pnl_pct']:
+                                curr_atr_mult = min(curr_atr_mult, step['atr_mult'])
+
+                    # --- 2. Calculate Current Active SL (Initial vs Adaptive Trailing) ---
                     if self.position == 1:
                         self.max_price_seen = max(self.max_price_seen, c_close)
-                        trail_sl = self.max_price_seen - (atr * CONFIG["TRAILING_ATR_MULT"])
+                        trail_sl = self.max_price_seen - (atr * curr_atr_mult)
                         active_sl = max(self.sl_price, trail_sl)
                         sl_type = "TP" if active_sl > self.entry_price else "SL"
                     else:
                         self.min_price_seen = min(self.min_price_seen, c_close)
-                        trail_sl = self.min_price_seen + (atr * CONFIG["TRAILING_ATR_MULT"])
+                        trail_sl = self.min_price_seen + (atr * curr_atr_mult)
                         active_sl = min(self.sl_price, trail_sl)
                         sl_type = "TP" if active_sl < self.entry_price else "SL"
 
-                    logger.info(f"  Current PnL: {pnl_now:+.2f}% | Entry: {self.entry_price:,.2f} | {sl_type}: {active_sl:,.2f}")
+                    logger.info(f"  PnL: {pnl_now:+.2f}% | ATR Mult: {curr_atr_mult:.1f}x | {sl_type}: {active_sl:,.2f}")
                     
                     # --- 서버사이드 손절 동기화 (트레일링 시) ---
                     # 소수점 오차 방지를 위해 가격이 일정 수준 이상 변했을 때만 업데이트 (0.1% 기준)
@@ -166,9 +175,10 @@ class TrendCrusherLive:
                 # --- MONITORING ENTRY ---
                 if self.position == 0:
                     is_vol_burst = curr_vol > (avg_vol * CONFIG["VOL_MULTIPLIER"])
+                    is_trending = adx > CONFIG["ADX_FILTER_LEVEL"]
                     
-                    if is_vol_burst and c_close > ema_4h_val and c_close > upper:
-                        logger.info(f"🚀 BUY SIGNAL: Price {c_close:,.2f} > Upper {upper:,.2f}")
+                    if is_vol_burst and is_trending and c_close > ema_4h_val and c_close > upper:
+                        logger.info(f"🚀 BUY SIGNAL: Price {c_close:,.2f} > Upper {upper:,.2f} (ADX: {adx:.1f})")
                         self.sl_price = c_close - (atr * CONFIG["INITIAL_SL_ATR"])
                         self.execute_order(1, c_close)
                         vol_ratio = curr_vol / (avg_vol + 1e-10)
@@ -177,8 +187,8 @@ class TrendCrusherLive:
                         self.notifier.notify_entry("LONG", c_close, self.sl_price, strength)
                         self.position = 1; self.entry_price = c_close; self.max_price_seen = c_close
                         
-                    elif is_vol_burst and c_close < ema_4h_val and c_close < lower:
-                        logger.info(f"📉 SELL SIGNAL: Price {c_close:,.2f} < Lower {lower:,.2f}")
+                    elif is_vol_burst and is_trending and c_close < ema_4h_val and c_close < lower:
+                        logger.info(f"📉 SELL SIGNAL: Price {c_close:,.2f} < Lower {lower:,.2f} (ADX: {adx:.1f})")
                         self.sl_price = c_close + (atr * CONFIG["INITIAL_SL_ATR"])
                         self.execute_order(-1, c_close)
                         strength = min(100, vol_ratio * 50)

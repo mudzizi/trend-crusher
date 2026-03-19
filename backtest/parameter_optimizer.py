@@ -14,36 +14,37 @@ def calculate_mdd(equity_curve):
     return np.max(drawdown)
 
 def run_parameter_search():
-    # 1. 최신 거래대금 상위 20개 코인으로 업데이트
-    symbols = [
-        'BTC/USDT', 'ETH/USDT', 'ALPACA/USDT', 'SOL/USDT', 'XAG/USDT', 
-        'XAU/USDT', 'XRP/USDT', 'HYPE/USDT', 'ZEC/USDT', 'DOGE/USDT', 
-        'SIREN/USDT', 'BNX/USDT', 'BARD/USDT', 'BNB/USDT', '1000PEPE/USDT', 
-        'RIVER/USDT', 'PIPPIN/USDT', 'ALPHA/USDT', 'ENJ/USDT', 'PAXG/USDT'
-    ]
+    # 1. 대상 심볼 설정
+    symbols = ['ETH/USDT', 'TRUMP/USDT', 'XAU/USDT', 'SOL/USDT']
+    
+    # 2. 탐색할 파라미터 그리드 (수익률 복구를 위해 범위를 넓힘)
     vol_multipliers = [1.5, 2.0, 2.5]
-    trailing_mults = [3.5, 4.0, 4.5]
-    risks = [0.02] # 리스크 2% 고정
+    adx_filters = [15, 20, 25]
     ema_periods = [100, 200]
+    
+    # 고정 파라미터 (V3 검증된 기본값)
+    trailing_mult = 4.5
+    risk_pct = 0.02
 
-    # CONFIG의 BACKTEST_DAYS를 365로 강제 설정
     CONFIG["BACKTEST_DAYS"] = 365
-
     results = []
 
-    combinations = list(itertools.product(symbols, vol_multipliers, trailing_mults, risks, ema_periods))
+    combinations = list(itertools.product(symbols, vol_multipliers, adx_filters, ema_periods))
     total_runs = len(combinations)
     
-    print(f"Starting Mega Grid Search: Total {total_runs} combinations...")
+    print(f"🚀 Starting V3 Parameter Optimization: Total {total_runs} combinations...")
 
-    for i, (sym, vol, trail, risk, ema) in enumerate(combinations):
+    for i, (sym, vol, adx, ema) in enumerate(combinations):
         current_config = CONFIG.copy()
         current_config.update({
             "SYMBOL": sym,
             "VOL_MULTIPLIER": vol,
-            "TRAILING_ATR_MULT": trail,
-            "RISK_PER_TRADE": risk,
-            "EMA_TREND_PERIOD": ema
+            "ADX_FILTER_LEVEL": adx,
+            "EMA_TREND_PERIOD": ema,
+            "TRAILING_ATR_MULT": trailing_mult,
+            "RISK_PER_TRADE": risk_pct,
+            "USE_ADAPTIVE_TRAIL": True, # V3 핵심 기능 활성화
+            "ADAPTIVE_TRAIL_STEPS": [{"pnl_pct": 10, "atr_mult": 3.5}, {"pnl_pct": 20, "atr_mult": 2.5}]
         })
 
         clean_sym = sym.replace('/', '_')
@@ -60,13 +61,7 @@ def run_parameter_search():
         df_check = pd.read_csv(f_check)
 
         strategy = TrendCrusherV2(config=current_config)
-        trades, equity_curve = strategy.run_precision_backtest(
-            df_sig, df_trend, df_check, 
-            vol_mult=vol, 
-            atr_trail_mult=trail,
-            risk_pct=risk,
-            ema_period=ema
-        )
+        trades, equity_curve = strategy.run_precision_backtest(df_sig, df_trend, df_check)
 
         if trades:
             ret = ((strategy.capital / current_config["SEED"]) - 1) * 100
@@ -76,8 +71,7 @@ def run_parameter_search():
             results.append({
                 "Symbol": sym,
                 "Vol_Mult": vol,
-                "Trail_Mult": trail,
-                "Risk": risk,
+                "ADX_Filter": adx,
                 "EMA_Period": ema,
                 "Return(%)": round(ret, 2),
                 "MDD(%)": round(mdd, 2),
@@ -85,7 +79,7 @@ def run_parameter_search():
                 "Trades": len(trades) // 2
             })
         
-        if (i+1) % 5 == 0:
+        if (i+1) % 10 == 0:
             print(f"Progress: {i+1}/{total_runs} combinations tested.")
 
     if not results:

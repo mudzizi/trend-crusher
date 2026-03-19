@@ -38,3 +38,12 @@ def test_calculate_avg_vol(mock_ohlcv):
     # shift(1) 확인: 6번째 행은 이전 5개의 평균이어야 함
     expected_avg = np.mean([100, 120, 110, 130, 150])
     assert avg_vol.iloc[5] == expected_avg
+
+def test_calculate_adx(mock_ohlcv):
+    from src.indicators import calculate_adx
+    adx = calculate_adx(mock_ohlcv, period=5)
+    assert len(adx) == len(mock_ohlcv)
+    # ADX should be between 0 and 100
+    valid_adx = adx.dropna()
+    assert (valid_adx >= 0).all()
+    assert (valid_adx <= 100).all()
