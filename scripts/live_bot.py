@@ -49,6 +49,7 @@ class TrendCrusherLive:
         self.entry_price = 0
         self.quantity = 0
         self.sl_price = 0
+        self.sl_order_id = None # 서버사이드 손절 주문 ID 추적
         self.max_price_seen = 0
         self.min_price_seen = float('inf')
         
@@ -78,6 +79,22 @@ class TrendCrusherLive:
         ema_4h = calculate_ema(df_4h, CONFIG["EMA_TREND_PERIOD"])
         
         return df_1h, ema_4h.iloc[-1]
+
+    def sync_sl_order(self, new_sl):
+        # 트레일링 스탑에 맞춰 거래소의 손절 주문을 업데이트 (취소 후 재주문)
+        if CONFIG["DRY_RUN"] or not self.sl_order_id: return
+        
+        try:
+            # 기존 주문 취소
+            self.exchange.cancel_order(self.sl_order_id, self.symbol)
+            # 새 주문 생성
+            sl_side = 'sell' if self.position == 1 else 'buy'
+            params = {'stopPrice': new_sl, 'reduceOnly': True}
+            sl_order = self.exchange.create_order(self.symbol, 'STOP_MARKET', sl_side, self.quantity, None, params)
+            self.sl_order_id = sl_order['id']
+            logger.info(f"🔄 Server-side SL Updated: {new_sl:,.2f}")
+        except Exception as e:
+            logger.error(f"Failed to sync SL: {e}")
 
     def run(self):
         while True:
@@ -115,6 +132,12 @@ class TrendCrusherLive:
                         sl_type = "TP" if active_sl < self.entry_price else "SL"
 
                     logger.info(f"  Current PnL: {pnl_now:+.2f}% | Entry: {self.entry_price:,.2f} | {sl_type}: {active_sl:,.2f}")
+                    
+                    # --- 서버사이드 손절 동기화 (트레일링 시) ---
+                    # 소수점 오차 방지를 위해 가격이 일정 수준 이상 변했을 때만 업데이트 (0.1% 기준)
+                    if not CONFIG["DRY_RUN"] and self.sl_order_id and abs(active_sl - self.sl_price) > (self.entry_price * 0.001):
+                        self.sync_sl_order(active_sl)
+                        self.sl_price = active_sl # 기준점 업데이트
 
                 # --- MONITORING EXIT ---
                 if self.position != 0:
@@ -174,6 +197,11 @@ class TrendCrusherLive:
             if not CONFIG["DRY_RUN"]:
                 side = 'sell' if self.position == 1 else 'buy'
                 try:
+                    # 0. 기존 손절 주문 있으면 취소
+                    if self.sl_order_id:
+                        self.exchange.cancel_order(self.sl_order_id, self.symbol)
+                        self.sl_order_id = None
+                    
                     self.exchange.create_market_order(self.symbol, side, self.quantity)
                     logger.info(f"✅ Closed Position: {side} {self.quantity}")
                 except Exception as e:
@@ -189,17 +217,13 @@ class TrendCrusherLive:
             # 2. Apply Maximum Leverage Cap (Margin Safety)
             max_notional = self.session_capital * CONFIG.get("MAX_LEVERAGE", 5)
             max_qty = max_notional / price
-            
-            # Final Qty is the minimum of risk-based and max-leverage-based
             final_qty = min(raw_qty, max_qty)
             
             # 3. Handle Precision & Min Quantity
             try:
                 self.quantity = float(self.exchange.amount_to_precision(self.symbol, final_qty))
-                
                 market = self.exchange.market(self.symbol)
                 min_qty = market['limits']['amount']['min']
-                
                 if self.quantity < min_qty:
                     logger.warning(f"⚠️ Qty {self.quantity} < Min {min_qty}. Adjusting to min.")
                     self.quantity = min_qty
@@ -215,8 +239,16 @@ class TrendCrusherLive:
                     self.exchange.set_leverage(int(CONFIG.get("MAX_LEVERAGE", 5)), self.symbol)
                     
                     side = 'buy' if direction == 1 else 'sell'
-                    self.exchange.create_market_order(self.symbol, side, self.quantity)
+                    order = self.exchange.create_market_order(self.symbol, side, self.quantity)
                     logger.info(f"✅ Opened Position: {side} {self.quantity}")
+                    
+                    # --- 서버사이드 손절 주문 (STOP_MARKET) 즉시 체결 ---
+                    sl_side = 'sell' if direction == 1 else 'buy'
+                    params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+                    sl_order = self.exchange.create_order(self.symbol, 'STOP_MARKET', sl_side, self.quantity, None, params)
+                    self.sl_order_id = sl_order['id']
+                    logger.info(f"🛡️ Server-side SL Order Placed: {self.sl_price:,.2f} (ID: {self.sl_order_id})")
+                    
                 except Exception as e:
                     logger.error(f"❌ Entry Order Failed: {e}")
                     self.notifier.notify_error(f"Order Failed: {e}")

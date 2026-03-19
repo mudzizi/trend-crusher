@@ -14,12 +14,20 @@ def calculate_mdd(equity_curve):
     return np.max(drawdown)
 
 def run_parameter_search():
-    # 1. 탐색할 파라미터 범위 설정 (Grid)
-    symbols = ["ETH/USDT", "SOL/USDT", "BTC/USDT", "TRUMP/USDT"]
+    # 1. 최신 거래대금 상위 20개 코인으로 업데이트
+    symbols = [
+        'BTC/USDT', 'ETH/USDT', 'ALPACA/USDT', 'SOL/USDT', 'XAG/USDT', 
+        'XAU/USDT', 'XRP/USDT', 'HYPE/USDT', 'ZEC/USDT', 'DOGE/USDT', 
+        'SIREN/USDT', 'BNX/USDT', 'BARD/USDT', 'BNB/USDT', '1000PEPE/USDT', 
+        'RIVER/USDT', 'PIPPIN/USDT', 'ALPHA/USDT', 'ENJ/USDT', 'PAXG/USDT'
+    ]
     vol_multipliers = [1.5, 2.0, 2.5]
     trailing_mults = [3.5, 4.0, 4.5]
-    risks = [0.01, 0.02]
-    ema_periods = [50, 100, 200]
+    risks = [0.02] # 리스크 2% 고정
+    ema_periods = [100, 200]
+
+    # CONFIG의 BACKTEST_DAYS를 365로 강제 설정
+    CONFIG["BACKTEST_DAYS"] = 365
 
     results = []
 
