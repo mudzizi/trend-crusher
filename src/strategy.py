@@ -91,12 +91,24 @@ class TrendCrusherV2:
             self.position = direction
             self.max_price_seen = self.entry_price
             self.min_price_seen = self.entry_price
-            self.trades.append({'time': timestamp, 'type': 'OPEN', 'side': side, 'price': self.entry_price})
+            self.trades.append({
+                'time': timestamp, 
+                'type': 'OPEN', 
+                'side': side, 
+                'price': self.entry_price,
+                'qty': self.quantity
+            })
 
     def _close_position(self, price, timestamp):
         pnl = (price - self.entry_price) * self.quantity * self.position
         fee = price * self.quantity * self.c["FEE_RATE"]
-        self.capital += pnl - fee
-        self.trades.append({'time': timestamp, 'type': 'CLOSE', 'price': price})
+        actual_pnl_usdt = pnl - fee
+        self.capital += actual_pnl_usdt
+        self.trades.append({
+            'time': timestamp, 
+            'type': 'CLOSE', 
+            'price': price,
+            'pnl_usdt': actual_pnl_usdt
+        })
         self.position = 0
         self.last_close_time = timestamp

@@ -217,13 +217,17 @@ class TrendCrusherLive:
             # 2. Apply Maximum Leverage Cap (Margin Safety)
             max_notional = self.session_capital * CONFIG.get("MAX_LEVERAGE", 5)
             max_qty = max_notional / price
+            
+            # Final Qty is the minimum of risk-based and max-leverage-based
             final_qty = min(raw_qty, max_qty)
             
             # 3. Handle Precision & Min Quantity
             try:
                 self.quantity = float(self.exchange.amount_to_precision(self.symbol, final_qty))
+                
                 market = self.exchange.market(self.symbol)
                 min_qty = market['limits']['amount']['min']
+                
                 if self.quantity < min_qty:
                     logger.warning(f"⚠️ Qty {self.quantity} < Min {min_qty}. Adjusting to min.")
                     self.quantity = min_qty
