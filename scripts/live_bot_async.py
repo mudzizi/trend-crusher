@@ -217,9 +217,16 @@ class SymbolBotAsync:
     def persist_state(self):
         self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_order_id)
 
+    def hot_reload_settings(self, new_params):
+        """Updates internal settings without restarting the bot."""
+        self.settings.update(new_params)
+        self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
+
 async def handle_commands(bots, notifier, pm):
     """Background task to poll and process Telegram commands."""
+    from src.optimizer_engine import OptimizerEngine
     offset = None
+    optimizer = OptimizerEngine(config=CONFIG)
     logger.info("📡 Command Listener active.")
     while True:
         try:
@@ -231,14 +238,41 @@ async def handle_commands(bots, notifier, pm):
                     text = message.get("text", "")
                     chat_id = str(message.get("chat", {}).get("id", ""))
                     
-                    if chat_id != str(CONFIG["TELEGRAM_CHAT_ID"]):
-                        logger.warning(f"Unauthorized command from {chat_id}: {text}")
-                        continue
+                    if chat_id != str(CONFIG["TELEGRAM_CHAT_ID"]): continue
                     
-                    cmd = text.split()[0].lower()
+                    parts = text.split()
+                    cmd = parts[0].lower()
                     
                     if cmd == "/status":
                         await send_summary(bots, notifier, pm)
+                    elif cmd == "/optimize":
+                        if len(parts) < 2:
+                            notifier.notify_status("Usage: /optimize [SYMBOL]")
+                            continue
+                        symbol = parts[1].upper()
+                        bot_key = symbol.replace('/', '').lower()
+                        if bot_key in bots:
+                            notifier.notify_status(f"🧠 Optimization started for {symbol}... (approx 30s)")
+                            best = await optimizer.find_best_params(symbol)
+                            if best:
+                                report = {
+                                    "New Vol": best['vol_m'],
+                                    "New ADX": best['adx_f'],
+                                    "New EMA": best['ema_p'],
+                                    "Past 30d Ret": f"{best['return']:.2f}%",
+                                    "Past 30d MDD": f"{best['mdd']:.2f}%"
+                                }
+                                notifier.send_report(f"Optimization Results: {symbol}", report)
+                                bots[bot_key].hot_reload_settings({
+                                    "VOL_MULTIPLIER": best['vol_m'],
+                                    "ADX_FILTER_LEVEL": best['adx_f'],
+                                    "EMA_TREND_PERIOD": best['ema_p']
+                                })
+                                notifier.notify_status(f"✅ Parameters updated for {symbol}")
+                            else:
+                                notifier.notify_error(f"Failed to optimize {symbol}.")
+                        else:
+                            notifier.notify_error(f"Bot for {symbol} not found.")
                     elif cmd == "/stop":
                         for bot in bots.values(): bot.is_halted = True
                         notifier.notify_status("🛑 New entries HALTED for all symbols.")
@@ -250,7 +284,7 @@ async def handle_commands(bots, notifier, pm):
                         for bot in bots.values():
                             if bot.position != 0: await bot.execute_exit()
                         notifier.notify_status("💀 All positions closed. Bot stopping.")
-                        os._exit(0) # Immediate shutdown
+                        os._exit(0)
                         
         except Exception as e:
             logger.error(f"Command Error: {e}")
