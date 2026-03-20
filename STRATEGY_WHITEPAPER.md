@@ -1,7 +1,7 @@
-# TrendCrusher V7: Strategy Whitepaper
+# TrendCrusher V8: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V7 버전에서는 **웹소켓(WebSocket)**과 **비동기 엔진**을 통해 레이턴시를 혁신적으로 줄였으며, **원자적 주문(Atomic Order)** 시스템을 통해 리스크 관리의 무결성을 확보했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V8 버전에서는 **웹소켓(WebSocket)** 기반의 초저지연 엔진과 **Command & Control** 원격 제어 시스템을 결합하여 운영의 완성도를 극대화했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -24,12 +24,17 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 2.  **Portfolio Dashboard**: 누적 수익률, 승률, 자산 분포를 대시보드에서 실시간 관리.
 
 ### 2.5. 자산 격리 및 연속성 (Asset Isolation & Persistence)
-1.  **Full State Persistence**: 트레일링 변수와 손절 주문 ID를 DB에 실시간 동기화하여 재시작 시 0.1초 만에 복구.
+1.  **Full State Persistence**: 모든 상태를 DB에 실시간 저장하여 봇 재시작 시 0.1초 만에 완벽 복구.
 
-### 2.6. 초저지연 및 원자적 안전 (Zero-Latency & Atomic Safety - V7)
-1.  **WebSocket Streaming**: 10초 주기 폴링을 폐지하고 웹소켓을 통한 실시간 틱 데이터 처리로 슬리피지 최소화.
-2.  **Atomic Entry**: 진입 성공 후 손절(SL) 주문 배치가 실패할 경우, 해당 포지션을 즉시 시장가로 청산하여 무방비 노출을 원천 차단.
-3.  **Asynchronous Execution**: `asyncio`를 기반으로 여러 종목의 시그널과 주문을 병렬 처리하여 병목 현상 제거.
+### 2.6. 초저지연 및 원자적 안전 (Zero-Latency & Atomic Safety)
+1.  **WebSocket Streaming**: 웹소켓을 통한 실시간 틱 데이터 처리로 슬리피지 최소화.
+2.  **Atomic Entry**: 진입 성공 후 손절(SL) 주문 배치가 실패할 경우 즉시 강제 청산하여 리스크 노출 차단.
+
+### 2.7. 원격 지휘 및 통제 (Command & Control - v8.0.0)
+시스템의 실제 운영 안정성을 위해 텔레그램 기반의 양방향 제어 시스템을 도입했습니다.
+1.  **Interactive Commands**: `/status`, `/stop`, `/close_all` 등의 명령어를 통해 자리에 없어도 스마트폰으로 봇을 즉각 제어.
+2.  **Hourly Heartbeat**: 매시간 봇의 생존 여부와 포트폴리오 요약 리포트를 자동 전송하여 침묵에 의한 불안감 해소.
+3.  **Authorized Security**: 사전에 등록된 사용자 ID만 명령을 수행할 수 있도록 보안 강화.
 
 ## 3. 최종 최적화 결과 (Verified 365-Day Backtest)
 최근 1년치(2025.03 ~ 2026.03) 1분봉 정밀 검증 결과입니다. (S-Tier)
@@ -41,7 +46,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 | **ETH/USDT** | **200** | **15** | **2.0x** | **+161.44%** | **19.80%** | **8.15 (A-Tier)** |
 
 ## 4. 결론 (Conclusion)
-TrendCrusher V7은 시장의 틱 하나도 놓치지 않는 예리함과, 어떤 재난 상황에서도 자산을 지켜내는 견고함을 동시에 갖추었습니다. 이제 이 시스템은 단순한 자동매매 봇을 넘어 고성능 알고리즘 트레이딩 엔진으로서 기능합니다.
+TrendCrusher V8은 기술(v7)과 운영(v8)의 완벽한 조화를 목표로 합니다. 초저지연 엔진의 날카로움과 원격 제어 시스템의 견고함이 결합되어, 시장의 어떤 돌발 상황에서도 자산을 안전하게 지키며 수익을 극대화할 것입니다.
 
 ---
 *Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*

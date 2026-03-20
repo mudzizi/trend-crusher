@@ -2,7 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v7.0.1] - 2026-03-21 (Current)
+## [v8.0.0] - 2026-03-21 (Current)
+### Added
+- **Command & Control System**: Bidirectional Telegram communication for remote bot management.
+- **Interactive Commands**: Added `/status`, `/stop`, `/resume`, and `/close_all` (Emergency Kill Switch).
+- **Hourly Heartbeat**: Automated portfolio health reports delivered every hour.
+- **Enhanced Security**: Authorized command execution limited to specific `TELEGRAM_CHAT_ID`.
+
+## [v7.0.1] - 2026-03-21
 ### Added
 - **Atomic Order Safety**: Immediate liquidation if Stop-Loss (SL) placement fails after entry.
 - **Fault-Tolerant Error Handling**: Categorized exceptions (Network, Budget, Terminal) with smart retry/panic protocols.
