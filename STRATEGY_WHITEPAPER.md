@@ -1,7 +1,7 @@
-# TrendCrusher V8: Strategy Whitepaper
+# TrendCrusher V9: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V8 버전에서는 **웹소켓(WebSocket)** 기반의 초저지연 엔진과 **Command & Control** 원격 제어 시스템을 결합하여 운영의 완성도를 극대화했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V9 버전에서는 **Walk-Forward 최적화 엔진**을 통해 시장의 변동성 체제(Volatility Regime) 변화에 스스로 대응하는 지능형 시스템으로 진화했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -24,17 +24,21 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 2.  **Portfolio Dashboard**: 누적 수익률, 승률, 자산 분포를 대시보드에서 실시간 관리.
 
 ### 2.5. 자산 격리 및 연속성 (Asset Isolation & Persistence)
-1.  **Full State Persistence**: 모든 상태를 DB에 실시간 저장하여 봇 재시작 시 0.1초 만에 완벽 복구.
+1.  **Full State Persistence**: 모든 트레일링 변수와 손절 주문 ID를 DB에 실시간 동기화하여 재시작 시 0.1초 만에 복구.
 
 ### 2.6. 초저지연 및 원자적 안전 (Zero-Latency & Atomic Safety)
 1.  **WebSocket Streaming**: 웹소켓을 통한 실시간 틱 데이터 처리로 슬리피지 최소화.
 2.  **Atomic Entry**: 진입 성공 후 손절(SL) 주문 배치가 실패할 경우 즉시 강제 청산하여 리스크 노출 차단.
 
-### 2.7. 원격 지휘 및 통제 (Command & Control - v8.0.0)
-시스템의 실제 운영 안정성을 위해 텔레그램 기반의 양방향 제어 시스템을 도입했습니다.
-1.  **Interactive Commands**: `/status`, `/stop`, `/close_all` 등의 명령어를 통해 자리에 없어도 스마트폰으로 봇을 즉각 제어.
-2.  **Hourly Heartbeat**: 매시간 봇의 생존 여부와 포트폴리오 요약 리포트를 자동 전송하여 침묵에 의한 불안감 해소.
-3.  **Authorized Security**: 사전에 등록된 사용자 ID만 명령을 수행할 수 있도록 보안 강화.
+### 2.7. 원격 지휘 및 통제 (Command & Control)
+1.  **Interactive Commands**: `/status`, `/stop`, `/close_all` 등의 명령어를 통해 스마트폰으로 봇을 즉각 제어.
+2.  **Hourly Heartbeat**: 매시간 봇의 생존 여부와 포트폴리오 요약 리포트를 자동 전송.
+
+### 2.8. 자가 적응형 최적화 (Self-Adaptive Optimization - v9.0.0)
+시장의 변화하는 성격에 대응하기 위해 전진 분석(Walk-Forward Analysis) 엔진을 도입했습니다.
+1.  **Recent Lookback Analysis**: 최근 30일간의 시장 데이터를 기반으로 수천 가지 파라미터 조합을 시뮬레이션.
+2.  **Efficiency Ranking (Return/MDD)**: 단순히 수익만 쫓는 것이 아니라, 가장 안정적인 수익 곡선을 그렸던 `VOL_MULTIPLIER`, `ADX_FILTER`, `EMA_PERIOD` 조합을 자동 선발.
+3.  **Live Hot-Reload**: 봇 중단 없이 실시간으로 최적화된 파라미터를 적용하여 변화하는 시장 변동성에 즉각 대응.
 
 ## 3. 최종 최적화 결과 (Verified 365-Day Backtest)
 최근 1년치(2025.03 ~ 2026.03) 1분봉 정밀 검증 결과입니다. (S-Tier)
@@ -46,7 +50,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 | **ETH/USDT** | **200** | **15** | **2.0x** | **+161.44%** | **19.80%** | **8.15 (A-Tier)** |
 
 ## 4. 결론 (Conclusion)
-TrendCrusher V8은 기술(v7)과 운영(v8)의 완벽한 조화를 목표로 합니다. 초저지연 엔진의 날카로움과 원격 제어 시스템의 견고함이 결합되어, 시장의 어떤 돌발 상황에서도 자산을 안전하게 지키며 수익을 극대화할 것입니다.
+TrendCrusher V9은 '경직된 알고리즘'에서 '유연한 지능'으로 진화했습니다. 스스로 시장을 공부하고 파라미터를 교정하는 자가 적응 능력을 통해, 어떤 시장 환경에서도 지속 가능한 경쟁 우위를 유지할 수 있는 시스템을 완성했습니다.
 
 ---
 *Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*

@@ -2,7 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v8.0.0] - 2026-03-21 (Current)
+## [v9.0.0] - 2026-03-21 (Current)
+### Added
+- **Self-Adaptive Optimizer Engine**: Implemented "Walk-Forward" optimization to re-calibrate parameters based on recent 30-day market data.
+- **Remote Optimization Control**: Added `/optimize [SYMBOL]` command via Telegram to trigger real-time parameter tuning.
+- **Settings Hot-Reload**: Enabled live updates of `VOL_MULTIPLIER`, `ADX_FILTER`, and `EMA_PERIOD` without restarting the bot.
+- **Efficiency Ranking**: Parameters are now selected based on `Return / MDD` ratio rather than pure profit.
+
+## [v8.0.0] - 2026-03-21
 ### Added
 - **Command & Control System**: Bidirectional Telegram communication for remote bot management.
 - **Interactive Commands**: Added `/status`, `/stop`, `/resume`, and `/close_all` (Emergency Kill Switch).
