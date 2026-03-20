@@ -110,6 +110,11 @@ class SymbolBot:
                     trail_sl = self.min_price_seen + (atr * curr_atr_mult)
                     active_sl = min(self.sl_price, trail_sl)
 
+                # --- Server-side SL Sync (V4 Safety) ---
+                if not self.settings["DRY_RUN"] and self.sl_order_id and abs(active_sl - self.sl_price) > (self.entry_price * 0.001):
+                    self.sync_sl_order(active_sl)
+                    self.sl_price = active_sl
+
                 should_exit = (self.position == 1 and c_close <= active_sl) or (self.position == -1 and c_close >= active_sl)
                 
                 if should_exit:
@@ -157,6 +162,17 @@ class SymbolBot:
         except Exception as e:
             self.logger.error(f"Step Error: {e}")
 
+    def sync_sl_order(self, new_sl):
+        try:
+            self.exchange.cancel_order(self.sl_order_id, self.symbol)
+            sl_side = 'sell' if self.position == 1 else 'buy'
+            params = {'stopPrice': new_sl, 'reduceOnly': True}
+            sl_order = self.exchange.create_order(self.symbol, 'STOP_MARKET', sl_side, self.quantity, None, params)
+            self.sl_order_id = sl_order['id']
+            self.logger.info(f"🔄 Server-side SL Synced: {new_sl:,.2f}")
+        except Exception as e:
+            self.logger.error(f"Failed to sync SL: {e}")
+
     def sanitize_quantity(self, qty):
         try:
             market = self.exchange.market(self.symbol)
@@ -172,12 +188,36 @@ class SymbolBot:
             return
         
         try:
-            side = 'buy' if (direction == 1 or (direction == 0 and self.position == -1)) else 'sell'
-            self.exchange.set_leverage(int(self.settings.get("MAX_LEVERAGE", 5)), self.symbol)
-            self.exchange.create_market_order(self.symbol, side, self.quantity)
-            self.logger.info(f"✅ Order Executed: {side} {self.quantity}")
+            # Entry
+            if direction != 0:
+                side = 'buy' if direction == 1 else 'sell'
+                self.exchange.set_leverage(int(self.settings.get("MAX_LEVERAGE", 5)), self.symbol)
+                order = self.exchange.create_market_order(self.symbol, side, self.quantity)
+                self.logger.info(f"✅ Market Order: {side} {self.quantity}")
+                
+                # Immediate Server-side SL
+                sl_side = 'sell' if direction == 1 else 'buy'
+                params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+                sl_order = self.exchange.create_order(self.symbol, 'STOP_MARKET', sl_side, self.quantity, None, params)
+                self.sl_order_id = sl_order['id']
+                self.logger.info(f"🛡️ Server-side SL Placed: {self.sl_price:,.2f} (ID: {self.sl_order_id})")
+            
+            # Exit
+            else:
+                if self.sl_order_id:
+                    try: 
+                        self.exchange.cancel_order(self.sl_order_id, self.symbol)
+                        self.logger.info(f"🛡️ Cancelled Server SL (ID: {self.sl_order_id})")
+                    except: 
+                        pass
+                    self.sl_order_id = None
+                
+                side = 'sell' if self.position == 1 else 'buy'
+                self.exchange.create_market_order(self.symbol, side, self.quantity)
+                self.logger.info(f"✅ Position Closed: {side} {self.quantity}")
+                
         except Exception as e:
-            self.logger.error(f"Order Failed: {e}")
+            self.logger.error(f"Order Execution Failed: {e}")
             raise e
 
 def main():
