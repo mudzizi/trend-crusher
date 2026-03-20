@@ -44,6 +44,7 @@ class SymbolBotAsync:
         self.sl_order_id = None
         self.max_price_seen = 0
         self.min_price_seen = float('inf')
+        self.is_halted = False # If true, skip new entries
         
         # Internal state for incremental indicators
         self.ohlcv_1h = None
@@ -92,6 +93,7 @@ class SymbolBotAsync:
                 self.ohlcv_4h = await self.fetch_ohlcv(tf)
 
     async def check_entry(self):
+        if self.is_halted: return
         if self.ohlcv_1h is None or self.ohlcv_4h is None: return
         
         # Calculate indicators on the fly
@@ -215,6 +217,71 @@ class SymbolBotAsync:
     def persist_state(self):
         self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_order_id)
 
+async def handle_commands(bots, notifier, pm):
+    """Background task to poll and process Telegram commands."""
+    offset = None
+    logger.info("📡 Command Listener active.")
+    while True:
+        try:
+            updates = notifier.get_updates(offset)
+            if updates and updates.get("ok"):
+                for result in updates.get("result", []):
+                    offset = result["update_id"] + 1
+                    message = result.get("message", {})
+                    text = message.get("text", "")
+                    chat_id = str(message.get("chat", {}).get("id", ""))
+                    
+                    if chat_id != str(CONFIG["TELEGRAM_CHAT_ID"]):
+                        logger.warning(f"Unauthorized command from {chat_id}: {text}")
+                        continue
+                    
+                    cmd = text.split()[0].lower()
+                    
+                    if cmd == "/status":
+                        await send_summary(bots, notifier, pm)
+                    elif cmd == "/stop":
+                        for bot in bots.values(): bot.is_halted = True
+                        notifier.notify_status("🛑 New entries HALTED for all symbols.")
+                    elif cmd == "/resume":
+                        for bot in bots.values(): bot.is_halted = False
+                        notifier.notify_status("▶️ New entries RESUMED for all symbols.")
+                    elif cmd == "/close_all":
+                        notifier.notify_status("⚠️ EMERGENCY: Closing all positions and shutting down...")
+                        for bot in bots.values():
+                            if bot.position != 0: await bot.execute_exit()
+                        notifier.notify_status("💀 All positions closed. Bot stopping.")
+                        os._exit(0) # Immediate shutdown
+                        
+        except Exception as e:
+            logger.error(f"Command Error: {e}")
+        await asyncio.sleep(10)
+
+async def send_summary(bots, notifier, pm):
+    """Sends a detailed summary of the entire portfolio."""
+    report = {}
+    active_count = 0
+    for sym, bot in bots.items():
+        status = "IDLE"
+        if bot.position != 0:
+            active_count += 1
+            pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
+            status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+        report[bot.symbol] = status
+    
+    report["---"] = "---"
+    report["Active Positions"] = active_count
+    # Get halted status from the first bot
+    is_halted = next(iter(bots.values())).is_halted if bots else False
+    report["Halted"] = is_halted
+    
+    notifier.send_report("Portfolio Heartbeat", report)
+
+async def heartbeat_loop(bots, notifier, pm):
+    """Sends a heartbeat report every hour."""
+    while True:
+        await asyncio.sleep(3600) # 1 Hour
+        await send_summary(bots, notifier, pm)
+
 async def main():
     exchange = ccxt.binance({
         'apiKey': CONFIG["BINANCE_API_KEY"],
@@ -235,8 +302,11 @@ async def main():
 
     ws_manager = BinanceWebSocketManager(symbols)
     asyncio.create_task(ws_manager.connect())
+    asyncio.create_task(handle_commands(bots, notifier, pm))
+    asyncio.create_task(heartbeat_loop(bots, notifier, pm))
     
-    logger.info(f"🚀 v7.0.0-async Engine Started. Monitoring {len(symbols)} symbols...")
+    logger.info(f"🚀 v8.0.0-async Engine Started. Monitoring {len(symbols)} symbols...")
+    notifier.notify_status(f"🛰️ Command & Control Active (v8.0.0)")
 
     while True:
         msg = await ws_manager.get_next_message()
