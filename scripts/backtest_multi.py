@@ -19,10 +19,18 @@ def calculate_mdd(equity_curve):
     drawdown = (peak - curve) / (peak + 1e-10)
     return np.max(drawdown)
 
-def run_backtest(symbol, params):
-    # 설정 업데이트
+def run_backtest(symbol, params=None):
+    # 1. Base config
     test_config = CONFIG.copy()
-    test_config.update(params)
+    
+    # 2. Override with Symbol Specific Settings from config.py
+    if "SYMBOL_SETTINGS" in CONFIG and symbol in CONFIG["SYMBOL_SETTINGS"]:
+        test_config.update(CONFIG["SYMBOL_SETTINGS"][symbol])
+        
+    # 3. Override with manually passed params (if any)
+    if params:
+        test_config.update(params)
+        
     test_config["SYMBOL"] = symbol
     
     # 데이터 경로 확인 및 다운로드
@@ -37,7 +45,7 @@ def run_backtest(symbol, params):
         fetcher.save_all()
     
     print(f">>> Running Backtest for {symbol} <<<")
-    print(f"Params: Vol_Mult={params['VOL_MULTIPLIER']}, Trail={params['TRAILING_ATR_MULT']}, Risk={params['RISK_PER_TRADE']}, EMA={params['EMA_TREND_PERIOD']}")
+    print(f"Params: Vol_Mult={test_config['VOL_MULTIPLIER']}, Trail={test_config['TRAILING_ATR_MULT']}, Risk={test_config['RISK_PER_TRADE']}, EMA={test_config['EMA_TREND_PERIOD']}")
     print(f"New Features: ADX_Filter={test_config['ADX_FILTER_LEVEL']}, Adaptive_Trail={test_config.get('USE_ADAPTIVE_TRAIL', False)}")
 
     df_sig = pd.read_csv(f_sig)
@@ -92,29 +100,17 @@ def run_backtest(symbol, params):
     }
 
 if __name__ == "__main__":
-    targets = [
-        {
-            "symbol": "TRUMP/USDT",
-            "params": {"VOL_MULTIPLIER": 2.5, "TRAILING_ATR_MULT": 4.5, "RISK_PER_TRADE": 0.02, "EMA_TREND_PERIOD": 100}
-        },
-        {
-            "symbol": "ETH/USDT",
-            "params": {"VOL_MULTIPLIER": 2.0, "TRAILING_ATR_MULT": 4.5, "RISK_PER_TRADE": 0.02, "EMA_TREND_PERIOD": 200}
-        },
-        {
-            "symbol": "XAU/USDT", 
-            "params": {"VOL_MULTIPLIER": 2.5, "TRAILING_ATR_MULT": 4.5, "RISK_PER_TRADE": 0.02, "EMA_TREND_PERIOD": 200}
-        }
-    ]
+    targets = CONFIG.get("SYMBOLS_LIST", ["TRUMP/USDT", "ETH/USDT", "XAU/USDT"])
     
     summary = []
-    for target in targets:
-        res = run_backtest(target['symbol'], target['params'])
+    for symbol in targets:
+        # run_backtest now automatically loads SYMBOL_SETTINGS from config.py
+        res = run_backtest(symbol)
         if res:
             summary.append(res)
             
     print("\n" + "="*50)
-    print(" BACKTEST SUMMARY (ADX + PARTIAL TP) ")
+    print(" FINAL S-TIER BACKTEST SUMMARY ")
     print("="*50)
     for s in summary:
         print(f"{s['symbol']:<12} | Return: {s['return']:>8.2f}% | MDD: {s['mdd']:>6.2f}% | Trades: {s['trades']}")

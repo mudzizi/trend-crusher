@@ -24,12 +24,13 @@ CONFIG = {
     # --- Operational Settings ---
     "DRY_RUN": os.getenv("DRY_RUN", "True").lower() == "true",            
     "SYMBOL": os.getenv("SYMBOL", "TRUMP/USDT"),     
-    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "SOL/USDT"], # Multi-symbol list
+    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "XAU/USDT", "SOL/USDT"], # Multi-symbol list
     "MAX_CONCURRENT_TRADES": 3,                             # Limit total risk exposure
     "SYMBOL_WEIGHTS": {                                     # Allocation weight per symbol
         "TRUMP/USDT": 0.4,
-        "ETH/USDT": 0.3,
-        "SOL/USDT": 0.3
+        "ETH/USDT": 0.25,
+        "XAU/USDT": 0.25,
+        "SOL/USDT": 0.1
     },
     "SEED": float(os.getenv("SEED", 10000.0)),              
     "SIGNAL_TIMEFRAME": "1h",
@@ -63,22 +64,23 @@ CONFIG = {
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 100,
             "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 20
+            "ADX_FILTER_LEVEL": 15
         },
         "ETH/USDT": {
             "VOL_MULTIPLIER": 2.0,
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 200,
             "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 20
+            "ADX_FILTER_LEVEL": 15
         },
         "XAU/USDT": {
             "VOL_MULTIPLIER": 2.5,
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 200,
-            "RISK_PER_TRADE": 0.015, # Gold uses lower risk due to leverage
+            "RISK_PER_TRADE": 0.02,
             "ADX_FILTER_LEVEL": 25
         },
+
         "SOL/USDT": {
             "VOL_MULTIPLIER": 1.5,
             "TRAILING_ATR_MULT": 4.0,
@@ -89,7 +91,7 @@ CONFIG = {
     },
     
     # --- New Strategy Improvements ---
-    "ADX_FILTER_LEVEL": 20, 
+    "ADX_FILTER_LEVEL": 15, 
     "USE_ADAPTIVE_TRAIL": True,
     "ADAPTIVE_TRAIL_STEPS": [
         {"pnl_pct": 10, "atr_mult": 3.5},
