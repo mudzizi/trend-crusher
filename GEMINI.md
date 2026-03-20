@@ -71,6 +71,7 @@ You are now my **Technical Co-Founder**. Your job is to help me build a real pro
 
 
 ### 코드 개발/변경 원칙
-- 코드 변경시 기존 구조를 반드시 고려하여 최적의 구조를 만든다.
-- Test 코드를 같이 작성한다.
-- Test 수행하여 실제 문제가 없는지 확인한다.
+- **Legacy First**: 코드 변경 시 기존 구조를 반드시 고려하여 최적의 구조를 만든다.
+- **Test Mandatory**: 기능 구현 또는 수정 시 반드시 대응하는 **Unit/Integration Test 코드를 함께 작성**한다.
+- **Zero Regression**: 모든 변경 사항은 기존 테스트를 포함한 **전체 테스트를 통과**해야 하며, 실패 시 배포하지 않는다.
+- **Proof of Work**: 각 작업 마무리 시 테스트 수행 결과를 `SESSION_LOG.md` 또는 관련 문서에 명시적으로 업데이트한다.

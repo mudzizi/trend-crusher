@@ -1,72 +1,52 @@
-# TrendCrusher V4: Multi-Symbol Portfolio Trading Bot
+# TrendCrusher V6: Smart Isolated Independent Trading System
 
-TrendCrusher는 가상자산 선물 시장을 위한 고성능 자동 매매 시스템입니다. V4 버전에서는 단일 코인 매매를 넘어, 여러 코인을 동시에 감시하고 자본을 지능적으로 배분하는 **Portfolio Manager** 체계를 완성했습니다.
+TrendCrusher는 가상자산 선물 시장을 위한 프로페셔널 자동 매매 엔진입니다. V6 버전에서는 각 코인이 마치 독립된 계좌에서 돌아가는 것과 같은 **Smart Isolated** 마진 체계와 **독립 자본 관리** 로직을 완성했습니다.
 
-## 🚀 주요 특징 (V4 핵심)
+## 🚀 주요 특징 (V6 핵심)
 
-- **Multi-Symbol Portfolio Manager (V4 New)**: 여러 코인을 동시에 감시하고, 중앙 매니저가 가용한 자산을 지능적으로 배분 (TRUMP, ETH, SOL 등).
-- **Real-time Portfolio Dashboard (V4 New)**: 전체 자산 현황, 승률, 활성 포지션의 수익률을 한눈에 실시간 모니터링.
-- **Risk-Margin Balancing**: 각 코인별 가중치(Weight)와 리스크(2%)를 동시에 고려하여 최적의 포지션 사이즈 산출.
-- **Exposure Control**: 최대 동시 진입 개수(Max Concurrent Trades)를 제한하여 계좌의 총 리스크(Total Risk)를 철저히 관리.
-- **ADX Filter**: 추세 강도가 일정 수준 이상일 때만 진입하여 가짜 돌파 필터링.
-- **Adaptive Trailing Stop**: 수익률 10%, 20% 돌파 시마다 트레일링 거리를 타이트하게 좁혀 수익 보존.
-- **Server-side SL Sync**: 진입 즉시 거래소(Binance) 서버에 손절 주문을 전송하여 봇 장애 시에도 자산 보호.
-- **Precision Backtesting**: 1분봉 데이터 기반의 Intra-bar 정밀 검증 완료 (1년치 데이터).
+- **Smart Isolated Margin (V6 New)**: 포지션이 없는 코인 진입 시 자동으로 격리 마진(Isolated)을 설정하여 타 종목으로의 리스크 전이를 원천 차단.
+- **Independent Capital Isolation (V6 New)**: 코인별 `ALLOCATED_SEED` 기반의 독립 가상 장부 관리. 한 코인의 수익/손실이 다른 코인의 포지션 사이즈에 영향을 주지 않음.
+- **Crash Recovery & Persistence (V6 New)**: 봇 재시작 시 0.1초 전의 상태(최고가, 손절 주문 ID 등)를 완벽히 복구하는 DB 영속화 엔진.
+- **Real-time Portfolio Dashboard**: 전체 자산 현황, 심볼별 수익 곡선, 활성 포지션의 수익률을 한눈에 모니터링.
+- **Dual Constraint Sizing**: 리스크(2%)와 가용 증거금 한도 중 더 안전한 값을 자동으로 선택.
+- **Adaptive Trailing Stop**: 수익 구간에 따라 ATR 추격 거리를 타이트하게 조절하여 수익 보존.
 
-## 📊 최신 검증 성과 (365일)
+## 📊 최신 검증 성과 (365일 / S-Tier)
 
-- **TRUMP/USDT**: 수익률 **+210%** | MDD 17%
-- **XAU/USDT**: 수익률 **+186%** | MDD **12%**
-- **ETH/USDT**: 수익률 **+161%** | MDD 19%
+- **TRUMP/USDT**: 수익률 **+210.07%** | MDD 17%
+- **XAU/USDT**: 수익률 **+186.89%** | MDD **12%**
+- **ETH/USDT**: 수익률 **+161.44%** | MDD 19%
 
 ## 🛠 설치 및 실행
 
 ### 1. 환경 설정
-`.env.example` 파일을 복사하여 `.env`를 생성하고 API 키를 입력하세요.
+`.env` 파일에 API 키와 텔레그램 정보를 입력하세요.
 
-```bash
-cp .env.example .env
-# API_KEY, SECRET, TELEGRAM_TOKEN 등 입력
-```
-
-### 2. 가상환경 구축 및 라이브러리 설치
+### 2. 가상환경 및 설치
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. 멀티 심볼 라이브 봇 실행 (추천)
+### 3. 라이브 봇 실행 (V6 통합 엔진)
 ```bash
-# 여러 코인을 동시에 감시하며 자본을 배분하는 통합 봇 실행
+# 여러 코인을 독립적으로 감시하며 자본을 격리 매매하는 통합 봇
 PYTHONPATH=. python3 scripts/live_bot_multi.py
 ```
 
-### 4. 실시간 대시보드 실행
+### 4. 실시간 포트폴리오 대시보드
 ```bash
-# 브라우저에서 http://localhost:5000 접속하여 포트폴리오 모니터링
+# 브라우저에서 http://localhost:5000 접속
 PYTHONPATH=. python3 scripts/dashboard.py
-```
-
-### 5. 단일 코인 라이브 봇 실행 (Legacy)
-```bash
-PYTHONPATH=. python3 scripts/live_bot.py
-```
-
-### 6. 백테스트 및 최적화
-```bash
-PYTHONPATH=. python3 scripts/backtest_multi.py    # 멀티 심볼 검증
-PYTHONPATH=. python3 backtest/parameter_optimizer.py # 파라미터 최적화
 ```
 
 ## 📂 프로젝트 구조
 
-- **src/portfolio_manager.py**: 중앙 집중식 자본 배분 및 리스크 관리 엔진 (V4 핵심)
-- **src/**: 핵심 전략, 지표, 리스크 관리 모듈
-- **scripts/**: 라이브 봇 실행 및 백테스트 스크립트
-- **backtest/**: 파라미터 최적화 엔진
-- **data/**: 백테스트용 OHLCV 데이터 (CSV)
-- **tests/**: 로직 검증을 위한 유닛 테스트
+- **src/portfolio_manager.py**: 독립 자본 관리 및 리스크 제어 (V6 핵심)
+- **src/db_manager.py**: 상태 복구 및 심볼별 수익 기록 엔진
+- **scripts/live_bot_multi.py**: 멀티 심볼 스마트 격리 매매 오케스트레이터
+- **tests/**: 27개의 검증된 유닛/통합 테스트 케이스
 
 ---
-*Disclaimer: 본 봇은 기술적 분석에 기반한 도구일 뿐이며, 모든 투자 결과의 책임은 투자자 본인에게 있습니다.*
+*Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*
