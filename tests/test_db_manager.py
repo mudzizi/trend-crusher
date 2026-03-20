@@ -33,9 +33,22 @@ def test_log_trade_open_and_close(temp_db):
     assert history.iloc[0]['status'] == "CLOSED"
 
 def test_log_equity(temp_db):
-    temp_db.log_equity(10000.0)
-    temp_db.log_equity(10500.0)
-    history = temp_db.get_equity_history()
-    assert len(history) == 2
-    assert history.iloc[0]['balance'] == 10000.0
-    assert history.iloc[1]['balance'] == 10500.0
+    # 1. 다양한 심볼로 잔고 기록
+    temp_db.log_equity(10000.0, symbol='TOTAL')
+    temp_db.log_equity(4000.0, symbol='TRUMP/USDT')
+    temp_db.log_equity(4200.0, symbol='TRUMP/USDT')
+    temp_db.log_equity(2500.0, symbol='ETH/USDT')
+
+    # 2. 전체 기록 확인
+    total_history = temp_db.get_equity_history()
+    assert len(total_history) == 4
+
+    # 3. 특정 심볼 필터링 확인
+    trump_history = temp_db.get_equity_history(symbol='TRUMP/USDT')
+    assert len(trump_history) == 2
+    assert trump_history.iloc[0]['balance'] == 4000.0
+    assert trump_history.iloc[1]['balance'] == 4200.0
+
+    eth_history = temp_db.get_equity_history(symbol='ETH/USDT')
+    assert len(eth_history) == 1
+    assert eth_history.iloc[0]['balance'] == 2500.0
