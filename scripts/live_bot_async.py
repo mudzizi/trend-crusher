@@ -45,6 +45,7 @@ class SymbolBotAsync:
         self.max_price_seen = 0
         self.min_price_seen = float('inf')
         self.is_halted = False # If true, skip new entries
+        self.pending_settings = None # v10: Store unapproved optimization results
         
         # Internal state for incremental indicators
         self.ohlcv_1h = None
@@ -227,7 +228,7 @@ async def handle_commands(bots, notifier, pm):
     from src.optimizer_engine import OptimizerEngine
     offset = None
     optimizer = OptimizerEngine(config=CONFIG)
-    logger.info("📡 Command Listener active.")
+    logger.info("📡 Command Listener active (v10 Sentinel).")
     while True:
         try:
             updates = notifier.get_updates(offset)
@@ -241,6 +242,7 @@ async def handle_commands(bots, notifier, pm):
                     if chat_id != str(CONFIG["TELEGRAM_CHAT_ID"]): continue
                     
                     parts = text.split()
+                    if not parts: continue
                     cmd = parts[0].lower()
                     
                     if cmd == "/status":
@@ -252,27 +254,54 @@ async def handle_commands(bots, notifier, pm):
                         symbol = parts[1].upper()
                         bot_key = symbol.replace('/', '').lower()
                         if bot_key in bots:
-                            notifier.notify_status(f"🧠 Optimization started for {symbol}... (approx 30s)")
+                            notifier.notify_status(f"🧠 Sentinel is studying {symbol}... (approx 30s)")
                             best = await optimizer.find_best_params(symbol)
                             if best:
-                                report = {
-                                    "New Vol": best['vol_m'],
-                                    "New ADX": best['adx_f'],
-                                    "New EMA": best['ema_p'],
-                                    "Past 30d Ret": f"{best['return']:.2f}%",
-                                    "Past 30d MDD": f"{best['mdd']:.2f}%"
-                                }
-                                notifier.send_report(f"Optimization Results: {symbol}", report)
-                                bots[bot_key].hot_reload_settings({
+                                # Store as pending
+                                bots[bot_key].pending_settings = {
                                     "VOL_MULTIPLIER": best['vol_m'],
                                     "ADX_FILTER_LEVEL": best['adx_f'],
                                     "EMA_TREND_PERIOD": best['ema_p']
-                                })
-                                notifier.notify_status(f"✅ Parameters updated for {symbol}")
+                                }
+                                report = {
+                                    "Proposal": "OPTIMIZE",
+                                    "New Vol": best['vol_m'],
+                                    "New ADX": best['adx_f'],
+                                    "New EMA": best['ema_p'],
+                                    "Est. Return": f"{best['return']:.2f}%",
+                                    "Est. MDD": f"{best['mdd']:.2f}%",
+                                    "Action": f"To apply, send: /apply {symbol}"
+                                }
+                                notifier.send_report(f"🚀 Sentinel Proposal: {symbol}", report)
                             else:
                                 notifier.notify_error(f"Failed to optimize {symbol}.")
                         else:
                             notifier.notify_error(f"Bot for {symbol} not found.")
+                    
+                    elif cmd == "/apply":
+                        if len(parts) < 2:
+                            notifier.notify_status("Usage: /apply [SYMBOL]")
+                            continue
+                        symbol = parts[1].upper()
+                        bot_key = symbol.replace('/', '').lower()
+                        if bot_key in bots and bots[bot_key].pending_settings:
+                            new_settings = bots[bot_key].pending_settings
+                            bots[bot_key].hot_reload_settings(new_settings)
+                            bots[bot_key].pending_settings = None # Clear queue
+                            notifier.notify_status(f"✅ Optimization applied to {symbol}!")
+                        else:
+                            notifier.notify_error(f"No pending proposal for {symbol}.")
+
+                    elif cmd == "/reject":
+                        if len(parts) < 2:
+                            notifier.notify_status("Usage: /reject [SYMBOL]")
+                            continue
+                        symbol = parts[1].upper()
+                        bot_key = symbol.replace('/', '').lower()
+                        if bot_key in bots:
+                            bots[bot_key].pending_settings = None
+                            notifier.notify_status(f"❌ Proposal for {symbol} rejected.")
+
                     elif cmd == "/stop":
                         for bot in bots.values(): bot.is_halted = True
                         notifier.notify_status("🛑 New entries HALTED for all symbols.")
@@ -290,6 +319,38 @@ async def handle_commands(bots, notifier, pm):
             logger.error(f"Command Error: {e}")
         await asyncio.sleep(10)
 
+async def auto_sentinel_loop(bots, notifier, pm):
+    """Weekly task to scan and propose optimizations for all symbols."""
+    optimizer = OptimizerEngine(config=CONFIG)
+    while True:
+        # Wait for 7 days
+        await asyncio.sleep(7 * 24 * 3600)
+        logger.info("🛰️ Sentinel is performing weekly patrol...")
+        notifier.notify_status("🛰️ Sentinel is performing weekly optimization scan for all symbols.")
+        
+        for symbol_key, bot in bots.items():
+            try:
+                best = await optimizer.find_best_params(bot.symbol)
+                if best:
+                    bot.pending_settings = {
+                        "VOL_MULTIPLIER": best['vol_m'],
+                        "ADX_FILTER_LEVEL": best['adx_f'],
+                        "EMA_TREND_PERIOD": best['ema_p']
+                    }
+                    report = {
+                        "Patrol": "WEEKLY_SCAN",
+                        "New Vol": best['vol_m'],
+                        "New ADX": best['adx_f'],
+                        "New EMA": best['ema_p'],
+                        "Est. Return": f"{best['return']:.2f}%",
+                        "Est. MDD": f"{best['mdd']:.2f}%",
+                        "Action": f"To apply, send: /apply {bot.symbol}"
+                    }
+                    notifier.send_report(f"🛰️ Sentinel Patrol Report: {bot.symbol}", report)
+                await asyncio.sleep(60) # Delay between symbols to avoid API limits
+            except Exception as e:
+                logger.error(f"Sentinel Patrol Error for {bot.symbol}: {e}")
+
 async def send_summary(bots, notifier, pm):
     """Sends a detailed summary of the entire portfolio."""
     report = {}
@@ -300,6 +361,11 @@ async def send_summary(bots, notifier, pm):
             active_count += 1
             pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
             status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+        
+        # v10: Indicate pending proposals
+        if bot.pending_settings:
+            status += " 🧠(PENDING)"
+            
         report[bot.symbol] = status
     
     report["---"] = "---"
@@ -338,9 +404,10 @@ async def main():
     asyncio.create_task(ws_manager.connect())
     asyncio.create_task(handle_commands(bots, notifier, pm))
     asyncio.create_task(heartbeat_loop(bots, notifier, pm))
+    asyncio.create_task(auto_sentinel_loop(bots, notifier, pm))
     
-    logger.info(f"🚀 v8.0.0-async Engine Started. Monitoring {len(symbols)} symbols...")
-    notifier.notify_status(f"🛰️ Command & Control Active (v8.0.0)")
+    logger.info(f"🚀 v10.0.0-async Engine Started. Sentinel is watching...")
+    notifier.notify_status(f"🛰️ The Sentinel Active (v10.0.0)")
 
     while True:
         msg = await ws_manager.get_next_message()
