@@ -2,7 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v10.0.0] - 2026-03-21 (Current)
+## [v11.0.0] - 2026-03-21 (Current)
+### Added
+- **The Sniper (Pre-emptive Limit Entry)**: Places zero-offset Maker Limit orders precisely at Donchian breakout levels when price approaches within 0.5%.
+- **4-Pillar Strict Validation**: Ambush is only set if Proximity, Volume Burst, ADX Trend, and EMA Macro-direction align perfectly.
+- **Ruthless Abort Logic**: Instantly cancels the unfilled Limit Order if any of the 4 Pillars weaken to avoid fakeout traps.
+- **Atomic Transition**: Automatically secures the position with a Server-side SL the moment the Sniper order is filled.
+- **Sniper Kill Switch**: Added `/sniper_on` and `/sniper_off` to Telegram commands for manual override.
+
+## [v10.0.0] - 2026-03-21
 ### Added
 - **The Sentinel (Hybrid Optimization)**: Automated weekly/performance-based optimization proposals with manual approval queue.
 - **Interactive Command Validator**: Standalone tool (`scripts/test_telegram_commands.py`) to verify remote connectivity and authorization.

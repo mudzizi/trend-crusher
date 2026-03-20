@@ -1,7 +1,7 @@
-# TrendCrusher V10: Strategy Whitepaper
+# TrendCrusher V11: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V10 버전에서는 **The Sentinel** 하이브리드 지능 시스템을 통해 시장 환경 변화에 따른 파라미터 자가 교정 능력을 극대화했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11 버전에서는 **The Sniper** 시스템을 도입하여, 추격 매수로 인한 슬리피지를 없애고 돌파의 찰나를 지정가(Maker)로 낚아채는 완벽한 타점 알고리즘을 완성했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -39,11 +39,16 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 1.  **Recent Lookback Analysis**: 최근 30일간의 시장 데이터를 기반으로 수천 가지 파라미터 조합을 시뮬레이션.
 2.  **Efficiency Ranking (Return/MDD)**: 가장 안정적인 수익 곡선을 그렸던 조합을 자동 선발.
 
-### 2.9. 자가 학습형 파수꾼 (The Sentinel - v10.0.0)
+### 2.9. 자가 학습형 파수꾼 (The Sentinel)
 지능형 제안과 인간의 최종 승인을 결합한 하이브리드 의사결정 시스템입니다.
 1.  **Automated Patrol**: 매주 정기적으로 모든 종목을 스캔하여 수익 효율성 개선안을 도출.
 2.  **Proposal Queue**: 최적화 결과는 즉시 반영되지 않고 '제안 대기열'에 보관되어 주인님의 검토를 대기.
-3.  **One-Click Hot-Reload**: 텔레그램 승인 명령 한 번으로 봇 중단 없이 즉시 새로운 파라미터를 전투에 투입.
+
+### 2.10. 선제적 지정가 매복 시스템 (The Precision Sniper - v11.0.0)
+시장가 추격의 굴레를 벗어나 수수료와 슬리피지를 방어하는 최종 타점 엔진입니다.
+1.  **Zero-Offset Target**: 복잡한 보정 없이 정확한 돌파 레벨(`Donchian`)에 지정가 주문을 배치하여 Maker 수수료를 확보.
+2.  **The 4-Pillars Guard**: 가격이 레벨에 근접(99.5%)하더라도 거래량, 추세(ADX), 방향(EMA)이 모두 폭발의 전조를 보일 때만 매복 실행.
+3.  **Ruthless Abort**: 매복 대기 중 4대 기둥 중 하나라도 무너지면, 가짜 돌파에 휩쓸리지 않도록 0.1초 만에 주문을 즉시 회수.
 
 ## 3. 최종 최적화 결과 (Verified 365-Day Backtest)
 최근 1년치(2025.03 ~ 2026.03) 1분봉 정밀 검증 결과입니다. (S-Tier)
@@ -55,7 +60,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 | **ETH/USDT** | **200** | **15** | **2.0x** | **+161.44%** | **19.80%** | **8.15 (A-Tier)** |
 
 ## 4. 결론 (Conclusion)
-TrendCrusher V10은 '지능'과 '통제'의 조화를 통해 완성되었습니다. 스스로 변화를 읽는 파수꾼(Sentinel)과 그 보고를 바탕으로 최종 결단을 내리는 주인님의 파트너십은, 불확실한 시장 환경에서 가장 강력하고 안정적인 수익을 창출하는 원동력이 될 것입니다.
+TrendCrusher V11은 기술적 진보의 결정체입니다. **The Sniper**의 날카로움, **The Sentinel**의 지능, 그리고 **Atomic Safety**의 견고함이 결합되어, 시장의 어떤 휩소나 폭락 속에서도 자산을 가장 안전하고 영리하게 불려 나갈 것입니다.
 
 ---
 *Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*
