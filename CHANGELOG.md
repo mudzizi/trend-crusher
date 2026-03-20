@@ -2,7 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v9.0.0] - 2026-03-21 (Current)
+## [v10.0.0] - 2026-03-21 (Current)
+### Added
+- **The Sentinel (Hybrid Optimization)**: Automated weekly/performance-based optimization proposals with manual approval queue.
+- **Interactive Command Validator**: Standalone tool (`scripts/test_telegram_commands.py`) to verify remote connectivity and authorization.
+- **Command Set Expansion**: Added `/apply [SYMBOL]`, `/reject [SYMBOL]`, and enhanced `/status` with pending proposal indicators.
+- **Refined Unit Tests**: 31/31 tests passing, including comprehensive Sentinel and Authorization logic.
+
+## [v9.0.0] - 2026-03-21
 ### Added
 - **Self-Adaptive Optimizer Engine**: Implemented "Walk-Forward" optimization to re-calibrate parameters based on recent 30-day market data.
 - **Remote Optimization Control**: Added `/optimize [SYMBOL]` command via Telegram to trigger real-time parameter tuning.
