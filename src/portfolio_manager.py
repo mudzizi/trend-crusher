@@ -39,6 +39,19 @@ class PortfolioManager:
             active_df = self.db.get_active_trades()
             return len(active_df)
 
+    def get_available_margin(self):
+        """Returns the actual available margin (free collateral) in USDT."""
+        if self.config.get("DRY_RUN", True):
+            return self.get_total_equity()
+        else:
+            try:
+                balance = self.exchange.fetch_balance()
+                # 'free' represents the margin available for new orders
+                return float(balance['free']['USDT'])
+            except Exception as e:
+                logger.error(f"Error fetching available margin: {e}")
+                return 0.0
+
     def calculate_order_qty(self, symbol, entry_price, sl_price):
         """
         Calculates optimal position size based on risk and margin constraints.
@@ -49,40 +62,39 @@ class PortfolioManager:
             logger.warning(f"Portfolio limit reached ({active_count}/{self.config.get('MAX_CONCURRENT_TRADES')}). Skipping {symbol}")
             return 0
 
-        # 2. Get total equity
+        # 2. Get total equity & available margin
         equity = self.get_total_equity()
-        if equity <= 0:
-            logger.error("Total equity is zero or negative. Cannot open position.")
+        available_margin = self.get_available_margin()
+        
+        if available_margin <= 0:
+            logger.error("No available margin to open new position.")
             return 0
 
-        # 3. Risk-based Quantity
-        # Get symbol-specific risk or fallback to global risk
+        # 3. Risk-based Quantity (Still based on total equity for consistent risk management)
         symbol_settings = self.config.get("SYMBOL_SETTINGS", {}).get(symbol, {})
         risk_pct = symbol_settings.get("RISK_PER_TRADE", self.config.get("RISK_PER_TRADE", 0.02))
         
-        # Risk amount is % of TOTAL equity (e.g., 2% of $10k = $200)
         risk_amt = equity * risk_pct
         stop_dist = abs(entry_price - sl_price)
-        if stop_dist == 0:
-            return 0
+        if stop_dist == 0: return 0
         risk_qty = risk_amt / stop_dist
 
-        # 4. Margin-based Quantity (Weight constraint)
-        # Allocation is based on symbol weight (e.g., 0.4 * $10k = $4k allocated)
+        # 4. Margin-based Quantity (Double constraint: Weight vs Available Margin)
         symbol_weights = self.config.get("SYMBOL_WEIGHTS", {})
-        # Default weight if not specified
         default_weight = 1.0 / self.config.get("MAX_CONCURRENT_TRADES", 3)
         weight = symbol_weights.get(symbol, default_weight)
         
         max_leverage = self.config.get("MAX_LEVERAGE", 5)
-        # Max notional value = allocated capital * leverage
-        max_notional = equity * weight * max_leverage
+        # Allocate based on weight but cap by actual available margin
+        allocated_capital = min(equity * weight, available_margin)
+        
+        max_notional = allocated_capital * max_leverage
         max_qty = max_notional / entry_price
 
-        # 5. Take the minimum of both to be safe
+        # 5. Take the minimum of both
         final_qty = min(risk_qty, max_qty)
         
-        logger.info(f"[{symbol}] Equity: {equity:.2f} | Weight: {weight:.2f} | Risk_Qty: {risk_qty:.4f} | Max_Qty: {max_qty:.4f} | Final: {final_qty:.4f}")
+        logger.info(f"[{symbol}] Equity: {equity:.2f} | Available: {available_margin:.2f} | Risk_Qty: {risk_qty:.4f} | Max_Qty: {max_qty:.4f} | Final: {final_qty:.4f}")
         
         return final_qty
 

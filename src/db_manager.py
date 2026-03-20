@@ -35,6 +35,30 @@ class DBManager:
                     balance REAL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bot_state (
+                    symbol TEXT PRIMARY KEY,
+                    position INTEGER,
+                    entry_price REAL,
+                    quantity REAL,
+                    max_price REAL,
+                    min_price REAL,
+                    sl_order_id TEXT,
+                    last_updated DATETIME DEFAULT (datetime('now','localtime'))
+                )
+            """)
+
+    def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_order_id):
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO bot_state (symbol, position, entry_price, quantity, max_price, min_price, sl_order_id, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, position, entry_price, quantity, max_price, min_price, sl_order_id))
+
+    def get_bot_state(self, symbol):
+        with self._get_connection() as conn:
+            df = pd.read_sql_query("SELECT * FROM bot_state WHERE symbol = ?", conn, params=(symbol,))
+            return df.iloc[0].to_dict() if not df.empty else None
 
     def log_trade_open(self, symbol, side, price, qty, strength):
         with self._get_connection() as conn:

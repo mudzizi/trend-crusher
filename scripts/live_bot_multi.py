@@ -51,16 +51,36 @@ class SymbolBot:
         self.sync_state_from_db()
 
     def sync_state_from_db(self):
-        active_trades = self.db.get_active_trades()
-        my_trade = active_trades[active_trades['symbol'] == self.symbol]
-        if not my_trade.empty:
-            row = my_trade.iloc[-1]
-            self.position = 1 if row['side'] == 'LONG' else -1
-            self.entry_price = row['open_price']
-            self.quantity = row['quantity']
-            self.max_price_seen = self.entry_price if self.position == 1 else 0
-            self.min_price_seen = self.entry_price if self.position == -1 else float('inf')
-            self.logger.info(f"Restored state: {row['side']} @ {self.entry_price} (Qty: {self.quantity})")
+        state = self.db.get_bot_state(self.symbol)
+        if state:
+            self.position = int(state['position'])
+            self.entry_price = float(state['entry_price'])
+            self.quantity = float(state['quantity'])
+            self.max_price_seen = float(state['max_price'])
+            self.min_price_seen = float(state['min_price'])
+            self.sl_order_id = state['sl_order_id']
+            self.logger.info(f"💾 Persistent state recovered: Pos={self.position}, Entry={self.entry_price}, MaxPrice={self.max_price_seen}")
+        else:
+            # Fallback to trades table for legacy support
+            active_trades = self.db.get_active_trades()
+            my_trade = active_trades[active_trades['symbol'] == self.symbol]
+            if not my_trade.empty:
+                row = my_trade.iloc[-1]
+                self.position = 1 if row['side'] == 'LONG' else -1
+                self.entry_price = float(row['open_price'])
+                self.quantity = float(row['quantity'])
+                self.max_price_seen = self.entry_price if self.position == 1 else 0
+                self.min_price_seen = self.entry_price if self.position == -1 else float('inf')
+                self.logger.info(f"Restored basic state from trades table: {row['side']} @ {self.entry_price}")
+
+    def persist_state(self):
+        try:
+            self.db.save_bot_state(
+                self.symbol, self.position, self.entry_price, self.quantity,
+                self.max_price_seen, self.min_price_seen, self.sl_order_id
+            )
+        except Exception as e:
+            self.logger.error(f"❌ Failed to persist state: {e}")
 
     def fetch_data(self, tf, limit=250):
         ohlcv = self.exchange.fetch_ohlcv(self.symbol, tf, limit=limit)
@@ -68,20 +88,23 @@ class SymbolBot:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
 
+    def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
+        for i in range(max_retries):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                if i == max_retries - 1: raise e
+                self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
+                time.sleep(delay * (i + 1))
+
     def step(self):
         try:
             # 1. Fetch Indicators
-            df_1h = self.fetch_data(self.settings["SIGNAL_TIMEFRAME"])
-            df_4h = self.fetch_data(self.settings["TREND_TIMEFRAME"])
+            df_1h = self.retry_api_call(self.fetch_data, CONFIG["SIGNAL_TIMEFRAME"])
+            df_4h = self.retry_api_call(self.fetch_data, CONFIG["TREND_TIMEFRAME"])
             
-            df_1h['upper'], df_1h['lower'] = calculate_donchian(df_1h, self.settings["DONCHIAN_PERIOD"])
-            df_1h['atr'] = calculate_atr(df_1h, self.settings["ATR_PERIOD"])
-            df_1h['avg_vol'] = calculate_avg_vol(df_1h, self.settings["AVG_VOL_PERIOD"])
-            df_1h['adx'] = calculate_adx(df_1h, 14)
-            ema_4h = calculate_ema(df_4h, self.settings["EMA_TREND_PERIOD"])
-            ema_4h_val = ema_4h.iloc[-1]
-            
-            ticker = self.exchange.fetch_ticker(self.symbol)
+            # ...
+            ticker = self.retry_api_call(self.exchange.fetch_ticker, self.symbol)
             c_close = float(ticker['last'])
             
             row = df_1h.iloc[-1]
@@ -129,8 +152,9 @@ class SymbolBot:
                     self.pm.update_balance_after_trade(actual_pnl_usdt)
                     self.notifier.notify_exit(self.symbol, c_close, pnl_pct, actual_pnl_usdt)
                     
-                    self.position = 0
-                    return # Skip entry check on same step
+                    self.position = 0; self.sl_order_id = None
+                    self.persist_state() # Clear state in DB
+                    return 
 
             # 3. Monitor Entry
             if self.position == 0:
@@ -147,6 +171,7 @@ class SymbolBot:
                         self.db.log_trade_open(self.symbol, "LONG", c_close, self.quantity, 100)
                         self.notifier.notify_entry(f"{self.symbol} LONG", c_close, self.sl_price, 100)
                         self.position = 1; self.entry_price = c_close; self.max_price_seen = c_close
+                        self.persist_state() # Save entry state
                         
                 elif is_vol_burst and is_trending and c_close < ema_4h_val and c_close < row['lower']:
                     self.logger.info(f"📉 SELL SIGNAL: Price {c_close:,.2f} (ADX: {adx:.1f})")
@@ -158,6 +183,11 @@ class SymbolBot:
                         self.db.log_trade_open(self.symbol, "SHORT", c_close, self.quantity, 100)
                         self.notifier.notify_entry(f"{self.symbol} SHORT", c_close, self.sl_price, 100)
                         self.position = -1; self.entry_price = c_close; self.min_price_seen = c_close
+                        self.persist_state() # Save entry state
+
+            # Always persist at the end of a successful step if in position
+            if self.position != 0:
+                self.persist_state()
 
         except Exception as e:
             self.logger.error(f"Step Error: {e}")
@@ -193,9 +223,15 @@ class SymbolBot:
                 side = 'buy' if direction == 1 else 'sell'
                 self.exchange.set_leverage(int(self.settings.get("MAX_LEVERAGE", 5)), self.symbol)
                 order = self.exchange.create_market_order(self.symbol, side, self.quantity)
-                self.logger.info(f"✅ Market Order: {side} {self.quantity}")
                 
-                # Immediate Server-side SL
+                # Update with ACTUAL filled quantity from exchange
+                actual_qty = float(order.get('filled', self.quantity))
+                if actual_qty > 0:
+                    self.quantity = actual_qty
+                
+                self.logger.info(f"✅ Market Order: {side} {self.quantity} (Actual: {actual_qty})")
+                
+                # Immediate Server-side SL (Always cover the actual filled qty)
                 sl_side = 'sell' if direction == 1 else 'buy'
                 params = {'stopPrice': self.sl_price, 'reduceOnly': True}
                 sl_order = self.exchange.create_order(self.symbol, 'STOP_MARKET', sl_side, self.quantity, None, params)
