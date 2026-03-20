@@ -53,13 +53,19 @@ CONFIG = {
     "INITIAL_SL_ATR": 2.0,
     
     # --- Trading Costs ---
-    "FEE_RATE": 0.0004,
-    "SLIPPAGE": 0.0005,
-    "DATA_DIR": "data",
-    
+    "LOOP_INTERVAL": 10,        
+    "MAX_LEVERAGE": 5,          
+    "MARGIN_MODE": "ISOLATED",  # Target margin mode
+
+    # --- Strategy Parameters (Default: TRUMP Best) ---
+    "VOL_MULTIPLIER": 2.5,      
+    "TRAILING_ATR_MULT": 4.5,   
+    "RISK_PER_TRADE": 0.02,     
+    "EMA_TREND_PERIOD": 100,
     # --- Symbol Specific Optimized Parameters ---
     "SYMBOL_SETTINGS": {
         "TRUMP/USDT": {
+            "ALLOCATED_SEED": 4000.0,
             "VOL_MULTIPLIER": 2.5,
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 100,
@@ -67,6 +73,7 @@ CONFIG = {
             "ADX_FILTER_LEVEL": 15
         },
         "ETH/USDT": {
+            "ALLOCATED_SEED": 2500.0,
             "VOL_MULTIPLIER": 2.0,
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 200,
@@ -74,14 +81,15 @@ CONFIG = {
             "ADX_FILTER_LEVEL": 15
         },
         "XAU/USDT": {
+            "ALLOCATED_SEED": 2500.0,
             "VOL_MULTIPLIER": 2.5,
             "TRAILING_ATR_MULT": 4.5,
             "EMA_TREND_PERIOD": 200,
             "RISK_PER_TRADE": 0.02,
             "ADX_FILTER_LEVEL": 25
         },
-
         "SOL/USDT": {
+            "ALLOCATED_SEED": 1000.0,
             "VOL_MULTIPLIER": 1.5,
             "TRAILING_ATR_MULT": 4.0,
             "EMA_TREND_PERIOD": 200,
@@ -89,6 +97,7 @@ CONFIG = {
             "ADX_FILTER_LEVEL": 15
         }
     },
+
     
     # --- New Strategy Improvements ---
     "ADX_FILTER_LEVEL": 15, 

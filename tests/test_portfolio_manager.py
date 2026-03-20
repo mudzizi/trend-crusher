@@ -10,9 +10,15 @@ class TestPortfolioManager(unittest.TestCase):
             "RISK_PER_TRADE": 0.02,
             "MAX_CONCURRENT_TRADES": 2,
             "MAX_LEVERAGE": 5,
-            "SYMBOL_WEIGHTS": {
-                "BTC/USDT": 0.5,
-                "ETH/USDT": 0.5
+            "SYMBOL_SETTINGS": {
+                "BTC/USDT": {
+                    "ALLOCATED_SEED": 10000.0, # Match old test seed for continuity
+                    "RISK_PER_TRADE": 0.02
+                },
+                "ETH/USDT": {
+                    "ALLOCATED_SEED": 5000.0,
+                    "RISK_PER_TRADE": 0.02
+                }
             }
         }
         self.mock_exchange = MagicMock()
@@ -33,15 +39,15 @@ class TestPortfolioManager(unittest.TestCase):
         self.assertEqual(qty, 0.2)
 
     def test_calculate_qty_margin_dominant(self):
-        # Case: Margin (Weight) is the tighter constraint
-        # Equity: 10000, Risk: 200
+        # Case: Margin (Seed) is the tighter constraint
+        # Symbol Equity: 10000, Risk: 200
         # Price: 50000, SL: 49950 (Dist: 50)
         # Risk Qty: 200 / 50 = 4.0
-        # Max Notional: 25000
-        # Max Qty: 25000 / 50000 = 0.5
-        # Expected: 0.5
+        # Max Notional: 10000 * 5 (Max Leverage) = 50000
+        # Max Qty: 50000 / 50000 = 1.0
+        # Expected: 1.0
         qty = self.pm.calculate_order_qty("BTC/USDT", 50000, 49950)
-        self.assertEqual(qty, 0.5)
+        self.assertEqual(qty, 1.0)
 
     def test_max_concurrent_trades(self):
         # Mock 2 active trades

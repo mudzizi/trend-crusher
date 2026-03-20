@@ -32,9 +32,15 @@ class DBManager:
                 CREATE TABLE IF NOT EXISTS equity (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp DATETIME DEFAULT (datetime('now','localtime')),
+                    symbol TEXT DEFAULT 'TOTAL',
                     balance REAL
                 )
             """)
+            # Migration: Ensure symbol column exists for older DBs
+            try:
+                conn.execute("ALTER TABLE equity ADD COLUMN symbol TEXT DEFAULT 'TOTAL'")
+            except:
+                pass
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bot_state (
                     symbol TEXT PRIMARY KEY,
@@ -79,14 +85,19 @@ class DBManager:
         with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM trades WHERE status='OPEN'", conn)
 
-    def log_equity(self, balance):
+    def log_equity(self, balance, symbol='TOTAL'):
         with self._get_connection() as conn:
-            conn.execute("INSERT INTO equity (balance) VALUES (?)", (balance,))
+            conn.execute("INSERT INTO equity (balance, symbol) VALUES (?, ?)", (balance, symbol))
 
     def get_trade_history(self):
         with self._get_connection() as conn:
             return pd.read_sql_query("SELECT * FROM trades WHERE status='CLOSED'", conn)
 
-    def get_equity_history(self):
+    def get_equity_history(self, symbol=None):
         with self._get_connection() as conn:
-            return pd.read_sql_query("SELECT * FROM equity", conn)
+            query = "SELECT * FROM equity"
+            params = ()
+            if symbol:
+                query += " WHERE symbol = ?"
+                params = (symbol,)
+            return pd.read_sql_query(query, conn, params=params)

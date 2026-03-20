@@ -49,6 +49,34 @@ class SymbolBot:
         
         # Load initial state if exists (for restart safety)
         self.sync_state_from_db()
+        
+        # Smart Margin Setup (Only if no active position)
+        self.check_and_set_isolated_margin()
+
+    def check_and_set_isolated_margin(self):
+        if self.settings.get("DRY_RUN", True): return
+        
+        try:
+            # Check current position via exchange
+            # Note: Using fetch_positions or similar depending on exchange
+            positions = self.exchange.fetch_positions([self.symbol])
+            size = 0
+            if positions:
+                size = abs(float(positions[0].get('contracts', 0)))
+            
+            if size == 0:
+                self.logger.info(f"Setting margin mode to ISOLATED for {self.symbol}")
+                try:
+                    self.exchange.set_margin_mode('ISOLATED', self.symbol)
+                except Exception as e:
+                    if "No need to change margin mode" in str(e):
+                        self.logger.info(f"Already in ISOLATED mode for {self.symbol}")
+                    else:
+                        self.logger.warning(f"Failed to set ISOLATED mode: {e}")
+            else:
+                self.logger.info(f"Skipping margin setup for {self.symbol} (Active position exists: {size})")
+        except Exception as e:
+            self.logger.error(f"Error during margin setup check: {e}")
 
     def sync_state_from_db(self):
         state = self.db.get_bot_state(self.symbol)
@@ -149,7 +177,8 @@ class SymbolBot:
                     
                     self.execute_market_order(0)
                     self.db.log_trade_close(self.symbol, c_close, pnl_pct, actual_pnl_usdt)
-                    self.pm.update_balance_after_trade(actual_pnl_usdt)
+                    # Use symbol-specific balance update
+                    self.pm.update_balance_after_trade(self.symbol, actual_pnl_usdt)
                     self.notifier.notify_exit(self.symbol, c_close, pnl_pct, actual_pnl_usdt)
                     
                     self.position = 0; self.sl_order_id = None
@@ -276,9 +305,13 @@ def main():
     logger.info(f"Starting Multi-Symbol Bot with {len(bots)} pairs...")
     notifier.notify_status(f"Multi-Symbol Bot Started: {', '.join(symbols)}")
     
-    # Initialize virtual balance if needed
-    if CONFIG["DRY_RUN"] and db.get_equity_history().empty:
-        db.log_equity(CONFIG["SEED"])
+    # Initialize virtual balances for each symbol if needed
+    if CONFIG["DRY_RUN"]:
+        for sym in symbols:
+            if db.get_equity_history(symbol=sym).empty:
+                sym_seed = CONFIG["SYMBOL_SETTINGS"].get(sym, {}).get("ALLOCATED_SEED", 1000.0)
+                db.log_equity(sym_seed, symbol=sym)
+                logger.info(f"Initialized virtual balance for {sym}: {sym_seed} USDT")
 
     while True:
         start_time = time.time()
