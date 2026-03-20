@@ -13,6 +13,7 @@ def base_config():
         "TRAILING_ATR_MULT": 4.0,
         "DONCHIAN_PERIOD": 20,
         "EMA_TREND_PERIOD": 100,
+        "ENTRY_SPLIT_COUNT": 1,
         "SIGNAL_TIMEFRAME": "1h",
     }
 
@@ -87,3 +88,30 @@ def test_position_size_respects_leverage_and_loss_cap(base_config):
     qty = strategy.calculate_position_size(price=100.0, stop_loss_price=99.0, risk_pct=0.02)
 
     assert qty == pytest.approx(100.0)
+
+
+def test_split_entry_updates_weighted_average_price(base_config):
+    split_config = base_config | {"ENTRY_SPLIT_COUNT": 2}
+    strategy = TrendCrusherV2(config=split_config)
+    strategy._open_position(direction=1, price=100.0, atr=5.0, timestamp=pd.Timestamp('2024-03-16 12:00:00'), risk_pct=0.02)
+
+    first_qty = strategy.quantity
+    first_entry = strategy.entry_price
+
+    strategy._add_position_split(price=110.0, timestamp=pd.Timestamp('2024-03-16 13:00:00'), risk_pct=0.02)
+
+    assert strategy.quantity > first_qty
+    assert first_entry < strategy.entry_price < 110.0 * (1 + split_config["SLIPPAGE"])
+    assert strategy.splits_filled == 2
+    assert strategy.trades[0]["splits_filled"] == 2
+
+
+def test_split_entry_can_trigger_on_next_bar_if_trend_holds(base_config):
+    split_config = base_config | {"ENTRY_SPLIT_COUNT": 2}
+    strategy = TrendCrusherV2(config=split_config)
+    opened_at = pd.Timestamp('2024-03-16 12:00:00')
+    strategy._open_position(direction=1, price=100.0, atr=5.0, timestamp=opened_at, risk_pct=0.02)
+
+    row = pd.Series({"close": 102.0, "ema_h": 99.0})
+
+    assert strategy._can_add_split(opened_at + pd.Timedelta(hours=1), row) is True

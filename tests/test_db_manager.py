@@ -39,3 +39,16 @@ def test_log_equity(temp_db):
     assert len(history) == 2
     assert history.iloc[0]['balance'] == 10000.0
     assert history.iloc[1]['balance'] == 10500.0
+
+
+def test_update_open_trade(temp_db):
+    temp_db.log_trade_open("ETH/USDT", "LONG", 2000.0, 1.0, 70.0)
+    temp_db.update_open_trade(2025.0, 1.5, 75.0)
+
+    with temp_db._get_connection() as conn:
+        history = pd.read_sql_query("SELECT * FROM trades", conn)
+
+    assert len(history) == 1
+    assert history.iloc[0]['open_price'] == 2025.0
+    assert history.iloc[0]['quantity'] == 1.5
+    assert history.iloc[0]['strength'] == 75.0

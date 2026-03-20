@@ -43,6 +43,21 @@ class DBManager:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (symbol, side, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), price, qty, strength, 'OPEN'))
 
+    def update_open_trade(self, price, qty, strength=None):
+        with self._get_connection() as conn:
+            if strength is None:
+                conn.execute("""
+                    UPDATE trades
+                    SET open_price = ?, quantity = ?
+                    WHERE status = 'OPEN'
+                """, (price, qty))
+            else:
+                conn.execute("""
+                    UPDATE trades
+                    SET open_price = ?, quantity = ?, strength = ?
+                    WHERE status = 'OPEN'
+                """, (price, qty, strength))
+
     def log_trade_close(self, price, pnl_pct, pnl_usdt):
         with self._get_connection() as conn:
             conn.execute("""

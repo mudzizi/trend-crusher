@@ -77,7 +77,7 @@ def _hash_directory(path: Path) -> str:
     return digest.hexdigest()
 
 
-class TimeSeriesStorage:
+class SnapshotStore:
     def __init__(
         self,
         root: str | Path = "timeseries",

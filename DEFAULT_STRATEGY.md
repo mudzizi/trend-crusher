@@ -4,18 +4,18 @@
 이 문서는 현재 저장소에서 기본 전략으로 간주하는 운용 기준을 고정하기 위한 문서다.
 백서가 연구 결과를 설명한다면, 이 문서는 실제 백테스트와 운영에 사용할 기본값을 기록한다.
 
-기준 시점: 2026-03-18
+기준 시점: 2026-03-19
 
 ## 공통 전략 구조
 - 거래소: Binance USDT-M Futures
 - 시그널 봉: `1h`
-- 추세 확인 봉: `4h`
+- 추세 확인 봉: 종목별 `Trend TF`
 - 정밀 체결 확인 봉: `1m`
 - 진입 조건:
   - `20`봉 Donchian 상단 돌파 시 LONG 후보
   - `20`봉 Donchian 하단 이탈 시 SHORT 후보
   - 거래량이 직전 `20`봉 평균 대비 설정 배수 이상일 때만 진입
-  - `4h EMA` 위 돌파는 LONG, 아래 이탈은 SHORT만 허용
+  - 종목별 `Trend TF EMA` 위 돌파는 LONG, 아래 이탈은 SHORT만 허용
 - 청산 조건:
   - 초기 손절: `ATR 2.0x`
   - 추적 손절: `ATR 4.5x` 기본
@@ -25,11 +25,11 @@
 
 ## 종목별 기본 파라미터
 
-| Symbol | Vol Mult | Trail ATR | Risk Per Trade | EMA Period | Loss Cap |
-|---|---:|---:|---:|---:|---:|
-| `TRUMP/USDT` | `2.5` | `4.5` | `0.02` | `100` | `-2%` |
-| `ETH/USDT` | `2.0` | `4.5` | `0.02` | `200` | `-2%` |
-| `BTC/USDT` | `2.0` | `4.5` | `0.01` | `200` | `-1%` |
+| Symbol | Vol Mult | Trail ATR | Risk Per Trade | Splits | Trend TF | EMA Period | Loss Cap |
+|---|---:|---:|---:|---:|---|---:|---:|
+| `TRUMP/USDT` | `2.5` | `4.5` | `0.02` | `1` | `2h` | `150` | `-2%` |
+| `ETH/USDT` | `2.0` | `4.5` | `0.02` | `2` | `4h` | `200` | `-2%` |
+| `BTC/USDT` | `2.0` | `4.5` | `0.01` | `1` | `2h` | `100` | `-1%` |
 
 ## 현재 기본 해석
 - `TRUMP/USDT`는 공격형 기본 전략이다.
@@ -41,12 +41,22 @@
 
 | Symbol | Snapshot ID | Return | MDD | Trades | Final Capital |
 |---|---|---:|---:|---:|---:|
-| `TRUMP/USDT` | `bronze-trump_usdt-latest` | `+191.94%` | `15.58%` | `91` | `29,193.83 USDT` |
-| `ETH/USDT` | `bronze-eth_usdt-latest` | `+181.71%` | `16.83%` | `112` | `28,171.15 USDT` |
-| `BTC/USDT` | `bronze-btc_usdt-latest` | `-4.77%` | `20.68%` | `131` | `9,523.01 USDT` |
+| `TRUMP/USDT` | `bronze-trump_usdt-latest` | `+207.99%` | `15.58%` | `95` | `30,799.29 USDT` |
+| `ETH/USDT` | `bronze-eth_usdt-latest` | `+274.95%` | `17.95%` | `113` | `37,494.57 USDT` |
+| `BTC/USDT` | `bronze-btc_usdt-latest` | `+9.43%` | `15.32%` | `151` | `10,942.84 USDT` |
+
+## MA 튜닝 기준
+- 365일 구간 백테스트 기준으로 `Trend Timeframe`와 `EMA Period`만 종목별로 탐색했다.
+- 탐색 범위는 `2h, 4h, 6h, 8h, 12h`와 `EMA 50, 100, 150, 200, 250, 300`이다.
+- 선택 기준은 현재 종목별 리스크/손실캡을 유지한 상태에서 `총수익률 최대`이며, 동률이면 `MDD`가 더 낮은 조합을 우선했다.
+
+## 분할진입 기준
+- 기본값은 종목별 `ENTRY_SPLIT_COUNT`를 따른다.
+- `ETH/USDT`는 현재 `2분할`을 기본값으로 사용한다.
+- 규칙은 첫 진입 뒤 다음 `1h` 시그널 바에서 추세 필터가 유지되면 남은 절반을 추가하는 방식이다.
 
 ## 데이터 저장 원칙
-- 시계열 저장소는 `timeseries-storage` 규칙을 따른다.
+- 시계열 저장소는 프로젝트 snapshot store 규칙을 따른다.
 - 저장 구조는 `raw / bronze / silver / gold`를 유지한다.
 - 현재 프로젝트 운용 모드는 `rolling latest`다.
 - 즉, 종목별 최신 데이터셋 하나만 유지하고 이전 버전은 남기지 않는다.

@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 from src.config import CONFIG
-from timeseries_storage import TimeSeriesStorage
+from src.snapshot_store import SnapshotStore
 
 class BinanceDataFetcher:
     def __init__(self, config=CONFIG):
@@ -75,7 +75,7 @@ class BinanceDataFetcher:
         }
 
     def persist_ohlcv_snapshot(self, storage=None, symbol=None, since_days=None, as_of_time=None):
-        storage = storage or TimeSeriesStorage(
+        storage = storage or SnapshotStore(
             root=self.c["TIMESERIES_DIR"],
             snapshot_root=self.c["SNAPSHOT_DIR"],
             mutable_latest=self.c.get("ROLLING_TIMESERIES", False),

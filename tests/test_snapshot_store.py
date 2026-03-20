@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from timeseries_storage import TimeSeriesStorage
+from src.snapshot_store import SnapshotStore
 
 
 def test_snapshot_replays_revision_by_as_of(tmp_path):
-    storage = TimeSeriesStorage(
+    storage = SnapshotStore(
         root=tmp_path / "timeseries",
         snapshot_root=tmp_path / "artifacts" / "research" / "snapshots",
     )
@@ -49,7 +49,7 @@ def test_snapshot_replays_revision_by_as_of(tmp_path):
 
 
 def test_snapshot_uses_later_ingested_at_on_as_of_tie(tmp_path):
-    storage = TimeSeriesStorage(
+    storage = SnapshotStore(
         root=tmp_path / "timeseries",
         snapshot_root=tmp_path / "artifacts" / "research" / "snapshots",
     )
@@ -98,7 +98,7 @@ def test_snapshot_uses_later_ingested_at_on_as_of_tie(tmp_path):
 
 
 def test_partitioned_parquet_round_trip_across_months(tmp_path):
-    storage = TimeSeriesStorage(
+    storage = SnapshotStore(
         root=tmp_path / "timeseries",
         snapshot_root=tmp_path / "artifacts" / "research" / "snapshots",
     )
@@ -143,7 +143,7 @@ def test_partitioned_parquet_round_trip_across_months(tmp_path):
 
 
 def test_mutable_latest_keeps_single_current_record(tmp_path):
-    storage = TimeSeriesStorage(
+    storage = SnapshotStore(
         root=tmp_path / "timeseries",
         snapshot_root=tmp_path / "artifacts" / "research" / "snapshots",
         mutable_latest=True,

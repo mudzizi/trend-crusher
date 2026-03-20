@@ -6,9 +6,10 @@ import pandas as pd
 from src.config import CONFIG
 from src.data_fetcher import BinanceDataFetcher
 from src.indicators import calculate_donchian, calculate_ema
+from src.snapshot_store import SnapshotStore
+from src.symbol_defaults import apply_symbol_defaults
 from src.strategy import TrendCrusherV2
 from src.visualizer import TradingVisualizer
-from timeseries_storage import TimeSeriesStorage
 
 
 def calculate_mdd(equity_curve):
@@ -30,6 +31,8 @@ def parse_args():
     parser.add_argument("--vol-multiplier", type=float, default=None)
     parser.add_argument("--trailing-atr-mult", type=float, default=None)
     parser.add_argument("--risk-per-trade", type=float, default=None)
+    parser.add_argument("--entry-split-count", type=int, default=None)
+    parser.add_argument("--trend-timeframe", default=None)
     parser.add_argument("--ema-period", type=int, default=None)
     parser.add_argument("--timeseries-dir", default=CONFIG["TIMESERIES_DIR"])
     parser.add_argument("--snapshot-dir", default=CONFIG["SNAPSHOT_DIR"])
@@ -53,6 +56,7 @@ def completed_trades(trades):
                 "open_price": opened["price"],
                 "close_price": closed["price"],
                 "pnl_pct": pnl_pct,
+                "splits_filled": opened.get("splits_filled", 1),
                 "cap_applied": closed.get("cap_applied", False),
             }
         )
@@ -96,22 +100,26 @@ def add_report_indicators(df_sig, df_trend, config):
 
 def main():
     args = parse_args()
-    config = CONFIG.copy()
-    config["SYMBOL"] = args.symbol
+    config = apply_symbol_defaults(CONFIG, args.symbol)
     config["BACKTEST_DAYS"] = args.days
     config["TIMESERIES_DIR"] = args.timeseries_dir
     config["SNAPSHOT_DIR"] = args.snapshot_dir
-    config["MAX_TRADE_LOSS_PCT_CAP"] = args.cap_loss_pct
+    if args.cap_loss_pct is not None:
+        config["MAX_TRADE_LOSS_PCT_CAP"] = args.cap_loss_pct
     if args.vol_multiplier is not None:
         config["VOL_MULTIPLIER"] = args.vol_multiplier
     if args.trailing_atr_mult is not None:
         config["TRAILING_ATR_MULT"] = args.trailing_atr_mult
     if args.risk_per_trade is not None:
         config["RISK_PER_TRADE"] = args.risk_per_trade
+    if args.entry_split_count is not None:
+        config["ENTRY_SPLIT_COUNT"] = args.entry_split_count
+    if args.trend_timeframe is not None:
+        config["TREND_TIMEFRAME"] = args.trend_timeframe
     if args.ema_period is not None:
         config["EMA_TREND_PERIOD"] = args.ema_period
 
-    storage = TimeSeriesStorage(
+    storage = SnapshotStore(
         root=config["TIMESERIES_DIR"],
         snapshot_root=config["SNAPSHOT_DIR"],
         mutable_latest=config["ROLLING_TIMESERIES"],
@@ -146,6 +154,8 @@ def main():
         f"Vol={config['VOL_MULTIPLIER']}, "
         f"Trail={config['TRAILING_ATR_MULT']}, "
         f"Risk={config['RISK_PER_TRADE']}, "
+        f"Splits={config['ENTRY_SPLIT_COUNT']}, "
+        f"TrendTF={config['TREND_TIMEFRAME']}, "
         f"EMA={config['EMA_TREND_PERIOD']}"
     )
     if config["MAX_TRADE_LOSS_PCT_CAP"] is not None:

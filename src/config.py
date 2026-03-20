@@ -5,13 +5,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 """
-[Verified Best Optimization Results]
------------------------------------------------------------------------------------
-SYMBOL      | Vol_Mult | Trail_Mult | Risk_Pct | EMA_Period | Result     | MDD (%)
------------------------------------------------------------------------------------
-TRUMP/USDT  | 2.5      | 4.5        | 0.02     | 100        | +159.36%   | 16.80%
-ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | +102.73%   | 18.02%
------------------------------------------------------------------------------------
+Symbol-specific tuned defaults live in src/symbol_defaults.py.
+The base CONFIG below is the default TRUMP/USDT operating profile.
 """
 
 CONFIG = {
@@ -26,7 +21,7 @@ CONFIG = {
     "SYMBOL": os.getenv("SYMBOL", "TRUMP/USDT"),     
     "SEED": float(os.getenv("SEED", 10000.0)),              
     "SIGNAL_TIMEFRAME": "1h",
-    "TREND_TIMEFRAME": "4h",
+    "TREND_TIMEFRAME": "2h",
     "CHECK_TIMEFRAME": "1m",
     "BACKTEST_DAYS": 365,       
     "LOOP_INTERVAL": 10,        
@@ -36,7 +31,8 @@ CONFIG = {
     "VOL_MULTIPLIER": 2.5,      
     "TRAILING_ATR_MULT": 4.5,   
     "RISK_PER_TRADE": 0.02,     
-    "EMA_TREND_PERIOD": 100,
+    "ENTRY_SPLIT_COUNT": 1,
+    "EMA_TREND_PERIOD": 150,
     
     # --- Fixed Indicators Setting ---
     "DONCHIAN_PERIOD": 20,
@@ -47,7 +43,7 @@ CONFIG = {
     # --- Trading Costs ---
     "FEE_RATE": 0.0004,
     "SLIPPAGE": 0.0005,
-    "MAX_TRADE_LOSS_PCT_CAP": None,
+    "MAX_TRADE_LOSS_PCT_CAP": 2.0,
     "DATA_DIR": "data",
     "TIMESERIES_DIR": os.getenv("TIMESERIES_DIR", "timeseries"),
     "SNAPSHOT_DIR": os.getenv("SNAPSHOT_DIR", "artifacts/research/snapshots"),

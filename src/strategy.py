@@ -16,6 +16,9 @@ class TrendCrusherV2:
         self.max_price_seen = 0
         self.min_price_seen = float('inf')
         self.last_close_time = pd.Timestamp.min
+        self.last_entry_time = pd.Timestamp.min
+        self.next_split_time = None
+        self.splits_filled = 0
         self.trades = []
         self.equity_curve = []
 
@@ -72,32 +75,79 @@ class TrendCrusherV2:
                             self._close_position(m_close, m_time); closed = True; break
                 if closed: continue
 
-            if self.position == 0 and curr_time > self.last_close_time:
-                is_vol_burst = row['volume'] > (row['avg_vol'] * vol_mult)
-                if is_vol_burst and row['close'] > row['ema_h'] and row['close'] > row['upper']:
-                    self._open_position(1, row['close'], row['atr'], curr_time, risk_pct)
-                elif is_vol_burst and row['close'] < row['ema_h'] and row['close'] < row['lower']:
-                    self._open_position(-1, row['close'], row['atr'], curr_time, risk_pct)
+            is_vol_burst = row['volume'] > (row['avg_vol'] * vol_mult)
+            signal_direction = 0
+            if is_vol_burst and row['close'] > row['ema_h'] and row['close'] > row['upper']:
+                signal_direction = 1
+            elif is_vol_burst and row['close'] < row['ema_h'] and row['close'] < row['lower']:
+                signal_direction = -1
+
+            if self.position != 0 and self._can_add_split(curr_time, row):
+                self._add_position_split(row['close'], curr_time, risk_pct)
+            elif signal_direction != 0 and self.position == 0 and curr_time > self.last_close_time:
+                self._open_position(signal_direction, row['close'], row['atr'], curr_time, risk_pct)
 
             self.equity_curve.append(self.capital)
         return self.trades, self.equity_curve
 
     def _open_position(self, direction, price, atr, timestamp, risk_pct):
-        side = 'LONG' if direction == 1 else 'SHORT'
         if direction == 1:
             self.sl_price = price - (atr * self.c["INITIAL_SL_ATR"])
-            self.entry_price = price * (1 + self.c["SLIPPAGE"])
         else:
             self.sl_price = price + (atr * self.c["INITIAL_SL_ATR"])
-            self.entry_price = price * (1 - self.c["SLIPPAGE"])
-        
-        self.quantity = self.calculate_position_size(self.entry_price, self.sl_price, risk_pct)
-        if self.quantity > 0:
-            self.capital -= self.entry_price * self.quantity * self.c["FEE_RATE"]
-            self.position = direction
-            self.max_price_seen = self.entry_price
-            self.min_price_seen = self.entry_price
-            self.trades.append({'time': timestamp, 'type': 'OPEN', 'side': side, 'price': self.entry_price})
+        self._apply_entry_fill(direction, price, timestamp, risk_pct, is_add=False)
+
+    def _can_add_split(self, timestamp, row):
+        max_splits = max(int(self.c.get("ENTRY_SPLIT_COUNT", 1)), 1)
+        if self.position == 0 or self.splits_filled >= max_splits or self.next_split_time is None:
+            return False
+        if timestamp < self.next_split_time:
+            return False
+        if self.position == 1:
+            return bool(row['close'] > row['ema_h'])
+        return bool(row['close'] < row['ema_h'])
+
+    def _add_position_split(self, price, timestamp, risk_pct):
+        self._apply_entry_fill(self.position, price, timestamp, risk_pct, is_add=True)
+
+    def _apply_entry_fill(self, direction, price, timestamp, risk_pct, is_add):
+        split_count = max(int(self.c.get("ENTRY_SPLIT_COUNT", 1)), 1)
+        split_risk_pct = risk_pct / split_count
+        side = 'LONG' if direction == 1 else 'SHORT'
+        fill_price = price * (1 + self.c["SLIPPAGE"]) if direction == 1 else price * (1 - self.c["SLIPPAGE"])
+        fill_quantity = self.calculate_position_size(fill_price, self.sl_price, split_risk_pct)
+
+        if fill_quantity <= 0:
+            return
+
+        fee = fill_price * fill_quantity * self.c["FEE_RATE"]
+        existing_quantity = self.quantity
+        new_total_quantity = existing_quantity + fill_quantity
+        weighted_notional = (self.entry_price * existing_quantity) + (fill_price * fill_quantity)
+        self.entry_price = weighted_notional / new_total_quantity
+        self.quantity = new_total_quantity
+        self.capital -= fee
+        self.position = direction
+        self.last_entry_time = timestamp
+        self.splits_filled += 1
+        if self.splits_filled < split_count:
+            self.next_split_time = timestamp + pd.to_timedelta(self.c["SIGNAL_TIMEFRAME"])
+        else:
+            self.next_split_time = None
+        self.max_price_seen = max(self.max_price_seen, fill_price) if existing_quantity > 0 else fill_price
+        self.min_price_seen = min(self.min_price_seen, fill_price) if existing_quantity > 0 else fill_price
+
+        if is_add and self.trades:
+            self.trades[-1].update({'price': self.entry_price, 'quantity': self.quantity, 'splits_filled': self.splits_filled})
+        else:
+            self.trades.append({
+                'time': timestamp,
+                'type': 'OPEN',
+                'side': side,
+                'price': self.entry_price,
+                'quantity': self.quantity,
+                'splits_filled': self.splits_filled,
+            })
 
     def _close_position(self, price, timestamp):
         exit_price = price
@@ -122,9 +172,17 @@ class TrendCrusherV2:
             'time': timestamp,
             'type': 'CLOSE',
             'price': exit_price,
+            'quantity': self.quantity,
+            'splits_filled': self.splits_filled,
             'cap_applied': cap_applied,
         })
         self.position = 0
+        self.entry_price = 0
+        self.quantity = 0
+        self.sl_price = 0
+        self.splits_filled = 0
+        self.last_entry_time = pd.Timestamp.min
+        self.next_split_time = None
         self.last_close_time = timestamp
 
     def _solve_capped_exit_price(self, target_net_change):
