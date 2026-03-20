@@ -54,6 +54,11 @@ class SymbolBotAsync:
         self.ohlcv_4h = None
         self.last_price = 0
 
+    def hot_reload_settings(self, new_params):
+        """Updates internal settings without restarting the bot."""
+        self.settings.update(new_params)
+        self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
+
     async def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
         for i in range(max_retries):
             try:
@@ -79,6 +84,15 @@ class SymbolBotAsync:
         self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"])
         self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"])
         self.logger.info(f"📊 Indicators Initialized")
+
+    async def on_kline_update(self, tf, kline):
+        """Update local OHLCV buffer when a candle closes or updates."""
+        if kline['x']: # Candle is closed
+            self.logger.info(f"🕯️ Candle Closed ({tf}): Updating indicators...")
+            if tf == self.settings["SIGNAL_TIMEFRAME"]:
+                self.ohlcv_1h = await self.fetch_ohlcv(tf)
+            else:
+                self.ohlcv_4h = await self.fetch_ohlcv(tf)
 
     async def fetch_ohlcv(self, tf, limit=100):
         ohlcv = await self.exchange.fetch_ohlcv(self.symbol, tf, limit=limit)
@@ -154,8 +168,8 @@ class SymbolBotAsync:
         top_level = upper.iloc[-1]
         bottom_level = lower.iloc[-1]
         
-        dist_top = abs(self.last_price - top_level) / self.last_price
-        dist_bottom = abs(self.last_price - bottom_level) / self.last_price
+        dist_top = abs(self.last_price - top_level) / (self.last_price + 1e-10)
+        dist_bottom = abs(self.last_price - bottom_level) / (self.last_price + 1e-10)
         prox_threshold = self.settings.get("SNIPER_PROXIMITY_PCT", 0.005)
         
         long_conditions_met = momentum_ok and trend_ok and self.last_price > ema_4h and dist_top <= prox_threshold
@@ -209,7 +223,7 @@ class SymbolBotAsync:
             self.logger.warning(f"Error cancelling sniper order: {e}")
         self.active_sniper_order_id = None
 
-    async def execute_entry(self, direction, atr):
+    async def check_exit(self):
         pnl_now = ((self.last_price / self.entry_price) - 1) * 100 * self.position
         
         # Simplified Trailing Logic for Async
@@ -257,13 +271,12 @@ class SymbolBotAsync:
                     # CRITICAL: Entry succeeded but SL failed. Liquidate immediately to stay safe!
                     self.logger.error(f"🚨 CRITICAL: SL placement failed after retries: {sl_err}. EMERGENCY LIQUIDATION!")
                     await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity)
-                    self.notifier.notify_error(f"EMERGENCY: SL failed for {self.symbol}. Position closed for safety.")
                     return
 
             self.position = direction
             self.entry_price = self.last_price
-            self.max_price_seen = self.last_price
-            self.min_price_seen = self.last_price
+            self.max_price_seen = self.entry_price
+            self.min_price_seen = self.entry_price
             self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
             self.persist_state()
             self.notifier.notify_entry(f"Async {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
@@ -421,6 +434,7 @@ async def handle_commands(bots, notifier, pm):
 
 async def auto_sentinel_loop(bots, notifier, pm):
     """Weekly task to scan and propose optimizations for all symbols."""
+    from src.optimizer_engine import OptimizerEngine
     optimizer = OptimizerEngine(config=CONFIG)
     while True:
         # Wait for 7 days
@@ -455,7 +469,13 @@ async def send_summary(bots, notifier, pm):
     """Sends a detailed summary of the entire portfolio."""
     report = {}
     active_count = 0
+    total_value = 0
+    
     for sym, bot in bots.items():
+        # Get current logical capital for this symbol
+        capital = await pm.get_total_equity(bot.symbol)
+        total_value += capital
+        
         status = "IDLE"
         if bot.position != 0:
             active_count += 1
@@ -468,16 +488,18 @@ async def send_summary(bots, notifier, pm):
         if bot.pending_settings:
             status += " 🧠(PENDING)"
             
-        report[bot.symbol] = status
+        report[f"{bot.symbol} (${capital:,.0f})"] = status
     
     report["---"] = "---"
+    report["Total Portfolio"] = f"${total_value:,.2f}"
     report["Active Positions"] = active_count
-    # Get halted status from the first bot
+    
+    # Get states from the first bot
     first_bot = next(iter(bots.values())) if bots else None
     report["Halted"] = first_bot.is_halted if first_bot else False
     report["Sniper Mode"] = "ON" if first_bot and first_bot.use_sniper else "OFF"
     
-    notifier.send_report("Portfolio Heartbeat", report)
+    notifier.send_report(f"Portfolio Heartbeat (v{CONFIG['VERSION']})", report)
 
 async def heartbeat_loop(bots, notifier, pm):
     """Sends a heartbeat report every hour."""
@@ -485,7 +507,27 @@ async def heartbeat_loop(bots, notifier, pm):
         await asyncio.sleep(3600) # 1 Hour
         await send_summary(bots, notifier, pm)
 
+import signal
+
+# ... (Logging setup remains)
+
+async def shutdown(sig, loop, notifier, exchange):
+    """Cleanup tasks and notify on catchable signals (SIGINT, SIGTERM)."""
+    logger.warning(f"Received exit signal {sig.name}...")
+    try:
+        notifier.notify_error(f"💀 *[TERMINATED]* Bot received {sig.name} and is shutting down.")
+    except:
+        pass
+    
+    tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    [task.cancel() for t in tasks]
+    
+    await exchange.close()
+    loop.stop()
+    logger.info("👋 Cleanup complete. Bot stopped.")
+
 async def main():
+    loop = asyncio.get_running_loop()
     exchange = ccxt.binance({
         'apiKey': CONFIG["BINANCE_API_KEY"],
         'secret': CONFIG["BINANCE_SECRET"],
@@ -497,36 +539,51 @@ async def main():
     pm = PortfolioManagerAsync(exchange, CONFIG)
     notifier = TelegramNotifier()
     
-    symbols = CONFIG["SYMBOLS_LIST"]
-    bots = {s.replace('/', '').lower(): SymbolBotAsync(s, exchange, pm, notifier, db) for s in symbols}
-    
-    for bot in bots.values():
-        await bot.initialize()
+    # Register signal handlers for clean exit and notification
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s, loop, notifier, exchange)))
 
-    ws_manager = BinanceWebSocketManager(symbols)
-    asyncio.create_task(ws_manager.connect())
-    asyncio.create_task(handle_commands(bots, notifier, pm))
-    asyncio.create_task(heartbeat_loop(bots, notifier, pm))
-    asyncio.create_task(auto_sentinel_loop(bots, notifier, pm))
-    
-    logger.info(f"🚀 v10.0.0-async Engine Started. Sentinel is watching...")
-    notifier.notify_status(f"🛰️ The Sentinel Active (v10.0.0)")
-
-    while True:
-        msg = await ws_manager.get_next_message()
-        stream = msg.get('e')
-        symbol_key = msg.get('s', '').lower()
+    try:
+        symbols = CONFIG["SYMBOLS_LIST"]
+        bots = {s.replace('/', '').lower(): SymbolBotAsync(s, exchange, pm, notifier, db) for s in symbols}
         
-        if symbol_key in bots:
-            bot = bots[symbol_key]
-            if stream == 'markPriceUpdate':
-                await bot.on_mark_price_update(float(msg['p']))
-            elif stream == 'kline':
-                tf_map = {'1h': CONFIG['SIGNAL_TIMEFRAME'], '1m': '1m'} # Simplified map
-                await bot.on_kline_update(msg['k']['i'], msg['k'])
+        for bot in bots.values():
+            await bot.initialize()
+
+        ws_manager = BinanceWebSocketManager(symbols)
+        asyncio.create_task(ws_manager.connect())
+        asyncio.create_task(handle_commands(bots, notifier, pm))
+        asyncio.create_task(heartbeat_loop(bots, notifier, pm))
+        asyncio.create_task(auto_sentinel_loop(bots, notifier, pm))
+        
+        logger.info(f"🚀 v{CONFIG['VERSION']}-async Engine Started. Sentinel is watching...")
+        notifier.notify_status(f"🛰️ The Sentinel Active (v{CONFIG['VERSION']})")
+
+        while True:
+            msg = await ws_manager.get_next_message()
+            stream = msg.get('e')
+            symbol_key = msg.get('s', '').lower()
+            
+            if symbol_key in bots:
+                bot = bots[symbol_key]
+                if stream == 'markPriceUpdate':
+                    await bot.on_mark_price_update(float(msg['p']))
+                elif stream == 'kline':
+                    await bot.on_kline_update(msg['k']['i'], msg['k'])
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error(f"💥 FATAL ERROR: {e}", exc_info=True)
+        notifier.notify_error(f"🚨 *[CRASH]* Bot died due to an unexpected error:\n`{str(e)[:200]}`\nCheck logs for details.")
+    finally:
+        await exchange.close()
+        logger.info("👋 Exchange resources released.")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
+    except Exception as fatal_e:
+        # Final fallback for errors outside the async loop
+        print(f"Final Fallback: {fatal_e}")

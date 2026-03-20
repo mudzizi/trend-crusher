@@ -9,6 +9,7 @@ sys.path.append(os.getcwd())
 from src.strategy import TrendCrusherV2
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
+from src.visualizer import TradingVisualizer
 
 class SniperBacktester(TrendCrusherV2):
     """
@@ -26,7 +27,6 @@ class SniperBacktester(TrendCrusherV2):
         side = 'LONG' if direction == 1 else 'SHORT'
         
         # 1. Evaluate if Sniper Ambush was successful
-        # We check if the price was within proximity BEFORE hitting the level in the current or prev 1m bar
         was_successful = False
         if not intra_data.empty:
             breakout_open = intra_data.iloc[0]['open']
@@ -150,15 +150,22 @@ def run_comparison(symbol):
     if symbol in CONFIG["SYMBOL_SETTINGS"]:
         base_config.update(CONFIG["SYMBOL_SETTINGS"][symbol])
     
-    # Ensure mandatory fields are present for V2 Strategy
     for key in ["FEE_RATE", "SLIPPAGE", "SEED", "DONCHIAN_PERIOD", "VOL_MULTIPLIER", "TRAILING_ATR_MULT", "ADX_FILTER_LEVEL", "EMA_TREND_PERIOD", "SIGNAL_TIMEFRAME", "RISK_PER_TRADE", "INITIAL_SL_ATR"]:
         if key not in base_config:
             base_config[key] = CONFIG[key]
 
-    # 1. Classic Market Mode (Force 0.5% Slippage Stress Test)
+    # --- Setup Structured Directories ---
+    timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    base_dir = f"reports/{clean_sym}"
+    sniper_report_dir = f"{base_dir}/Sniper_Mode/{timestamp}"
+    market_report_dir = f"{base_dir}/Market_Mode/{timestamp}"
+    
+    os.makedirs(sniper_report_dir, exist_ok=True)
+    os.makedirs(market_report_dir, exist_ok=True)
+
+    # 1. Classic Market Mode (0.5% Slippage)
     config_market = base_config.copy()
     config_market["SLIPPAGE"] = 0.005 
-    
     tester_m = TrendCrusherV2(config=config_market)
     trades_m, curve_m = tester_m.run_precision_backtest(df_sig, df_trend, df_check)
     ret_m = ((curve_m[-1] / config_market["SEED"]) - 1) * 100
@@ -174,6 +181,56 @@ def run_comparison(symbol):
     success_rate = (tester_s.sniper_success_count / (tester_s.sniper_success_count + tester_s.sniper_fail_count + 1e-6)) * 100
     print(f"Sniper Success Rate:            {success_rate:.1f}%")
     print(f"Alpha Gained:                   {ret_s - ret_m:>8.2f}%")
+
+    # --- Helper: Save Raw Data ---
+    def save_raw_trades(trades, path):
+        if not trades: return
+        df = pd.DataFrame(trades)
+        rows = []
+        for i in range(0, len(df), 2):
+            if i+1 >= len(df): break
+            o = df.iloc[i]; c = df.iloc[i+1]
+            rows.append({
+                'open_time': o['time'], 'close_time': c['time'],
+                'side': o['side'], 'entry_mode': o.get('entry_mode', 'MARKET'),
+                'open_price': o['price'], 'close_price': c['price'],
+                'pnl_usdt': c['pnl_usdt'], 'pnl_pct': ((c['price']/o['price'])-1)*100*(1 if o['side']=='LONG' else -1)
+            })
+        pd.DataFrame(rows).to_csv(f"{path}/trades.csv", index=False)
+
+    save_raw_trades(trades_s, sniper_report_dir)
+    save_raw_trades(trades_m, market_report_dir)
+    
+    # --- Helper: Generate Graphs ---
+    def generate_chart(trades, curve, path, title):
+        viz = TradingVisualizer(report_dir=path)
+        df_ohlcv = df_sig.copy()
+        upper, lower = calculate_donchian(df_ohlcv, base_config["DONCHIAN_PERIOD"])
+        df_ohlcv['upper'], df_ohlcv['lower'] = upper, lower
+        ema_vals = calculate_ema(df_trend, base_config["EMA_TREND_PERIOD"])
+        df_h = pd.DataFrame({'timestamp': df_trend['timestamp'], 'ema_h': ema_vals}).set_index('timestamp')
+        df_ohlcv = df_ohlcv.join(df_h, on='timestamp').ffill()
+
+        df_trades_formatted = pd.DataFrame()
+        if trades:
+            rows = []
+            for i in range(0, len(trades), 2):
+                if i+1 >= len(trades): break
+                o = trades[i]; c = trades[i+1]
+                rows.append({
+                    'open_time': o['time'], 'close_time': c['time'],
+                    'side': o['side'], 'open_price': o['price'], 'close_price': c['price'],
+                    'pnl_pct': ((c['price']/o['price'])-1)*100*(1 if o['side']=='LONG' else -1)
+                })
+            df_trades_formatted = pd.DataFrame(rows)
+
+        equity_df = pd.DataFrame({'timestamp': df_sig['timestamp'][:len(curve)], 'balance': curve})
+        viz.generate_report(df_ohlcv, df_trades_formatted, equity_df, title)
+
+    generate_chart(trades_s, curve_s, sniper_report_dir, f"{symbol} (Sniper Mode)")
+    generate_chart(trades_m, curve_m, market_report_dir, f"{symbol} (Market Mode)")
+    
+    print(f"Results organized in: reports/{clean_sym}/")
 
 if __name__ == "__main__":
     symbols = ["TRUMP/USDT", "ETH/USDT", "XAU/USDT"]

@@ -16,7 +16,7 @@ ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | 15    | +161.44%
 """
 
 # --- System Version ---
-VERSION = "11.0.0"
+VERSION = "11.0.1"
 
 CONFIG = {
     "VERSION": VERSION,
