@@ -9,7 +9,7 @@
 1. [시스템 철학](#-시스템-철학)
 2. [핵심 전략 (The 4 Pillars)](#-핵심-전략-the-4-pillars)
 3. [주요 기능 하이라이트](#-주요-기능-하이라이트)
-4. [환경 설정 가이드 (.env Setup)](#-환경-설정-가이드-env-setup)
+4. [상세 설정 가이드 (Configuration)](#-상세-설정-가이드-configuration)
 5. [설치 및 실행 (Installation)](#-설치-및-실행-installation)
 6. [운영 마스터 가이드 (Operations)](#-운영-마스터-가이드-operations)
 7. [안전 및 회복력 (Safety)](#-안전-및-회복력-safety)
@@ -42,24 +42,36 @@
 
 ---
 
-## 🛠 환경 설정 가이드 (.env Setup)
-프로젝트 루트에 `.env` 파일을 생성하고 아래 형식을 복사하여 입력하세요.
+## 🔧 상세 설정 가이드 (Configuration)
 
-```env
-# 바이낸스 선물 API 키 (필수)
-BINANCE_API_KEY=your_api_key_here
-BINANCE_SECRET=your_secret_key_here
+### 1. 비밀번호 및 계정 설정 (.env)
+프로젝트 루트의 `.env` 파일은 봇의 신분증과 같습니다.
 
-# 텔레그램 알림 및 원격 제어 (필수)
-TELEGRAM_TOKEN=12345678:ABCdefGHI...
-TELEGRAM_CHAT_ID=123456789
+| 변수명 | 설명 | 비고 |
+| :--- | :--- | :--- |
+| `BINANCE_API_KEY` | 바이낸스 API Key | **Futures 권한 필수**, 출금 불가 권장 |
+| `BINANCE_SECRET` | 바이낸스 Secret Key | 외부 유출 절대 금지 |
+| `TELEGRAM_TOKEN` | 봇파더에게 받은 API 토큰 | 알림 및 원격 제어용 |
+| `TELEGRAM_CHAT_ID` | 내 텔레그램 계정 숫자 ID | 인증된 사용자 식별용 |
+| `DRY_RUN` | 실거래 여부 (`True`/`False`) | True 설정 시 가상 머니로 테스트 |
+| `SEED` | 가상 시작 자본금 | DRY_RUN 모드에서만 사용 |
 
-# 가상 매매 여부 (True: 테스트 / False: 실제 돈)
-DRY_RUN=True
+### 2. 전략 및 리스크 관리 (src/config.py)
+`src/config.py`는 봇의 지능과 리스크 허용 범위를 결정합니다.
 
-# 초기 가상 자본 (DRY_RUN 모드 전용)
-SEED=10000
-```
+#### 🌍 글로벌 설정 (Global Settings)
+*   **`SYMBOLS_LIST`**: 봇이 동시에 감시할 코인 목록. (예: `["TRUMP/USDT", "ETH/USDT"]`)
+*   **`MAX_CONCURRENT_TRADES`**: 동시에 잡을 수 있는 최대 포지션 개수. 계좌 전체 리스크를 제한합니다.
+*   **`SNIPER_PROXIMITY_PCT`**: 돌파가 얼마나 가까워졌을 때 매복 주문을 넣을지 결정 (기본 `0.005` = 0.5%).
+*   **`FEE_RATE` / `MAKER_FEE_RATE`**: 거래소 수수료율. 수익률 계산의 정밀도를 결정합니다.
+
+#### 🎯 심볼별 최적화 설정 (SYMBOL_SETTINGS)
+각 코인의 성격에 맞게 개별 파라미터를 설정합니다.
+*   **`ALLOCATED_SEED`**: 해당 코인에 할당할 전용 자산. (예: $4,000)
+*   **`VOL_MULTIPLIER`**: 거래량 폭발 기준. (높을수록 깐깐한 진입)
+*   **`ADX_FILTER_LEVEL`**: 추세 강도 기준. (높을수록 확실한 추세에서만 진입)
+*   **`EMA_TREND_PERIOD`**: 대세 판단 이평선. (보통 100 또는 200 사용)
+*   **`RISK_PER_TRADE`**: 한 번의 매매에서 감수할 원금 대비 손실 비율 (기본 `0.02` = 2%).
 
 ---
 
@@ -97,11 +109,6 @@ PYTHONPATH=. python3 scripts/watchdog.py
 | `/sniper_on/off` | 선제적 지정가 매복 기능 제어 | 휩소 장세가 심할 때 OFF 가능 |
 | `/stop` / `/resume` | 신규 진입 로직 중단 및 재개 | 큰 발표(CPI 등) 전 일시 중단 |
 | `/close_all` | **[긴급 킬 스위치]** 전량 청산 및 종료 | 비상 사태 시 사용 |
-
-### 자가 학습 워크플로우 (Sentinel)
-1. 봇이 매주 월요일 00:00에 자동 스캔을 수행하거나, 사용자가 `/optimize` 명령을 내립니다.
-2. 봇이 "이런 세팅이 더 좋습니다"라고 리포트를 보냅니다.
-3. 리포트의 예상 수익률/MDD를 확인하고 `/apply`를 입력하여 전략을 즉시 갱신합니다.
 
 ---
 
