@@ -56,8 +56,12 @@ class PortfolioManager:
             return 0
 
         # 3. Risk-based Quantity
+        # Get symbol-specific risk or fallback to global risk
+        symbol_settings = self.config.get("SYMBOL_SETTINGS", {}).get(symbol, {})
+        risk_pct = symbol_settings.get("RISK_PER_TRADE", self.config.get("RISK_PER_TRADE", 0.02))
+        
         # Risk amount is % of TOTAL equity (e.g., 2% of $10k = $200)
-        risk_amt = equity * self.config.get("RISK_PER_TRADE", 0.02)
+        risk_amt = equity * risk_pct
         stop_dist = abs(entry_price - sl_price)
         if stop_dist == 0:
             return 0

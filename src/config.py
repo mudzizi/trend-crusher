@@ -56,6 +56,38 @@ CONFIG = {
     "SLIPPAGE": 0.0005,
     "DATA_DIR": "data",
     
+    # --- Symbol Specific Optimized Parameters ---
+    "SYMBOL_SETTINGS": {
+        "TRUMP/USDT": {
+            "VOL_MULTIPLIER": 2.5,
+            "TRAILING_ATR_MULT": 4.5,
+            "EMA_TREND_PERIOD": 100,
+            "RISK_PER_TRADE": 0.02,
+            "ADX_FILTER_LEVEL": 20
+        },
+        "ETH/USDT": {
+            "VOL_MULTIPLIER": 2.0,
+            "TRAILING_ATR_MULT": 4.5,
+            "EMA_TREND_PERIOD": 200,
+            "RISK_PER_TRADE": 0.02,
+            "ADX_FILTER_LEVEL": 20
+        },
+        "XAU/USDT": {
+            "VOL_MULTIPLIER": 2.5,
+            "TRAILING_ATR_MULT": 4.5,
+            "EMA_TREND_PERIOD": 200,
+            "RISK_PER_TRADE": 0.015, # Gold uses lower risk due to leverage
+            "ADX_FILTER_LEVEL": 25
+        },
+        "SOL/USDT": {
+            "VOL_MULTIPLIER": 1.5,
+            "TRAILING_ATR_MULT": 4.0,
+            "EMA_TREND_PERIOD": 200,
+            "RISK_PER_TRADE": 0.02,
+            "ADX_FILTER_LEVEL": 15
+        }
+    },
+    
     # --- New Strategy Improvements ---
     "ADX_FILTER_LEVEL": 20, 
     "USE_ADAPTIVE_TRAIL": True,

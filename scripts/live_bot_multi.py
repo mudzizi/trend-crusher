@@ -33,6 +33,12 @@ class SymbolBot:
         self.viz = viz
         self.logger = logging.getLogger(f"Bot-{symbol.split('/')[0]}")
         
+        # Load symbol-specific settings, fallback to global CONFIG
+        self.settings = CONFIG.copy()
+        if "SYMBOL_SETTINGS" in CONFIG and self.symbol in CONFIG["SYMBOL_SETTINGS"]:
+            self.settings.update(CONFIG["SYMBOL_SETTINGS"][self.symbol])
+            self.logger.info(f"Loaded optimized settings for {self.symbol}")
+        
         self.position = 0 
         self.entry_price = 0
         self.quantity = 0
@@ -65,14 +71,14 @@ class SymbolBot:
     def step(self):
         try:
             # 1. Fetch Indicators
-            df_1h = self.fetch_data(CONFIG["SIGNAL_TIMEFRAME"])
-            df_4h = self.fetch_data(CONFIG["TREND_TIMEFRAME"])
+            df_1h = self.fetch_data(self.settings["SIGNAL_TIMEFRAME"])
+            df_4h = self.fetch_data(self.settings["TREND_TIMEFRAME"])
             
-            df_1h['upper'], df_1h['lower'] = calculate_donchian(df_1h, CONFIG["DONCHIAN_PERIOD"])
-            df_1h['atr'] = calculate_atr(df_1h, CONFIG["ATR_PERIOD"])
-            df_1h['avg_vol'] = calculate_avg_vol(df_1h, CONFIG["AVG_VOL_PERIOD"])
+            df_1h['upper'], df_1h['lower'] = calculate_donchian(df_1h, self.settings["DONCHIAN_PERIOD"])
+            df_1h['atr'] = calculate_atr(df_1h, self.settings["ATR_PERIOD"])
+            df_1h['avg_vol'] = calculate_avg_vol(df_1h, self.settings["AVG_VOL_PERIOD"])
             df_1h['adx'] = calculate_adx(df_1h, 14)
-            ema_4h = calculate_ema(df_4h, CONFIG["EMA_TREND_PERIOD"])
+            ema_4h = calculate_ema(df_4h, self.settings["EMA_TREND_PERIOD"])
             ema_4h_val = ema_4h.iloc[-1]
             
             ticker = self.exchange.fetch_ticker(self.symbol)
@@ -89,9 +95,9 @@ class SymbolBot:
                 pnl_now = ((c_close / self.entry_price) - 1) * 100 * self.position
                 
                 # Adaptive SL logic
-                curr_atr_mult = CONFIG["TRAILING_ATR_MULT"]
-                if CONFIG.get("USE_ADAPTIVE_TRAIL", False):
-                    for step_cfg in CONFIG.get("ADAPTIVE_TRAIL_STEPS", []):
+                curr_atr_mult = self.settings["TRAILING_ATR_MULT"]
+                if self.settings.get("USE_ADAPTIVE_TRAIL", False):
+                    for step_cfg in self.settings.get("ADAPTIVE_TRAIL_STEPS", []):
                         if pnl_now >= step_cfg['pnl_pct']:
                             curr_atr_mult = min(curr_atr_mult, step_cfg['atr_mult'])
 
@@ -110,7 +116,7 @@ class SymbolBot:
                     self.logger.info(f"🛑 EXIT SIGNAL: Closing at {c_close:,.2f}")
                     pnl_pct = ((c_close / self.entry_price) - 1) * 100 * self.position
                     gross_pnl_usdt = (self.entry_price * self.quantity) * (pnl_pct / 100)
-                    fee_usdt = (self.entry_price * self.quantity * CONFIG["FEE_RATE"]) + (c_close * self.quantity * CONFIG["FEE_RATE"])
+                    fee_usdt = (self.entry_price * self.quantity * self.settings["FEE_RATE"]) + (c_close * self.quantity * self.settings["FEE_RATE"])
                     actual_pnl_usdt = gross_pnl_usdt - fee_usdt
                     
                     self.execute_market_order(0)
@@ -123,12 +129,12 @@ class SymbolBot:
 
             # 3. Monitor Entry
             if self.position == 0:
-                is_vol_burst = curr_vol > (avg_vol * CONFIG["VOL_MULTIPLIER"])
-                is_trending = adx > CONFIG["ADX_FILTER_LEVEL"]
+                is_vol_burst = curr_vol > (avg_vol * self.settings["VOL_MULTIPLIER"])
+                is_trending = adx > self.settings["ADX_FILTER_LEVEL"]
                 
                 if is_vol_burst and is_trending and c_close > ema_4h_val and c_close > row['upper']:
                     self.logger.info(f"🚀 BUY SIGNAL: Price {c_close:,.2f} (ADX: {adx:.1f})")
-                    self.sl_price = c_close - (atr * CONFIG["INITIAL_SL_ATR"])
+                    self.sl_price = c_close - (atr * self.settings["INITIAL_SL_ATR"])
                     qty = self.pm.calculate_order_qty(self.symbol, c_close, self.sl_price)
                     if qty > 0:
                         self.quantity = self.sanitize_quantity(qty)
@@ -139,7 +145,7 @@ class SymbolBot:
                         
                 elif is_vol_burst and is_trending and c_close < ema_4h_val and c_close < row['lower']:
                     self.logger.info(f"📉 SELL SIGNAL: Price {c_close:,.2f} (ADX: {adx:.1f})")
-                    self.sl_price = c_close + (atr * CONFIG["INITIAL_SL_ATR"])
+                    self.sl_price = c_close + (atr * self.settings["INITIAL_SL_ATR"])
                     qty = self.pm.calculate_order_qty(self.symbol, c_close, self.sl_price)
                     if qty > 0:
                         self.quantity = self.sanitize_quantity(qty)
@@ -161,13 +167,13 @@ class SymbolBot:
             return round(qty, 3)
 
     def execute_market_order(self, direction):
-        if CONFIG["DRY_RUN"]:
+        if self.settings["DRY_RUN"]:
             self.logger.info(f"DRY RUN: Executing {'ENTRY' if direction!=0 else 'EXIT'} for {self.symbol}")
             return
         
         try:
             side = 'buy' if (direction == 1 or (direction == 0 and self.position == -1)) else 'sell'
-            self.exchange.set_leverage(int(CONFIG.get("MAX_LEVERAGE", 5)), self.symbol)
+            self.exchange.set_leverage(int(self.settings.get("MAX_LEVERAGE", 5)), self.symbol)
             self.exchange.create_market_order(self.symbol, side, self.quantity)
             self.logger.info(f"✅ Order Executed: {side} {self.quantity}")
         except Exception as e:
