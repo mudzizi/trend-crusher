@@ -302,8 +302,8 @@ def main():
     symbols = CONFIG["SYMBOLS_LIST"]
     bots = [SymbolBot(sym, exchange, pm, notifier, db, viz) for sym in symbols]
     
-    logger.info(f"Starting Multi-Symbol Bot with {len(bots)} pairs...")
-    notifier.notify_status(f"Multi-Symbol Bot Started: {', '.join(symbols)}")
+    logger.info(f"Starting Multi-Symbol Bot {CONFIG['VERSION']} with {len(bots)} pairs...")
+    notifier.notify_status(f"🚀 Multi-Symbol Bot {CONFIG['VERSION']} Started: {', '.join(symbols)}")
     
     # Initialize virtual balances for each symbol if needed
     if CONFIG["DRY_RUN"]:

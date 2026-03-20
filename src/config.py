@@ -14,7 +14,11 @@ ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | +102.73%   | 18.02
 -----------------------------------------------------------------------------------
 """
 
+# --- System Version ---
+VERSION = "6.2.0"
+
 CONFIG = {
+    "VERSION": VERSION,
     # --- API KEYS (보안을 위해 .env에서 로드) ---
     "BINANCE_API_KEY": os.getenv("BINANCE_API_KEY", ""),
     "BINANCE_SECRET": os.getenv("BINANCE_SECRET", ""),

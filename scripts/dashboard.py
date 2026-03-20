@@ -92,6 +92,7 @@ def index():
         win_rate = (wins / len(trades_list)) * 100
 
     return render_template('index.html', 
+                           version=CONFIG.get("VERSION", "N/A"),
                            symbols=symbols,
                            market_summaries=market_summaries,
                            active_positions=active_positions,
