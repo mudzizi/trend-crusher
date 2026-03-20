@@ -2,7 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v11.0.0] - 2026-03-21 (Current)
+## [v11.0.1] - 2026-03-21 (Current)
+### Added
+- **Resilience Watchdog**: Implemented `scripts/watchdog.py` to monitor the bot process and auto-restart on crashes or OOM Killer events.
+- **Last Will Notification**: Added global exception and signal handlers to notify via Telegram immediately before a crash or termination.
+- **Resource Protection**: Ensured explicit closure of exchange connections during shutdown to prevent resource leaks.
+- **Stability Fixes**: Resolved various SyntaxErrors and verified the entire suite with 34/34 tests.
+
+## [v11.0.0] - 2026-03-21
 ### Added
 - **The Sniper (Pre-emptive Limit Entry)**: Places zero-offset Maker Limit orders precisely at Donchian breakout levels when price approaches within 0.5%.
 - **4-Pillar Strict Validation**: Ambush is only set if Proximity, Volume Burst, ADX Trend, and EMA Macro-direction align perfectly.
