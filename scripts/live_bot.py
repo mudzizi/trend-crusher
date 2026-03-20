@@ -165,7 +165,7 @@ class TrendCrusherLive:
                         logger.info(f"🛑 EXIT SIGNAL: Closing at {c_close:,.2f} | PnL: {actual_pnl_usdt:+.2f} USDT")
                         self.execute_order(0, c_close)
                         self.session_capital += actual_pnl_usdt
-                        self.db.log_trade_close(c_close, pnl_pct, actual_pnl_usdt)
+                        self.db.log_trade_close(self.symbol, c_close, pnl_pct, actual_pnl_usdt)
                         self.db.log_equity(self.session_capital)
                         
                         self.viz.generate_report(df_1h, self.db.get_trade_history(), self.db.get_equity_history(), self.symbol)

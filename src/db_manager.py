@@ -43,13 +43,17 @@ class DBManager:
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (symbol, side, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), price, qty, strength, 'OPEN'))
 
-    def log_trade_close(self, price, pnl_pct, pnl_usdt):
+    def log_trade_close(self, symbol, price, pnl_pct, pnl_usdt):
         with self._get_connection() as conn:
             conn.execute("""
                 UPDATE trades 
                 SET close_time = ?, close_price = ?, pnl_pct = ?, pnl_usdt = ?, status = ?
-                WHERE status = 'OPEN'
-            """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), price, pnl_pct, pnl_usdt, 'CLOSED'))
+                WHERE status = 'OPEN' AND symbol = ?
+            """, (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), price, pnl_pct, pnl_usdt, 'CLOSED', symbol))
+
+    def get_active_trades(self):
+        with self._get_connection() as conn:
+            return pd.read_sql_query("SELECT * FROM trades WHERE status='OPEN'", conn)
 
     def log_equity(self, balance):
         with self._get_connection() as conn:

@@ -19,6 +19,14 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
     *   수익 20% 돌파: ATR 2.5x (타이트한 익절 방어)
 3.  **Risk-based Sizing**: 모든 매매는 손절 시 원금의 **2%**만 손실되도록 수량을 자동 계산.
 
+### 2.3. 포트폴리오 관리 (Portfolio Management - V4)
+여러 심볼을 동시에 운용할 때의 자본 효율성과 계좌 안전성을 위해 중앙 집중식 관리 로직을 도입했습니다.
+1.  **Weight-based Allocation**: 각 심볼별로 최대 할당 비중(Weight)을 설정 (예: TRUMP 40%, ETH 30%).
+2.  **Dual Constraint Sizing**: 다음 두 수치 중 **최솟값**을 최종 수량으로 선택합니다.
+    *   **Risk-Qty**: 전체 자산의 2% 리스크를 감수하는 수량.
+    *   **Margin-Qty**: (전체 자산 * 비중 * 레버리지) 한도 내에서의 수량.
+3.  **Concurrent Trade Limit**: 동시에 진입 가능한 최대 포지션 개수(`MAX_CONCURRENT_TRADES`)를 제한하여 시스템적인 연쇄 손실 위험을 방지합니다.
+
 ## 3. 최종 최적화 결과 (Verified 365-Day Backtest)
 최근 1년치(2025.03 ~ 2026.03) 1분봉 정밀 검증 결과입니다.
 

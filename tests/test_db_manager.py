@@ -25,7 +25,7 @@ def test_log_trade_open_and_close(temp_db):
     assert history.iloc[0]['status'] == "OPEN"
     
     # 2. 포지션 종료 기록
-    temp_db.log_trade_close(51000.0, 2.0, 200.0)
+    temp_db.log_trade_close("BTC/USDT", 51000.0, 2.0, 200.0)
     history = temp_db.get_trade_history() # 이제 CLOSED이므로 helper 사용 가능
     assert len(history) == 1
     assert history.iloc[0]['close_price'] == 51000.0

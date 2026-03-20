@@ -24,6 +24,13 @@ CONFIG = {
     # --- Operational Settings ---
     "DRY_RUN": os.getenv("DRY_RUN", "True").lower() == "true",            
     "SYMBOL": os.getenv("SYMBOL", "TRUMP/USDT"),     
+    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "SOL/USDT"], # Multi-symbol list
+    "MAX_CONCURRENT_TRADES": 3,                             # Limit total risk exposure
+    "SYMBOL_WEIGHTS": {                                     # Allocation weight per symbol
+        "TRUMP/USDT": 0.4,
+        "ETH/USDT": 0.3,
+        "SOL/USDT": 0.3
+    },
     "SEED": float(os.getenv("SEED", 10000.0)),              
     "SIGNAL_TIMEFRAME": "1h",
     "TREND_TIMEFRAME": "4h",
