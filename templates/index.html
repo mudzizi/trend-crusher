@@ -3,132 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trend Crusher Dashboard</title>
+    <title>Trend Crusher Portfolio Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #0a0a0a; color: #e0e0e0; font-family: 'Inter', sans-serif; }
-        .card { background-color: #141414; border: 1px solid #222; margin-bottom: 20px; }
-        .positive { color: #00ff88; }
-        .negative { color: #ff4d4d; }
-        .stat-card { padding: 20px; text-align: center; border-radius: 12px; }
-        .trend-bull { color: #00ff88; background: rgba(0, 255, 136, 0.1); }
-        .trend-bear { color: #ff4d4d; background: rgba(255, 77, 77, 0.1); }
-        .market-img { width: 100%; border-radius: 12px; border: 1px solid #333; }
-        .report-img { width: 100%; border-radius: 8px; cursor: pointer; transition: 0.2s; }
-        .report-img:hover { transform: scale(1.02); }
-        .header-section { background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%); padding: 40px 0; border-bottom: 1px solid #222; }
-        .alert-custom { background-color: #2c1a1a; border: 1px solid #ff4d4d; color: #ff4d4d; }
+        :root { --bg-dark: #0a0a0a; --card-bg: #141414; --accent-green: #00ff88; --accent-red: #ff4d4d; --text-secondary: #a0a0a0; }
+        body { background-color: var(--bg-dark); color: #e0e0e0; font-family: 'Inter', sans-serif; }
+        .card { background-color: var(--card-bg); border: 1px solid #222; margin-bottom: 20px; border-radius: 16px; }
+        .positive { color: var(--accent-green); }
+        .negative { color: var(--accent-red); }
+        .stat-card { padding: 25px; text-align: center; border-radius: 16px; border: 1px solid #333; }
+        .header-section { background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%); padding: 50px 0; border-bottom: 1px solid #222; }
+        .badge-pos { background: rgba(0, 255, 136, 0.15); color: var(--accent-green); border: 1px solid var(--accent-green); }
+        .badge-neg { background: rgba(255, 77, 77, 0.15); color: var(--accent-red); border: 1px solid var(--accent-red); }
+        .pos-card { border-left: 4px solid var(--accent-green); }
+        .neg-card { border-left: 4px solid var(--accent-red); }
+        .progress { height: 8px; background-color: #333; border-radius: 4px; overflow: visible; position: relative; }
+        .progress-bar-sl { position: absolute; height: 16px; width: 2px; background: white; top: -4px; z-index: 10; }
+        .table-dark { --bs-table-bg: transparent; }
     </style>
 </head>
 <body>
-    <div class="header-section mb-4">
+    <div class="header-section mb-5">
         <div class="container">
-            <div class="d-flex justify-content-between align-items-end">
-                <div>
-                    <h1 class="fw-bold mb-0">Trend Crusher <span class="text-secondary fs-4">V2</span></h1>
-                    <p class="text-secondary mb-0">Live Algorithm Monitoring: <strong>{{ symbol }}</strong></p>
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1 class="fw-extrabold mb-1">Trend Crusher <span class="text-secondary fs-4">V4 Portfolio</span></h1>
+                    <p class="text-secondary mb-0">Multi-Symbol Capital Management & Risk Control</p>
                 </div>
-                <div class="text-end">
-                    <h5 class="text-secondary mb-1">Session Balance</h5>
-                    <h2 class="fw-bold {{ 'positive' if total_return >= 0 else 'negative' }}">
-                        {{ "{:,.2f}".format(balance) }} <small class="fs-6 text-secondary">USDT</small>
-                    </h2>
+                <div class="col-md-6 text-end">
+                    <div class="d-inline-block text-start me-4">
+                        <div class="text-secondary small">PORTFOLIO BALANCE</div>
+                        <h2 class="fw-bold mb-0 {{ 'positive' if total_return >= 0 else 'negative' }}">
+                            {{ "{:,.2f}".format(balance) }} <small class="fs-6 opacity-50">USDT</small>
+                        </h2>
+                    </div>
+                    <div class="d-inline-block text-start">
+                        <div class="text-secondary small">WIN RATE</div>
+                        <h2 class="fw-bold mb-0 text-info">{{ win_rate }}%</h2>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="container">
-        <!-- Error Alert -->
         {% if error %}
-        <div class="alert alert-custom shadow-sm mb-4" role="alert">
-            <h5 class="alert-heading fw-bold">⚠️ Market Data Warning</h5>
+        <div class="alert alert-danger border-0 shadow-sm mb-4" style="background: rgba(255, 77, 77, 0.1);">
+            <h5 class="fw-bold">⚠️ Dashboard Error</h5>
             <p class="mb-0">{{ error }}</p>
-            <hr>
-            <p class="mb-0 small">Please check if the symbol exists or if the bot has enough history to calculate EMA 200.</p>
         </div>
         {% endif %}
 
-        <!-- Market Insight Section -->
-        {% if market %}
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card shadow-sm">
-                    <div class="text-secondary small mb-1">CURRENT PRICE</div>
-                    <h3 class="fw-bold mb-0">{{ "{:,.2f}".format(market.price) }}</h3>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card shadow-sm {{ 'trend-bull' if market.trend == 'BULLISH' else 'trend-bear' }}">
-                    <div class="small mb-1">4H TREND</div>
-                    <h3 class="fw-bold mb-0">{{ market.trend }}</h3>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card shadow-sm">
-                    <div class="text-secondary small mb-1">VOL MULTIPLIER</div>
-                    <h3 class="fw-bold mb-0 {{ 'positive' if market.vol_mult >= 2.0 else '' }}">
-                        {{ market.vol_mult }}x
-                    </h3>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card shadow-sm">
-                    <div class="text-secondary small mb-1">DIST TO UPPER</div>
-                    <h3 class="fw-bold mb-0 text-info">{{ market.dist_upper }}%</h3>
-                </div>
-            </div>
-        </div>
-
+        <!-- Active Positions Section -->
         <div class="row mb-5">
             <div class="col-12">
-                <div class="card shadow">
-                    <div class="card-header bg-transparent border-secondary py-3">
-                        <h5 class="mb-0">Live Market Analysis (1H + Indicators)</h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <img src="/static/current_market.png?v={{ reports|length }}" class="market-img" alt="Market View">
-                    </div>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="fw-bold mb-0">Active Positions</h3>
+                    <span class="badge bg-secondary px-3 py-2 rounded-pill">{{ active_positions|length }} Active</span>
+                </div>
+                
+                <div class="row">
+                    {% if active_positions %}
+                        {% for pos in active_positions %}
+                        <div class="col-md-4">
+                            <div class="card stat-card {{ 'pos-card' if pos.side == 'LONG' else 'neg-card' }}">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="text-start">
+                                        <h4 class="fw-bold mb-0">{{ pos.symbol }}</h4>
+                                        <span class="badge {{ 'badge-pos' if pos.side == 'LONG' else 'badge-neg' }}">{{ pos.side }}</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="h3 fw-bold mb-0 {{ 'positive' if pos.pnl >= 0 else 'negative' }}">
+                                            {{ "{:+.2f}%".format(pos.pnl) }}
+                                        </div>
+                                        <div class="small text-secondary">PnL (Real-time)</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-4">
+                                    <div class="d-flex justify-content-between small text-secondary mb-2">
+                                        <span>Entry: {{ "{:,.2f}".format(pos.entry) }}</span>
+                                        <span>Current: {{ "{:,.2f}".format(pos.curr) }}</span>
+                                    </div>
+                                    <!-- SL Visualization (Placeholder for logic) -->
+                                    <div class="progress mt-2 mb-4">
+                                        <div class="progress-bar {{ 'bg-success' if pos.pnl >= 0 else 'bg-danger' }}" role="progressbar" style="width: {{ [pos.pnl|abs * 5, 100]|min }}%"></div>
+                                    </div>
+                                    <div class="text-start small opacity-50">
+                                        Qty: {{ pos.qty }} | Open: {{ pos.open_time[11:16] }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12">
+                            <div class="card p-5 text-center text-secondary border-dashed">
+                                <h5 class="mb-0">No active positions at the moment.</h5>
+                                <p class="small">Waiting for Trend Breakout signals...</p>
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
-        {% else %}
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary mb-3" role="status"></div>
-            <p class="text-secondary">Waiting for live market data...</p>
-        </div>
-        {% endif %}
 
         <div class="row">
+            <!-- Market Watch List -->
+            <div class="col-lg-5">
+                <div class="card shadow">
+                    <div class="card-header bg-transparent border-0 py-4 px-4">
+                        <h5 class="fw-bold mb-0">Market Watch</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-dark table-hover mb-0">
+                            <thead class="text-secondary small">
+                                <tr>
+                                    <th class="ps-4">SYMBOL</th>
+                                    <th>PRICE</th>
+                                    <th class="pe-4 text-end">WEIGHT</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in market_summaries %}
+                                <tr style="border-bottom: 1px solid #1a1a1a;">
+                                    <td class="ps-4 fw-bold py-3">{{ item.symbol }}</td>
+                                    <td class="py-3">{{ "{:,.2f}".format(item.price) }}</td>
+                                    <td class="pe-4 text-end py-3 text-secondary">{{ "{:.1f}%".format(item.weight * 100) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- Trade History -->
             <div class="col-lg-7">
                 <div class="card shadow">
-                    <div class="card-header bg-transparent border-secondary py-3 d-flex justify-content-between">
-                        <h5 class="mb-0">Closed Trades</h5>
-                        <span class="badge bg-secondary">{{ trades|length }} Trades Total</span>
+                    <div class="card-header bg-transparent border-0 py-4 px-4 d-flex justify-content-between">
+                        <h5 class="fw-bold mb-0">Closed Trades</h5>
+                        <span class="badge bg-dark border border-secondary">{{ trades|length }} Total</span>
                     </div>
-                    <div class="card-body">
+                    <div class="card-body p-0">
                         <div class="table-responsive">
                             <table class="table table-dark table-hover mb-0">
-                                <thead>
+                                <thead class="text-secondary small">
                                     <tr>
-                                        <th>Side</th>
-                                        <th>Entry</th>
-                                        <th>Exit</th>
+                                        <th class="ps-4">SYMBOL</th>
+                                        <th>SIDE</th>
                                         <th>PnL (%)</th>
-                                        <th>Time</th>
+                                        <th>PnL (USDT)</th>
+                                        <th class="pe-4 text-end">DATE</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for trade in trades %}
-                                    <tr>
-                                        <td><span class="badge {{ 'bg-success' if trade.side == 'LONG' else 'bg-danger' }}">{{ trade.side }}</span></td>
-                                        <td>{{ "{:,.1f}".format(trade.open_price) }}</td>
-                                        <td>{{ "{:,.1f}".format(trade.close_price) }}</td>
+                                    {% for trade in trades[:15] %}
+                                    <tr style="border-bottom: 1px solid #1a1a1a;">
+                                        <td class="ps-4 fw-bold py-3">{{ trade.symbol }}</td>
+                                        <td><span class="badge {{ 'badge-pos' if trade.side == 'LONG' else 'badge-neg' }}">{{ trade.side }}</span></td>
                                         <td class="{{ 'positive' if trade.pnl_pct > 0 else 'negative' }} fw-bold">
                                             {{ "{:+.2f}%".format(trade.pnl_pct) }}
                                         </td>
-                                        <td class="small text-secondary">{{ trade.close_time[5:] if trade.close_time else '' }}</td>
+                                        <td class="{{ 'positive' if trade.pnl_usdt > 0 else 'negative' }}">
+                                            {{ "{:+.2f}".format(trade.pnl_usdt) }}
+                                        </td>
+                                        <td class="pe-4 text-end small text-secondary py-3">{{ trade.close_time[5:16] }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -137,29 +178,13 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Trade Reports -->
-            <div class="col-lg-5">
-                <div class="card shadow">
-                    <div class="card-header bg-transparent border-secondary py-3">
-                        <h5 class="mb-0">Past Trade Reports</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            {% for report in reports[:6] %}
-                            <div class="col-12 mb-3">
-                                <a href="/reports/{{ report }}" target="_blank">
-                                    <img src="/reports/{{ report }}" class="report-img" title="{{ report }}">
-                                </a>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-refresh page every 30 seconds
+        setTimeout(function() { location.reload(); }, 30000);
+    </script>
 </body>
 </html>

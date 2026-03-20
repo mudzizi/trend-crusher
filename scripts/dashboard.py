@@ -7,63 +7,72 @@ import os
 import pandas as pd
 import ccxt
 import traceback
+import time
 
-app = Flask(__name__)
+# --- Flask Setup ---
+base_dir = os.path.dirname(os.path.abspath(__file__))
+template_dir = os.path.join(os.path.dirname(base_dir), 'templates')
+static_dir = os.path.join(os.path.dirname(base_dir), 'static')
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 db = DBManager()
 viz = TradingVisualizer()
 exchange = ccxt.binance({'options': {'defaultType': 'future'}})
 
 @app.route('/')
 def index():
-    symbol = CONFIG["SYMBOL"]
-    market_stats = None
+    symbols = CONFIG.get("SYMBOLS_LIST", [CONFIG["SYMBOL"]])
+    market_summaries = []
+    active_positions = []
     error_msg = None
     
     try:
-        # 1. Fetch Latest Market Data
-        ohlcv_1h = exchange.fetch_ohlcv(symbol, '1h', limit=100)
-        df_1h = pd.DataFrame(ohlcv_1h, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df_1h['timestamp'] = pd.to_datetime(df_1h['timestamp'], unit='ms')
-        
-        # EMA 200을 위해 충분한 데이터를 가져옴 (최대 500개)
-        ohlcv_4h = exchange.fetch_ohlcv(symbol, '4h', limit=500)
-        df_4h = pd.DataFrame(ohlcv_4h, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        
-        # 데이터 개수 체크
-        if len(df_4h) < 20:
-            error_msg = f"Insufficient data for {symbol}. Need more history."
-        else:
-            # Calculate Indicators
-            df_1h['upper'], df_1h['lower'] = calculate_donchian(df_1h, CONFIG["DONCHIAN_PERIOD"])
-            df_1h['avg_vol'] = calculate_avg_vol(df_1h, CONFIG["AVG_VOL_PERIOD"])
+        # 1. Fetch Active Positions from DB
+        active_df = db.get_active_trades()
+        for _, pos in active_df.iterrows():
+            sym = pos['symbol']
+            ticker = exchange.fetch_ticker(sym)
+            curr_price = float(ticker['last'])
             
-            # EMA 계산 (데이터가 부족하면 있는 만큼만 계산하도록 처리됨)
-            ema_period = min(len(df_4h), CONFIG["EMA_TREND_PERIOD"])
-            ema_4h = calculate_ema(df_4h, period=ema_period)
-            df_1h['ema_h'] = ema_4h.iloc[-1]
+            pnl_pct = ((curr_price / pos['open_price']) - 1) * 100
+            if pos['side'] == 'SHORT':
+                pnl_pct = -pnl_pct
+                
+            # SL Status Calculation
+            # We need to estimate current SL since it's not in DB yet (it's managed in-memory by the bot)
+            # But for the dashboard, we'll show distance to initial SL and entry
+            # To be more accurate, the bot should ideally log SL to DB, but for now we'll calculate basic distance
             
-            # Generate Market View Image
-            viz.generate_market_view(df_1h, symbol)
-            
-            last_row = df_1h.iloc[-1]
-            curr_price = last_row['close']
-            vol_mult = last_row['volume'] / (last_row['avg_vol'] + 1e-10)
-            dist_upper = (last_row['upper'] - curr_price) / curr_price * 100
-            dist_lower = (curr_price - last_row['lower']) / curr_price * 100
-            trend = "BULLISH" if curr_price > last_row['ema_h'] else "BEARISH"
-            
-            market_stats = {
-                "price": curr_price,
-                "trend": trend,
-                "vol_mult": round(vol_mult, 2),
-                "dist_upper": round(dist_upper, 2),
-                "dist_lower": round(dist_lower, 2)
-            }
+            active_positions.append({
+                "symbol": sym,
+                "side": pos['side'],
+                "entry": pos['open_price'],
+                "curr": curr_price,
+                "qty": pos['quantity'],
+                "pnl": round(pnl_pct, 2),
+                "open_time": pos['open_time']
+            })
+
+        # 2. Fetch Market Summary for all watched symbols
+        for sym in symbols:
+            try:
+                ticker = exchange.fetch_ticker(sym)
+                c_close = float(ticker['last'])
+                
+                # Summary info for the list
+                market_summaries.append({
+                    "symbol": sym,
+                    "price": c_close,
+                    "weight": CONFIG.get("SYMBOL_WEIGHTS", {}).get(sym, 1.0/len(symbols))
+                })
+            except:
+                continue
+
     except Exception as e:
-        error_msg = f"API/Calculation Error: {str(e)}"
+        error_msg = f"Dashboard Error: {str(e)}"
         print(traceback.format_exc())
 
-    # 2. Database Info
+    # 3. Portfolio Overall Stats
     trades_df = db.get_trade_history()
     trades_list = trades_df.sort_values(by='id', ascending=False).to_dict(orient='records') if not trades_df.empty else []
     
@@ -76,16 +85,21 @@ def index():
         current_balance = CONFIG["SEED"]
         total_return = 0
     
-    report_files = sorted([f for f in os.listdir("reports") if f.endswith('.png')], reverse=True) if os.path.exists("reports") else []
-    
+    # Calculate Win Rate
+    win_rate = 0
+    if len(trades_list) > 0:
+        wins = len([t for t in trades_list if t['pnl_usdt'] > 0])
+        win_rate = (wins / len(trades_list)) * 100
+
     return render_template('index.html', 
-                           symbol=symbol,
-                           market=market_stats,
+                           symbols=symbols,
+                           market_summaries=market_summaries,
+                           active_positions=active_positions,
                            error=error_msg,
                            trades=trades_list,
                            balance=current_balance,
                            total_return=total_return,
-                           reports=report_files)
+                           win_rate=round(win_rate, 1))
 
 @app.route('/static/<filename>')
 def serve_static(filename):
@@ -96,4 +110,4 @@ def serve_report(filename):
     return send_from_directory("reports", filename)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)

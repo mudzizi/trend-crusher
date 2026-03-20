@@ -62,3 +62,4 @@
 ---
 **Status**: V3 Strategy Verified & Ready for Production.
 \n### [2026-03-20] Multi-Symbol Portfolio Manager Implementation\n- **Feature**: Centralized PortfolioManager for multi-symbol capital allocation.\n- **Risk Engine**: Dual-constraint sizing (Risk-based & Margin-based).\n- **Orchestrator**: New `live_bot_multi.py` to monitor multiple pairs concurrently.\n- **Database**: Updated DBManager to support symbol-specific trade tracking.\n- **Validation**: 23/23 tests passed, including new portfolio logic tests.
+\n### [2026-03-20] Portfolio Dashboard V4 Upgrade\n- **UI/UX**: Modernized dashboard with real-time portfolio monitoring.\n- **Active Stats**: Real-time PnL tracking for all active positions.\n- **KPIs**: Added Portfolio-wide balance, Win Rate, and Symbol Weight distribution.\n- **UX**: 30-second auto-refresh for live market observation.

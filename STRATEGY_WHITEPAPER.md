@@ -27,6 +27,12 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
     *   **Margin-Qty**: (전체 자산 * 비중 * 레버리지) 한도 내에서의 수량.
 3.  **Concurrent Trade Limit**: 동시에 진입 가능한 최대 포지션 개수(`MAX_CONCURRENT_TRADES`)를 제한하여 시스템적인 연쇄 손실 위험을 방지합니다.
 
+### 2.4. 시각적 리스크 모니터링 (Visual Monitoring - V4)
+알고리즘의 투명한 운영을 위해 실시간 포트폴리오 대시보드를 제공합니다.
+1.  **Real-time PnL Tracking**: 모든 활성 포지션의 미실현 손익(Unrealized PnL)을 실시간 틱 데이터로 감시.
+2.  **Visual SL Progress**: 진입가와 현재가 사이의 수익률 거리를 시각화하여, 트레일링 스탑의 작동 상황을 직관적으로 파악.
+3.  **Portfolio KPIs**: 누적 수익률, 승률, 자산 분포(Weight)를 한눈에 관리하여 심리적 안정감 제공.
+
 ## 3. 최종 최적화 결과 (Verified 365-Day Backtest)
 최근 1년치(2025.03 ~ 2026.03) 1분봉 정밀 검증 결과입니다.
 
