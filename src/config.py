@@ -15,7 +15,7 @@ ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | +102.73%   | 18.02
 """
 
 # --- System Version ---
-VERSION = "10.0.0"
+VERSION = "11.0.0"
 
 CONFIG = {
     "VERSION": VERSION,
@@ -110,4 +110,7 @@ CONFIG = {
         {"pnl_pct": 10, "atr_mult": 3.5},
         {"pnl_pct": 20, "atr_mult": 2.5}
     ],
+    
+    # --- The Sniper (v11.0.0) ---
+    "SNIPER_PROXIMITY_PCT": 0.005, # Place limit order when price is within 0.5% of breakout level
 }

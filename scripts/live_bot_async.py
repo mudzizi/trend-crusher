@@ -46,11 +46,22 @@ class SymbolBotAsync:
         self.min_price_seen = float('inf')
         self.is_halted = False # If true, skip new entries
         self.pending_settings = None # v10: Store unapproved optimization results
+        self.active_sniper_order_id = None # v11: Track pre-emptive limit order
+        self.use_sniper = True # v11: Remote kill switch for Sniper logic
         
         # Internal state for incremental indicators
         self.ohlcv_1h = None
         self.ohlcv_4h = None
         self.last_price = 0
+
+    async def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
+        for i in range(max_retries):
+            try:
+                return await func(*args, **kwargs)
+            except Exception as e:
+                if i == max_retries - 1: raise e
+                self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
+                await asyncio.sleep(delay * (i + 1))
 
     async def initialize(self):
         """Initial sync from DB and REST API."""
@@ -81,17 +92,44 @@ class SymbolBotAsync:
         if self.position != 0:
             await self.check_exit()
         else:
+            if self.active_sniper_order_id:
+                await self.check_sniper_fill()
             await self.check_entry()
 
-    async def on_kline_update(self, tf, kline):
-        """Update local OHLCV buffer when a candle closes or updates."""
-        # For simplicity in this v7 prototype, we update indicators on candle close events
-        if kline['x']: # Candle is closed
-            self.logger.info(f"🕯️ Candle Closed ({tf}): Updating indicators...")
-            if tf == self.settings["SIGNAL_TIMEFRAME"]:
-                self.ohlcv_1h = await self.fetch_ohlcv(tf)
-            else:
-                self.ohlcv_4h = await self.fetch_ohlcv(tf)
+    async def check_sniper_fill(self):
+        """Checks if the active sniper limit order has been filled."""
+        if self.settings["DRY_RUN"]: return # Simulate in check_entry for dry run
+        try:
+            order = await self.retry_api_call(self.exchange.fetch_order, self.active_sniper_order_id, self.symbol)
+            if order['status'] == 'closed':
+                self.logger.info(f"🎯 Sniper Order FILLED for {self.symbol}!")
+                self.quantity = float(order.get('filled', order.get('amount')))
+                self.entry_price = float(order['average'])
+                direction = 1 if order['side'] == 'buy' else -1
+                side_str = "LONG" if direction == 1 else "SHORT"
+                
+                # Atomic SL Placement
+                try:
+                    params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+                    sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
+                    self.sl_order_id = sl_order['id']
+                except Exception as sl_err:
+                    self.logger.error(f"🚨 CRITICAL: SL placement failed after Sniper Fill: {sl_err}. EMERGENCY LIQUIDATION!")
+                    await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity)
+                    self.active_sniper_order_id = None
+                    return
+                
+                self.position = direction
+                self.max_price_seen = self.entry_price
+                self.min_price_seen = self.entry_price
+                self.active_sniper_order_id = None
+                
+                self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
+                self.persist_state()
+                self.notifier.notify_entry(f"🎯 Sniper {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
+                
+        except Exception as e:
+            self.logger.error(f"Error checking sniper fill: {e}")
 
     async def check_entry(self):
         if self.is_halted: return
@@ -109,16 +147,69 @@ class SymbolBotAsync:
         
         curr_vol = df_1h.iloc[-1]['volume']
         
-        is_vol_burst = curr_vol > (avg_vol * self.settings["VOL_MULTIPLIER"])
-        is_trending = adx > self.settings["ADX_FILTER_LEVEL"]
+        # The 4 Pillars
+        momentum_ok = curr_vol > (avg_vol * self.settings["VOL_MULTIPLIER"])
+        trend_ok = adx > self.settings["ADX_FILTER_LEVEL"]
         
-        if is_vol_burst and is_trending and self.last_price > ema_4h:
-            if self.last_price > upper.iloc[-1]:
+        top_level = upper.iloc[-1]
+        bottom_level = lower.iloc[-1]
+        
+        dist_top = abs(self.last_price - top_level) / self.last_price
+        dist_bottom = abs(self.last_price - bottom_level) / self.last_price
+        prox_threshold = self.settings.get("SNIPER_PROXIMITY_PCT", 0.005)
+        
+        long_conditions_met = momentum_ok and trend_ok and self.last_price > ema_4h and dist_top <= prox_threshold
+        short_conditions_met = momentum_ok and trend_ok and self.last_price < ema_4h and dist_bottom <= prox_threshold
+        
+        # Classic breakout fallback & DRY_RUN simulation
+        if momentum_ok and trend_ok and self.last_price > ema_4h and self.last_price > top_level:
+            if not self.active_sniper_order_id:
                 await self.execute_entry(1, atr)
-            elif self.last_price < lower.iloc[-1]:
+            return
+        elif momentum_ok and trend_ok and self.last_price < ema_4h and self.last_price < bottom_level:
+            if not self.active_sniper_order_id:
                 await self.execute_entry(-1, atr)
+            return
 
-    async def check_exit(self):
+        if self.use_sniper and not self.settings["DRY_RUN"]:
+            if long_conditions_met:
+                await self.manage_sniper_ambush(1, top_level, atr)
+            elif short_conditions_met:
+                await self.manage_sniper_ambush(-1, bottom_level, atr)
+            elif self.active_sniper_order_id:
+                # Conditions broke, abort sniper
+                self.logger.info(f"🚫 Sniper conditions weakened. Aborting ambush for {self.symbol}.")
+                await self.cancel_sniper_ambush()
+
+    async def manage_sniper_ambush(self, direction, target_price, atr):
+        if self.active_sniper_order_id: return # Already ambushing
+        
+        # Calculate size
+        self.sl_price = target_price - (atr * self.settings["INITIAL_SL_ATR"]) if direction == 1 else target_price + (atr * self.settings["INITIAL_SL_ATR"])
+        qty = await self.pm.calculate_order_qty(self.symbol, target_price, self.sl_price)
+        if qty <= 0: return
+        
+        side = 'buy' if direction == 1 else 'sell'
+        try:
+            self.logger.info(f"🏹 Sniper Ambush Set! {side.upper()} LIMIT at {target_price:,.2f} for {self.symbol}")
+            order = await self.retry_api_call(self.exchange.create_limit_order, self.symbol, side, qty, target_price)
+            self.active_sniper_order_id = order['id']
+            self.quantity = qty
+        except Exception as e:
+            self.logger.error(f"Failed to place sniper limit order: {e}")
+
+    async def cancel_sniper_ambush(self):
+        if not self.active_sniper_order_id: return
+        try:
+            await self.retry_api_call(self.exchange.cancel_order, self.active_sniper_order_id, self.symbol)
+            self.logger.info(f"♻️ Sniper Order Cancelled for {self.symbol}")
+        except ccxt.OrderNotFound:
+            pass # Might have just filled
+        except Exception as e:
+            self.logger.warning(f"Error cancelling sniper order: {e}")
+        self.active_sniper_order_id = None
+
+    async def execute_entry(self, direction, atr):
         pnl_now = ((self.last_price / self.entry_price) - 1) * 100 * self.position
         
         # Simplified Trailing Logic for Async
@@ -312,8 +403,17 @@ async def handle_commands(bots, notifier, pm):
                         notifier.notify_status("⚠️ EMERGENCY: Closing all positions and shutting down...")
                         for bot in bots.values():
                             if bot.position != 0: await bot.execute_exit()
+                            if bot.active_sniper_order_id: await bot.cancel_sniper_ambush()
                         notifier.notify_status("💀 All positions closed. Bot stopping.")
                         os._exit(0)
+                    elif cmd == "/sniper_off":
+                        for bot in bots.values(): 
+                            bot.use_sniper = False
+                            if bot.active_sniper_order_id: await bot.cancel_sniper_ambush()
+                        notifier.notify_status("🔕 Sniper Mode DISABLED. Reverting to market-only breakouts.")
+                    elif cmd == "/sniper_on":
+                        for bot in bots.values(): bot.use_sniper = True
+                        notifier.notify_status("🎯 Sniper Mode ENABLED. Ready for precise limit entries.")
                         
         except Exception as e:
             logger.error(f"Command Error: {e}")
@@ -361,6 +461,8 @@ async def send_summary(bots, notifier, pm):
             active_count += 1
             pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
             status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+        elif bot.active_sniper_order_id:
+            status = "🎯 AMBUSHING (Limit Set)"
         
         # v10: Indicate pending proposals
         if bot.pending_settings:
@@ -371,8 +473,9 @@ async def send_summary(bots, notifier, pm):
     report["---"] = "---"
     report["Active Positions"] = active_count
     # Get halted status from the first bot
-    is_halted = next(iter(bots.values())).is_halted if bots else False
-    report["Halted"] = is_halted
+    first_bot = next(iter(bots.values())) if bots else None
+    report["Halted"] = first_bot.is_halted if first_bot else False
+    report["Sniper Mode"] = "ON" if first_bot and first_bot.use_sniper else "OFF"
     
     notifier.send_report("Portfolio Heartbeat", report)
 
