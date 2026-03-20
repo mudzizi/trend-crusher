@@ -5,12 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 """
-[Verified Best Optimization Results]
+[Verified Best Optimization Results - S-Tier]
 -----------------------------------------------------------------------------------
-SYMBOL      | Vol_Mult | Trail_Mult | Risk_Pct | EMA_Period | Result     | MDD (%)
+SYMBOL      | Vol_Mult | Trail_Mult | Risk_Pct | EMA_Period | ADX_F | Result (1Y)
 -----------------------------------------------------------------------------------
-TRUMP/USDT  | 2.5      | 4.5        | 0.02     | 100        | +159.36%   | 16.80%
-ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | +102.73%   | 18.02%
+TRUMP/USDT  | 2.5      | 4.5        | 0.02     | 100        | 15    | +210.07%
+XAU/USDT    | 2.5      | 4.5        | 0.02     | 200        | 25    | +186.89%
+ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | 15    | +161.44%
 -----------------------------------------------------------------------------------
 """
 
@@ -19,7 +20,7 @@ VERSION = "11.0.0"
 
 CONFIG = {
     "VERSION": VERSION,
-    # --- API KEYS (보안을 위해 .env에서 로드) ---
+    # --- API KEYS ---
     "BINANCE_API_KEY": os.getenv("BINANCE_API_KEY", ""),
     "BINANCE_SECRET": os.getenv("BINANCE_SECRET", ""),
     "TELEGRAM_TOKEN": os.getenv("TELEGRAM_TOKEN", ""),
@@ -28,44 +29,35 @@ CONFIG = {
     # --- Operational Settings ---
     "DRY_RUN": os.getenv("DRY_RUN", "True").lower() == "true",            
     "SYMBOL": os.getenv("SYMBOL", "TRUMP/USDT"),     
-    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "XAU/USDT", "SOL/USDT"], # Multi-symbol list
-    "MAX_CONCURRENT_TRADES": 3,                             # Limit total risk exposure
-    "SYMBOL_WEIGHTS": {                                     # Allocation weight per symbol
-        "TRUMP/USDT": 0.4,
-        "ETH/USDT": 0.25,
-        "XAU/USDT": 0.25,
-        "SOL/USDT": 0.1
-    },
+    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "XAU/USDT", "SOL/USDT"],
+    "MAX_CONCURRENT_TRADES": 3,
+    "MARGIN_MODE": "ISOLATED",
     "SEED": float(os.getenv("SEED", 10000.0)),              
+    
+    # --- Timeframes ---
     "SIGNAL_TIMEFRAME": "1h",
     "TREND_TIMEFRAME": "4h",
     "CHECK_TIMEFRAME": "1m",
-    "BACKTEST_DAYS": 365,       
-    "LOOP_INTERVAL": 10,        
-    "MAX_LEVERAGE": 5,          
+    "LOOP_INTERVAL": 10,
     
-    # --- Strategy Parameters (Default: TRUMP Best) ---
+    # --- Trading Costs ---
+    "FEE_RATE": 0.0004,         # Standard Taker Fee
+    "MAKER_FEE_RATE": 0.0002,   # Standard Maker Fee
+    "SLIPPAGE": 0.0005,         # Default Slippage (0.05%)
+    "DATA_DIR": "data",
+    
+    # --- Strategy Parameters (Global Defaults) ---
     "VOL_MULTIPLIER": 2.5,      
     "TRAILING_ATR_MULT": 4.5,   
     "RISK_PER_TRADE": 0.02,     
     "EMA_TREND_PERIOD": 100,
-    
-    # --- Fixed Indicators Setting ---
     "DONCHIAN_PERIOD": 20,
     "ATR_PERIOD": 14,
     "AVG_VOL_PERIOD": 20,
     "INITIAL_SL_ATR": 2.0,
-    
-    # --- Trading Costs ---
-    "LOOP_INTERVAL": 10,        
-    "MAX_LEVERAGE": 5,          
-    "MARGIN_MODE": "ISOLATED",  # Target margin mode
+    "ADX_FILTER_LEVEL": 15,
+    "MAX_LEVERAGE": 5,
 
-    # --- Strategy Parameters (Default: TRUMP Best) ---
-    "VOL_MULTIPLIER": 2.5,      
-    "TRAILING_ATR_MULT": 4.5,   
-    "RISK_PER_TRADE": 0.02,     
-    "EMA_TREND_PERIOD": 100,
     # --- Symbol Specific Optimized Parameters ---
     "SYMBOL_SETTINGS": {
         "TRUMP/USDT": {
@@ -102,9 +94,7 @@ CONFIG = {
         }
     },
 
-    
-    # --- New Strategy Improvements ---
-    "ADX_FILTER_LEVEL": 15, 
+    # --- Strategy Improvements ---
     "USE_ADAPTIVE_TRAIL": True,
     "ADAPTIVE_TRAIL_STEPS": [
         {"pnl_pct": 10, "atr_mult": 3.5},
@@ -112,5 +102,5 @@ CONFIG = {
     ],
     
     # --- The Sniper (v11.0.0) ---
-    "SNIPER_PROXIMITY_PCT": 0.005, # Place limit order when price is within 0.5% of breakout level
+    "SNIPER_PROXIMITY_PCT": 0.005, 
 }
