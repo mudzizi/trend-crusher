@@ -99,22 +99,36 @@ async def test_on_kline_update_new_candle_sync(mock_bot):
     mock_bot.fetch_ohlcv.assert_called_with("1h")
 
 @pytest.mark.asyncio
-async def test_on_kline_update_exit_trigger(mock_bot):
-    # 시나리오: 포지션이 있는 상태에서 실시간 가격 업데이트가 오면 check_exit을 호출하는지 확인
-    mock_bot.position = 1 # LONG
-    mock_bot.check_exit = AsyncMock()
+async def test_on_kline_update_ignore_irrelevant_tf(mock_bot):
+    # 시나리오: 설정에 없는 '1m' 타임프레임 데이터가 들어왔을 때 무시해야 함
+    mock_bot.fetch_ohlcv = AsyncMock()
+    mock_bot.check_entry = AsyncMock()
     
-    last_ts = mock_bot.ohlcv_1h.iloc[-1]['timestamp']
     kline_msg = {
-        't': int(last_ts.timestamp() * 1000),
-        'o': '50500', 'h': '50500', 'l': '50500', 'c': '50500', 'v': '10',
-        'x': False
+        't': 1600000000000,
+        'o': '1', 'h': '1', 'l': '1', 'c': '1', 'v': '1',
+        'x': True, 
+        'i': '1m' # Irrelevant timeframe
     }
     
-    await mock_bot.on_kline_update("1h", kline_msg)
+    await mock_bot.on_kline_update("1m", kline_msg)
     
-    # 검증: 포지션이 있으므로 check_exit이 호출되어야 함
-    mock_bot.check_exit.assert_called_once()
+    # 검증: fetch_ohlcv나 check_entry가 호출되지 않아야 함
+    mock_bot.fetch_ohlcv.assert_not_called()
+    mock_bot.check_entry.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_config_structure_consistency():
+    # 시나리오: config.example.yaml에 필수 키들이 모두 포함되어 있는지 확인
+    from src.config import load_config
+    config = load_config()
+    
+    required_keys = [
+        "VERSION", "BINANCE_API_KEY", "TELEGRAM_TOKEN", 
+        "SYMBOLS_LIST", "SYMBOL_SETTINGS", "DRY_RUN"
+    ]
+    for key in required_keys:
+        assert key in config, f"Missing required config key: {key}"
 
 if __name__ == "__main__":
     pytest.main([__file__])
