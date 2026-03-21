@@ -550,7 +550,19 @@ async def send_summary(bots, notifier, pm):
     report["Halted"] = first_bot.is_halted if first_bot else False
     report["Sniper Mode"] = "ON" if first_bot and first_bot.use_sniper else "OFF"
     
-    notifier.send_report(f"Portfolio Heartbeat (v{CONFIG['VERSION']})", report)
+    # Create Buttons (ReplyKeyboardMarkup)
+    reply_markup = {
+        "keyboard": [
+            [{"text": "/status"}, {"text": "/sniper_on"}, {"text": "/sniper_off"}],
+            [{"text": "/stop"}, {"text": "/resume"}, {"text": "/close_all"}]
+        ],
+        "resize_keyboard": True,
+        "one_time_keyboard": False
+    }
+
+    notifier.send_message(f"📋 *Portfolio Heartbeat (v{CONFIG['VERSION']})*\n\n" + 
+                          "\n".join([f"• *{k}*: {v}" for k, v in report.items()]), 
+                          reply_markup=reply_markup)
 
 async def heartbeat_loop(bots, notifier, pm):
     """Sends a heartbeat report every hour to Telegram and every 1 minute to logs."""
@@ -608,6 +620,9 @@ async def main():
     pm = PortfolioManagerAsync(exchange, CONFIG)
     notifier = TelegramNotifier()
     
+    # Register command menu in Telegram
+    notifier.set_commands()
+    
     # Register signal handlers for clean exit and notification
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s, loop, notifier, exchange)))
@@ -627,6 +642,9 @@ async def main():
         
         logger.info(f"🚀 v{CONFIG['VERSION']}-async Engine Started. Sentinel is watching...")
         notifier.notify_status(f"🛰️ The Sentinel Active (v{CONFIG['VERSION']})")
+        
+        # Send initial summary with buttons
+        await send_summary(bots, notifier, pm)
 
         while True:
             try:
