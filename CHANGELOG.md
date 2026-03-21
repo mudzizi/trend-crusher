@@ -6,6 +6,7 @@ All notable changes to the TrendCrusher project will be documented in this file.
 ### Added
 - **Command Flushing**: Implemented a startup flush mechanism for Telegram commands to ignore old messages (e.g., `/close_all`) sent while the bot was offline.
 - **Enhanced Testing**: Expanded `tests/test_resilience.py` to verify command flushing logic.
+- **Version Synchronization**: Centralized versioning in `src/config.py`. Replaced all hardcoded version strings across logs, reports, and documentation with dynamic references to `CONFIG['VERSION']`.
 ### Fixed
 - **Startup Crash Prevention**: Resolved a potential issue where old shutdown commands could trigger an immediate exit upon restart.
 

@@ -1,7 +1,7 @@
 # TrendCrusher V11: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.0.1 버전에서는 **The Sniper**의 정밀한 타점과 함께, 시스템 장애 상황에서도 자산을 사수하고 스스로 복구하는 **Resilience Watchdog** 체계를 완성했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.1.1 버전에서는 **The Sniper**의 정밀한 타점과 함께, 시스템 장애 상황에서도 자산을 사수하고 스스로 복구하는 **Resilience Watchdog** 체계를 완성했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -31,7 +31,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 1.  **Walk-Forward Optimization**: 최근 30일 데이터를 기반으로 최적 파라미터를 도출하여 텔레그램으로 제안.
 2.  **Live Hot-Reload**: 봇 중단 없이 실시간으로 최적화된 파라미터를 실전에 투입.
 
-### 2.11. 운영 회복력 및 파수견 시스템 (Operational Resilience - v11.0.1)
+### 2.11. 운영 회복력 및 파수견 시스템 (Operational Resilience - v11.1.1)
 시스템의 연속 가동성과 장애 대응력을 프로페셔널 등급으로 강화했습니다.
 1.  **Last Will Notification**: 봇 프로세스가 예기치 못한 에러(Crash)나 시스템 신호(SIGTERM)로 종료될 때, 마지막 순간의 상태와 원인을 텔레그램으로 즉시 보고합니다.
 2.  **External Watchdog (Phoenix)**: 봇 외부에서 독립적으로 가동되는 감시 스크립트가 프로세스 상태를 1초 단위로 모니터링합니다. OOM Killer 등 침묵 속의 사망 발생 시 즉시 주인님께 알리고 봇을 자동 재시작합니다.
@@ -47,7 +47,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 | **XAU/USDT** | -13.93% | **+343.27%** | **+357.20%** | 71.4% |
 
 ## 4. 결론 (Conclusion)
-TrendCrusher V11.0.1은 **"기술적 예리함"**과 **"운영적 견고함"**의 완벽한 결합체입니다. 스나이퍼의 날카로운 타점으로 수익을 극대화하고, 워치독의 끈질긴 생명력으로 시스템의 중단 없는 성장을 보장합니다.
+TrendCrusher V11.1.1은 **"기술적 예리함"**과 **"운영적 견고함"**의 완벽한 결합체입니다. 스나이퍼의 날카로운 타점으로 수익을 극대화하고, 워치독의 끈질긴 생명력으로 시스템의 중단 없는 성장을 보장합니다.
 
 ---
 *Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*

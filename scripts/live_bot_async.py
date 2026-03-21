@@ -45,9 +45,9 @@ class SymbolBotAsync:
         self.max_price_seen = 0
         self.min_price_seen = float('inf')
         self.is_halted = False # If true, skip new entries
-        self.pending_settings = None # v10: Store unapproved optimization results
-        self.active_sniper_order_id = None # v11: Track pre-emptive limit order
-        self.use_sniper = True # v11: Remote kill switch for Sniper logic
+        self.pending_settings = None # Store unapproved optimization results
+        self.active_sniper_order_id = None # Track pre-emptive limit order
+        self.use_sniper = True # Remote kill switch for Sniper logic
         
         # Internal state for incremental indicators
         self.ohlcv_1h = None
@@ -349,7 +349,7 @@ async def handle_commands(bots, notifier, pm):
         logger.warning(f"⚠️ Failed to flush old Telegram updates: {e}")
 
     optimizer = OptimizerEngine(config=CONFIG)
-    logger.info("📡 Command Listener active (v10 Sentinel).")
+    logger.info(f"📡 Command Listener active (v{CONFIG['VERSION']} Sentinel).")
     while True:
         try:
             updates = notifier.get_updates(offset)
@@ -500,7 +500,7 @@ async def send_summary(bots, notifier, pm):
         elif bot.active_sniper_order_id:
             status = "🎯 AMBUSHING (Limit Set)"
         
-        # v10: Indicate pending proposals
+        # Indicate pending proposals
         if bot.pending_settings:
             status += " 🧠(PENDING)"
             

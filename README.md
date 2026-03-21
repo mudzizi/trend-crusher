@@ -1,7 +1,7 @@
-# 🚀 TrendCrusher V11.0.1: The Phoenix Engine
+# 🚀 TrendCrusher V11.1.1: The Phoenix Engine
 > **"시장을 추격하지 말고 길목에서 매복하라. 쓰러져도 10초 만에 다시 일어난다."**
 > 
-> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기 알고리즘 매매 시스템**입니다. V11.0.1 버전은 최강의 타점을 자랑하는 **The Sniper** 엔진과 어떤 상황에서도 스스로 복구되는 **Phoenix Watchdog** 체계가 결합된 최종 완성형 엔진입니다.
+> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기 알고리즘 매매 시스템**입니다. V11.1.1 버전은 최강의 타점을 자랑하는 **The Sniper** 엔진과 어떤 상황에서도 스스로 복구되는 **Phoenix Watchdog** 체계가 결합된 최종 완성형 엔진입니다.
 
 ---
 
@@ -35,7 +35,7 @@
 
 ## 🛡️ 주요 기능 하이라이트
 - **The Precision Sniper (v11)**: 돌파 레벨 0.5% 근접 시 자동 매복. 조건 불일치 시 0.1초 만에 즉시 취소.
-- **Phoenix Watchdog (v11.0.1)**: OOM Killer나 프로세스 중단 시 즉시 알림 및 10초 내 자동 재시작.
+- **Phoenix Watchdog (v11.1.1)**: OOM Killer나 프로세스 중단 시 즉시 알림 및 10초 내 자동 재시작.
 - **The Sentinel (v10)**: 매주 최근 30일 데이터를 자가 학습하여 최적의 파라미터를 텔레그램으로 제안.
 - **WebSocket Async Engine (v7)**: 시장의 모든 틱(Tick)을 실시간 수신하여 지연 시간 제로화.
 - **Smart Isolated Margin**: 코인별 철저한 자산 격리 및 독립 가상 장부 관리.
@@ -137,5 +137,5 @@ PYTHONPATH=. python3 scripts/watchdog.py
 4.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V11.0.1 Development Team**
+**TrendCrusher V11.1.1 Development Team**
 *Technical Co-Founder by AI Agent*

@@ -8,7 +8,8 @@ def mock_config():
     return {
         "TELEGRAM_CHAT_ID": "123456",
         "SYMBOLS_LIST": ["BTC/USDT"],
-        "DRY_RUN": True
+        "DRY_RUN": True,
+        "VERSION": "11.1.1-test"
     }
 
 @pytest.mark.asyncio

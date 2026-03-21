@@ -1,23 +1,27 @@
 # Trading Session Log (2026-03-21) - Resilience & Stability
 
 ## ✅ 완료된 작업
-1. **텔레그램 명령어 플러시(Flush) 도입**:
+1. **버전 정보 중앙 집중화 및 동기화**:
+   - `src/config.py`의 `VERSION`을 `11.1.1`로 업데이트.
+   - 봇 로그, 텔레그램 리포트, `README.md`, `STRATEGY_WHITEPAPER.md` 등 프로젝트 전반에 하드코딩된 버전 문자열을 `CONFIG['VERSION']` 동적 참조로 교체.
+
+2. **텔레그램 명령어 플러시(Flush) 도입**:
    - 봇 시작 시 서버에 쌓여있던 과거 명령어(예: `/close_all`)를 무시하도록 `offset` 기반 플러시 로직 구현.
    - 재시작 즉시 봇이 종료되는 현상 차단.
 
-2. **NumPy 호환성 해결**:
+3. **NumPy 호환성 해결**:
    - NumPy 2.x와 `pandas`/`pyarrow` 간의 충돌로 인한 `AttributeError` 해결.
    - `requirements.txt`를 `numpy<2.0.0`으로 수정하고 `v1.26.4`로 강제 다운그레이드 완료.
 
-3. **네트워크 회복성(Resilience) 강화**:
+4. **네트워크 회복성(Resilience) 강화**:
    - `fetch_ohlcv`에 `retry_api_call` 적용하여 바이낸스 API 타임아웃 발생 시 자동 재시도(3회) 로직 구축.
    - 메인 이벤트 루프에 예외 처리 추가하여 개별 메시지 처리 실패 시에도 봇이 전체 종료되지 않도록 개선.
 
-4. **검증 테스트 추가**:
+5. **검증 테스트 추가**:
    - `tests/test_resilience.py` 신규 작성 및 확장: API 재시도, 초기화 에러, 명령어 플러시 로직 검증 완료.
    - 전체 테스트(38개) 수행 결과 100% 통과 확인.
 
-5. **프로세스 안정화**:
+6. **프로세스 안정화**:
    - `watchdog.py`의 감시 기능과 봇의 자체 에러 처리 로직이 상호 보완하도록 구조 개선.
 
 ---
