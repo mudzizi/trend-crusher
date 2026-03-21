@@ -92,7 +92,13 @@ class SymbolBotAsync:
     async def on_kline_update(self, tf, kline):
         """Update local OHLCV buffer in real-time (even for unclosed candles)."""
         try:
-            is_signal_tf = (tf == self.settings["SIGNAL_TIMEFRAME"])
+            signal_tf = self.settings["SIGNAL_TIMEFRAME"]
+            trend_tf = self.settings["TREND_TIMEFRAME"]
+            
+            if tf not in [signal_tf, trend_tf]:
+                return # Ignore irrelevant timeframes (e.g., 1m if not used)
+
+            is_signal_tf = (tf == signal_tf)
             target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
             if target_df is None: return
 
@@ -118,9 +124,9 @@ class SymbolBotAsync:
                     self.ohlcv_1h = await self.fetch_ohlcv(tf)
                 else:
                     self.ohlcv_4h = await self.fetch_ohlcv(tf)
-                self.logger.info(f"🕯️ New Candle ({tf}): Buffer Synced.")
+                self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
 
-            # 2. Trigger check_entry/exit if we have real-time candle data
+            # 2. Trigger check_entry/exit
             if not kline['x']:
                 if self.position != 0:
                     await self.check_exit()
@@ -547,10 +553,28 @@ async def send_summary(bots, notifier, pm):
     notifier.send_report(f"Portfolio Heartbeat (v{CONFIG['VERSION']})", report)
 
 async def heartbeat_loop(bots, notifier, pm):
-    """Sends a heartbeat report every hour."""
+    """Sends a heartbeat report every hour to Telegram and every 1 minute to logs."""
+    count = 0
     while True:
-        await asyncio.sleep(3600) # 1 Hour
-        await send_summary(bots, notifier, pm)
+        await asyncio.sleep(60) # 1 Minute
+        count += 1
+        
+        # 1. Log Brief Status every minute (Visibility in watchdog.log)
+        for bot in bots.values():
+            status = "IDLE"
+            if bot.position != 0:
+                pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
+                status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+            elif bot.active_sniper_order_id:
+                status = "🎯 AMBUSHING"
+            
+            # Simple indicators check log
+            logger.info(f"💓 [{bot.symbol}] Price: {bot.last_price:,.2f} | Status: {status}")
+
+        # 2. Telegram Heartbeat every hour
+        if count >= 60:
+            await send_summary(bots, notifier, pm)
+            count = 0
 
 import signal
 
