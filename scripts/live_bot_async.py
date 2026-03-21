@@ -70,32 +70,39 @@ class SymbolBotAsync:
 
     async def initialize(self):
         """Initial sync from DB and REST API."""
-        # 1. State recovery
-        state = self.db.get_bot_state(self.symbol)
-        if state:
-            self.position = int(state['position'])
-            self.entry_price = float(state['entry_price'])
-            self.quantity = float(state['quantity'])
-            self.max_price_seen = float(state['max_price'])
-            self.sl_order_id = state['sl_order_id']
-            self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}")
+        try:
+            # 1. State recovery
+            state = self.db.get_bot_state(self.symbol)
+            if state:
+                self.position = int(state['position'])
+                self.entry_price = float(state['entry_price'])
+                self.quantity = float(state['quantity'])
+                self.max_price_seen = float(state['max_price'])
+                self.sl_order_id = state['sl_order_id']
+                self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}")
 
-        # 2. Initial OHLCV fetch via REST
-        self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"])
-        self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"])
-        self.logger.info(f"📊 Indicators Initialized")
+            # 2. Initial OHLCV fetch via REST with retry
+            self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"])
+            self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"])
+            self.logger.info(f"📊 Indicators Initialized")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
+            raise e
 
     async def on_kline_update(self, tf, kline):
         """Update local OHLCV buffer when a candle closes or updates."""
         if kline['x']: # Candle is closed
             self.logger.info(f"🕯️ Candle Closed ({tf}): Updating indicators...")
-            if tf == self.settings["SIGNAL_TIMEFRAME"]:
-                self.ohlcv_1h = await self.fetch_ohlcv(tf)
-            else:
-                self.ohlcv_4h = await self.fetch_ohlcv(tf)
+            try:
+                if tf == self.settings["SIGNAL_TIMEFRAME"]:
+                    self.ohlcv_1h = await self.fetch_ohlcv(tf)
+                else:
+                    self.ohlcv_4h = await self.fetch_ohlcv(tf)
+            except Exception as e:
+                self.logger.error(f"⚠️ Failed to update OHLCV on candle close: {e}")
 
     async def fetch_ohlcv(self, tf, limit=100):
-        ohlcv = await self.exchange.fetch_ohlcv(self.symbol, tf, limit=limit)
+        ohlcv = await self.retry_api_call(self.exchange.fetch_ohlcv, self.symbol, tf, limit=limit)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
@@ -560,16 +567,20 @@ async def main():
         notifier.notify_status(f"🛰️ The Sentinel Active (v{CONFIG['VERSION']})")
 
         while True:
-            msg = await ws_manager.get_next_message()
-            stream = msg.get('e')
-            symbol_key = msg.get('s', '').lower()
-            
-            if symbol_key in bots:
-                bot = bots[symbol_key]
-                if stream == 'markPriceUpdate':
-                    await bot.on_mark_price_update(float(msg['p']))
-                elif stream == 'kline':
-                    await bot.on_kline_update(msg['k']['i'], msg['k'])
+            try:
+                msg = await ws_manager.get_next_message()
+                stream = msg.get('e')
+                symbol_key = msg.get('s', '').lower()
+                
+                if symbol_key in bots:
+                    bot = bots[symbol_key]
+                    if stream == 'markPriceUpdate':
+                        await bot.on_mark_price_update(float(msg['p']))
+                    elif stream == 'kline':
+                        await bot.on_kline_update(msg['k']['i'], msg['k'])
+            except Exception as loop_e:
+                logger.error(f"⚠️ Error in main event loop: {loop_e}")
+                await asyncio.sleep(1) # Cool down before next message
     except asyncio.CancelledError:
         pass
     except Exception as e:

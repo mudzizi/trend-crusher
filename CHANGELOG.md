@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.1.0] - 2026-03-21
+### Added
+- **Network Resilience**: Integrated `retry_api_call` into `fetch_ohlcv` to automatically recover from transient Binance API timeouts and network errors.
+- **Fault-Tolerant Loop**: Wrapped the main event loop in a try-except block to prevent the entire bot from crashing due to individual message processing errors.
+- **Resilience Testing**: Added `tests/test_resilience.py` to verify API retry logic and startup error handling.
+### Changed
+- **NumPy Downgrade**: Downgraded NumPy to `v1.26.4` to resolve `AttributeError: _ARRAY_API not found` and ensure compatibility with `pandas` and `pyarrow`.
+- **Environment Stability**: Updated `requirements.txt` to lock NumPy at `v1.x` and prevent future breaking upgrades.
+
 ## [v11.0.1] - 2026-03-21 (Current)
 ### Added
 - **Resilience Watchdog**: Implemented `scripts/watchdog.py` to monitor the bot process and auto-restart on crashes or OOM Killer events.
