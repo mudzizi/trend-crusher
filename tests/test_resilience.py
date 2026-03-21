@@ -67,8 +67,22 @@ async def test_on_kline_update_error_handling(mock_bot):
     """캔들 종료 시 업데이트 실패해도 봇이 죽지 않는지 확인"""
     mock_bot.exchange.fetch_ohlcv.side_effect = Exception("Random API Error")
     
+    # Initialize buffers to avoid early return
+    now = pd.Timestamp.now().floor('h')
+    mock_bot.ohlcv_1h = pd.DataFrame([[now, 1, 1, 1, 1, 1]], columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    mock_bot.ohlcv_4h = mock_bot.ohlcv_1h.copy()
+
     # 이 호출은 에러를 내부적으로 catch하고 로그만 남겨야 함 (봇이 죽으면 안 됨)
-    await mock_bot.on_kline_update("1h", {'x': True, 'i': '1h'})
+    # 신규 캔들이 시작되는 시나리오 (t > last_ts) 여야 fetch_ohlcv를 호출함
+    new_ts = now + pd.Timedelta(hours=1)
+    kline_msg = {
+        't': int(new_ts.timestamp() * 1000),
+        'o': '1', 'h': '1', 'l': '1', 'c': '1', 'v': '1',
+        'x': True, 
+        'i': '1h'
+    }
+    
+    await mock_bot.on_kline_update("1h", kline_msg)
     
     # 여기까지 도달하면 성공
     assert mock_bot.exchange.fetch_ohlcv.called

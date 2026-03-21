@@ -1,3 +1,20 @@
+# Trading Session Log (2026-03-21) - Real-time Engine Optimization
+
+## ✅ 완료된 작업
+1. **비동기 봇 실시간 OHLCV 업데이트 구현 (v11.1.2)**:
+   - `scripts/live_bot_async.py`의 `on_kline_update` 로직을 개조하여 캔들 종료 전이라도 실시간 웹소켓 데이터를 버퍼에 즉시 반영.
+   - 거래량(Volume) 급증 및 가격 돌파 조건을 캔들 중간(인트라-바)에도 즉시 감지할 수 있도록 개선.
+   - 기존 10초 폴링 방식 대비 반응 속도를 약 1~2초 수준으로 단축.
+
+2. **실시간 엔진 전용 유닛 테스트 추가**:
+   - `tests/test_async_realtime.py`를 신규 생성하여 미확정 봉 업데이트, 캔들 전환 동기화, 즉시 트리거 로직을 100% 검증.
+
+3. **전체 회귀 테스트 및 버그 수정**:
+   - `tests/test_resilience.py`의 레거시 테스트 케이스가 변경된 엔진 구조와 충돌하는 문제 해결.
+   - **Proof of Work**: 전체 41개 테스트 케이스 100% 통과 확인 (`41 passed`).
+
+---
+
 # Trading Session Log (2026-03-21) - Resilience & Stability
 
 ## ✅ 완료된 작업

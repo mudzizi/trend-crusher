@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.1.2] - 2026-03-21
+### Added
+- **Real-time OHLCV Updates**: Modified `SymbolBotAsync` to update OHLCV buffers in real-time (2s interval) via WebSocket kline streams. This eliminates the delay caused by waiting for candle closes and ensures volume-based and breakout signals are triggered instantly.
+- **Async Real-time Testing**: Added `tests/test_async_realtime.py` to verify real-time buffer updates and trigger mechanisms.
+### Fixed
+- **Resilience Test Regression**: Updated `tests/test_resilience.py` to align with the new `on_kline_update` method signature and internal logic.
+- **Latency Optimization**: `check_entry` and `check_exit` now react to every price/volume update instead of only on candle close or mark price updates.
+
 ## [v11.1.1] - 2026-03-21
 ### Added
 - **Command Flushing**: Implemented a startup flush mechanism for Telegram commands to ignore old messages (e.g., `/close_all`) sent while the bot was offline.

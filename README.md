@@ -94,6 +94,7 @@ PYTHONPATH=. python3 scripts/test_telegram_commands.py
 봇을 실시간 감시하고 죽으면 되살리는 워치독 모드로 가동합니다.
 ```bash
 PYTHONPATH=. python3 scripts/watchdog.py
+nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 ```
 
 ---

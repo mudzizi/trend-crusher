@@ -90,16 +90,45 @@ class SymbolBotAsync:
             raise e
 
     async def on_kline_update(self, tf, kline):
-        """Update local OHLCV buffer when a candle closes or updates."""
-        if kline['x']: # Candle is closed
-            self.logger.info(f"🕯️ Candle Closed ({tf}): Updating indicators...")
-            try:
-                if tf == self.settings["SIGNAL_TIMEFRAME"]:
+        """Update local OHLCV buffer in real-time (even for unclosed candles)."""
+        try:
+            is_signal_tf = (tf == self.settings["SIGNAL_TIMEFRAME"])
+            target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
+            if target_df is None: return
+
+            # Binance Kline format: t(start), o, h, l, c, v, T(end), x(is_closed)
+            kline_ts = pd.to_datetime(kline['t'], unit='ms')
+            k_close = float(kline['c'])
+            
+            # Update last_price from kline as well to keep it fresh
+            self.last_price = k_close
+            
+            # 1. Update existing row or append temporary new row
+            last_idx = target_df.index[-1]
+            if kline_ts == target_df.loc[last_idx, 'timestamp']:
+                # Update last row with latest real-time data
+                target_df.loc[last_idx, 'open'] = float(kline['o'])
+                target_df.loc[last_idx, 'high'] = float(kline['h'])
+                target_df.loc[last_idx, 'low'] = float(kline['l'])
+                target_df.loc[last_idx, 'close'] = k_close
+                target_df.loc[last_idx, 'volume'] = float(kline['v'])
+            elif kline_ts > target_df.loc[last_idx, 'timestamp']:
+                # It's a new candle! Re-fetch to ensure sync
+                if is_signal_tf:
                     self.ohlcv_1h = await self.fetch_ohlcv(tf)
                 else:
                     self.ohlcv_4h = await self.fetch_ohlcv(tf)
-            except Exception as e:
-                self.logger.error(f"⚠️ Failed to update OHLCV on candle close: {e}")
+                self.logger.info(f"🕯️ New Candle ({tf}): Buffer Synced.")
+
+            # 2. Trigger check_entry/exit if we have real-time candle data
+            if not kline['x']:
+                if self.position != 0:
+                    await self.check_exit()
+                else:
+                    await self.check_entry()
+                
+        except Exception as e:
+            self.logger.error(f"⚠️ Error updating OHLCV buffer: {e}")
 
     async def fetch_ohlcv(self, tf, limit=100):
         ohlcv = await self.retry_api_call(self.exchange.fetch_ohlcv, self.symbol, tf, limit=limit)
