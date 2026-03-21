@@ -233,6 +233,6 @@ def run_comparison(symbol):
     print(f"Results organized in: reports/{clean_sym}/")
 
 if __name__ == "__main__":
-    symbols = ["TRUMP/USDT", "ETH/USDT", "XAU/USDT"]
+    symbols = ["TRUMP/USDT", "ETH/USDT", "XRP/USDT", "XAU/USDT"]
     for sym in symbols:
         run_comparison(sym)
