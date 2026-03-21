@@ -60,7 +60,7 @@ class TrendCrusherLive:
         logger.info(f"Mode: {'DRY RUN' if CONFIG['DRY_RUN'] else 'LIVE'}")
         logger.info(f"Symbol: {self.symbol} | Seed: {self.initial_seed} USDT")
         logger.info("="*50)
-        self.notifier.notify_status(f"Bot V3 Started on {self.symbol}. Seed: {self.initial_seed} USDT")
+        self.notifier.notify_status(f"Bot v{CONFIG['VERSION']} Started on {self.symbol}. Seed: {self.initial_seed} USDT")
 
     def fetch_data(self, tf, limit=250):
         ohlcv = self.exchange.fetch_ohlcv(self.symbol, tf, limit=limit)

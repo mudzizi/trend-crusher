@@ -8,6 +8,8 @@ All notable changes to the TrendCrusher project will be documented in this file.
 - **Enhanced Testing**: Expanded `tests/test_resilience.py` to verify command flushing logic.
 - **Version Synchronization**: Centralized versioning in `src/config.py`. Replaced all hardcoded version strings across logs, reports, and documentation with dynamic references to `CONFIG['VERSION']`.
 ### Fixed
+- **Legacy String Cleanup**: Removed remaining "V3" hardcoded strings in `scripts/live_bot.py` and other legacy areas.
+- **Test Fixture Stability**: Fixed `KeyError: 'VERSION'` in `tests/test_sentinel.py` by ensuring mock configurations include the version key.
 - **Startup Crash Prevention**: Resolved a potential issue where old shutdown commands could trigger an immediate exit upon restart.
 
 ## [v11.1.0] - 2026-03-21
