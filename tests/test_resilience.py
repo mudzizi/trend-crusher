@@ -73,3 +73,36 @@ async def test_on_kline_update_error_handling(mock_bot):
     # 여기까지 도달하면 성공
     assert mock_bot.exchange.fetch_ohlcv.called
     print("✅ Kline update resilience verified: No crash on API error.")
+
+@pytest.mark.asyncio
+async def test_command_flushing_on_startup():
+    """봇 시작 시 이전 텔레그램 명령어를 무시(Flush)하는지 확인"""
+    from scripts.live_bot_async import handle_commands
+    
+    # handle_commands 내부의 try-except Exception을 우회하기 위해 BaseException 사용
+    class StopLoop(BaseException): pass
+    
+    mock_notifier = MagicMock()
+    # Mock some old messages sitting on the server
+    mock_notifier.get_updates.side_effect = [
+        {"ok": True, "result": [{"update_id": 100, "message": {"text": "/close_all"}}]}, # First call (flush)
+        {"ok": True, "result": []}, # Second call (wait)
+        StopLoop() # Third call to break the infinite loop
+    ]
+    
+    mock_pm = MagicMock()
+    mock_bots = {}
+    
+    with patch('src.optimizer_engine.OptimizerEngine', MagicMock()), \
+         patch('asyncio.sleep', AsyncMock()):
+        try:
+            await handle_commands(mock_bots, mock_notifier, mock_pm)
+        except StopLoop:
+            pass # Expected break
+            
+    # Check that the first get_updates was called with offset=None (flush)
+    # And subsequent calls used offset=101
+    assert mock_notifier.get_updates.call_count >= 2
+    mock_notifier.get_updates.assert_any_call(None)
+    mock_notifier.get_updates.assert_any_call(101)
+    print("✅ Command flushing verified: Old commands are skipped on startup.")

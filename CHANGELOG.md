@@ -2,6 +2,13 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.1.1] - 2026-03-21
+### Added
+- **Command Flushing**: Implemented a startup flush mechanism for Telegram commands to ignore old messages (e.g., `/close_all`) sent while the bot was offline.
+- **Enhanced Testing**: Expanded `tests/test_resilience.py` to verify command flushing logic.
+### Fixed
+- **Startup Crash Prevention**: Resolved a potential issue where old shutdown commands could trigger an immediate exit upon restart.
+
 ## [v11.1.0] - 2026-03-21
 ### Added
 - **Network Resilience**: Integrated `retry_api_call` into `fetch_ohlcv` to automatically recover from transient Binance API timeouts and network errors.

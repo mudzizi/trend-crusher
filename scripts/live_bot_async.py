@@ -333,11 +333,21 @@ class SymbolBotAsync:
         """Updates internal settings without restarting the bot."""
         self.settings.update(new_params)
         self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
-
 async def handle_commands(bots, notifier, pm):
     """Background task to poll and process Telegram commands."""
     from src.optimizer_engine import OptimizerEngine
+
+    # --- Flush Old Updates on Startup ---
     offset = None
+    try:
+        initial_updates = notifier.get_updates(offset)
+        if initial_updates and initial_updates.get("ok") and initial_updates.get("result"):
+            # Set offset to the latest update_id + 1 to skip all past messages
+            offset = initial_updates["result"][-1]["update_id"] + 1
+            logger.info(f"🧹 Flushed {len(initial_updates['result'])} old Telegram commands.")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to flush old Telegram updates: {e}")
+
     optimizer = OptimizerEngine(config=CONFIG)
     logger.info("📡 Command Listener active (v10 Sentinel).")
     while True:
@@ -434,7 +444,6 @@ async def handle_commands(bots, notifier, pm):
                     elif cmd == "/sniper_on":
                         for bot in bots.values(): bot.use_sniper = True
                         notifier.notify_status("🎯 Sniper Mode ENABLED. Ready for precise limit entries.")
-                        
         except Exception as e:
             logger.error(f"Command Error: {e}")
         await asyncio.sleep(10)
