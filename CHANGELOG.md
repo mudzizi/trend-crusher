@@ -2,17 +2,18 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v11.1.2] - 2026-03-21
+## [v11.2.0] - 2026-03-21
 ### Added
 - **Real-time OHLCV Updates**: Modified `SymbolBotAsync` to update OHLCV buffers in real-time (2s interval) via WebSocket kline streams. This eliminates the delay caused by waiting for candle closes and ensures volume-based and breakout signals are triggered instantly.
-- **Timeframe Filtering**: Implemented strict filtering in `on_kline_update` to ignore irrelevant kline streams (e.g., 1m), preventing buffer corruption and unnecessary API overhead.
-- **1-Minute Logging Heartbeat**: Added a periodic logging mechanism to `heartbeat_loop` that writes current price and status to the log file every minute for improved visibility.
-- **Configuration Overhaul**: Transitioned entire system to YAML-based configuration (`config.yaml`) with environment variable overrides.
-- **Documentation**: Created `CONFIG_GUIDE.md` and updated `STRATEGY_WHITEPAPER.md` to reflect real-time engine capabilities.
-- **Async Real-time Testing**: Added `tests/test_async_realtime.py` and `tests/test_config_loading.py` to verify engine logic and configuration integrity.
+- **Telegram Command Buttons**: Added a clickable command menu and bottom reply keyboard for easy bot control (status, sniper_on/off, stop/resume, close_all).
+- **Configuration Overhaul (YAML)**: Transitioned entire system to YAML-based configuration (`config.yaml`) with environment variable overrides for better security and flexibility.
+- **1-Minute Logging Heartbeat**: Periodic logging in `heartbeat_loop` for improved system health visibility.
+- **Timeframe Filtering**: Implemented strict filtering to ignore irrelevant kline streams, preventing buffer corruption.
+- **Documentation**: Created `CONFIG_GUIDE.md` and updated `STRATEGY_WHITEPAPER.md` to reflect the new real-time engine.
+- **Enhanced Testing**: Added `tests/test_async_realtime.py`, `tests/test_config_loading.py`, and `tests/test_telegram_buttons.py` for full verification of new features.
 ### Fixed
-- **Resilience Test Regression**: Updated `tests/test_resilience.py` to align with the new `on_kline_update` method signature and internal logic.
-- **Latency Optimization**: `check_entry` and `check_exit` now react to every price/volume update instead of only on candle close or mark price updates.
+- **Resilience Test Regression**: Updated tests to align with new engine logic and method signatures.
+- **Latency Optimization**: Reduced response time to ~1-2s for all trading conditions.
 
 ## [v11.1.1] - 2026-03-21
 ### Added

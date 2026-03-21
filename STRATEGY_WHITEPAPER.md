@@ -1,7 +1,7 @@
 # TrendCrusher V11: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.1.2 버전은 웹소켓 기반의 **실시간 인트라-바(Intra-bar) 감지** 엔진을 통해 지표는 1시간을 보되, 실행은 1초를 앞서가는 초저지연 매매 체계를 완성했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.2.0 버전은 웹소켓 기반의 **실시간 인트라-바(Intra-bar) 감지** 엔진을 통해 지표는 1시간을 보되, 실행은 1초를 앞서가는 초저지연 매매 체계를 완성했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
