@@ -84,13 +84,27 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 연결 및 보안 검증 (권장)
+### 2. 설정 (Configuration)
+`config.example.yaml` 파일을 `config.yaml`로 복사한 후, 본인의 환경에 맞게 수정하세요.
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+**주요 설정 항목:**
+- **API Keys**: `BINANCE_API_KEY`, `BINANCE_SECRET`, `TELEGRAM_TOKEN`, `TELEGRAM_CHAT_ID`를 설정합니다.
+- **Trading Settings**: `DRY_RUN` (테스트 모드 여부), `SEED` (초기 자본), `SYMBOLS_LIST` 등을 조정할 수 있습니다.
+- **Strategy Params**: 각 코인별로 최적화된 파라미터(`SYMBOL_SETTINGS`)를 직접 수정하거나 Sentinel이 자동 업데이트하도록 둘 수 있습니다.
+
+> **Tip:** 보안을 위해 API 키 등 민감한 정보는 `.env` 파일이나 OS 환경 변수로 설정할 수도 있습니다. 이 경우 `config.yaml`의 값보다 환경 변수가 우선 적용됩니다.
+
+### 3. 연결 및 보안 검증 (권장)
 봇 본체를 돌리기 전, 텔레그램 명령 수신과 내 폰의 ID가 일치하는지 확인하세요.
 ```bash
 PYTHONPATH=. python3 scripts/test_telegram_commands.py
 ```
 
-### 3. 라이브 봇 실행 (Phoenix 모드 - 추천)
+### 4. 라이브 봇 실행 (Phoenix 모드 - 추천)
 봇을 실시간 감시하고 죽으면 되살리는 워치독 모드로 가동합니다.
 ```bash
 PYTHONPATH=. python3 scripts/watchdog.py
@@ -138,5 +152,5 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 4.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V11.1.1 Development Team**
+**TrendCrusher V11.1.2 Development Team**
 *Technical Co-Founder by AI Agent*

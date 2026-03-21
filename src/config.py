@@ -1,106 +1,57 @@
 import os
+import yaml
 from dotenv import load_dotenv
 
-# .env 파일 로드
+# .env 파일 로드 (레거시 지원 및 환경 변수 우선 적용용)
 load_dotenv()
 
-"""
-[Verified Best Optimization Results - S-Tier]
------------------------------------------------------------------------------------
-SYMBOL      | Vol_Mult | Trail_Mult | Risk_Pct | EMA_Period | ADX_F | Result (1Y)
------------------------------------------------------------------------------------
-TRUMP/USDT  | 2.5      | 4.5        | 0.02     | 100        | 15    | +210.07%
-XAU/USDT    | 2.5      | 4.5        | 0.02     | 200        | 25    | +186.89%
-ETH/USDT    | 2.0      | 4.5        | 0.02     | 200        | 15    | +161.44%
------------------------------------------------------------------------------------
-"""
-
 # --- System Version ---
-VERSION = "11.1.1"
+VERSION = "11.1.2"
 
-CONFIG = {
-    "VERSION": VERSION,
-    # --- API KEYS ---
-    "BINANCE_API_KEY": os.getenv("BINANCE_API_KEY", ""),
-    "BINANCE_SECRET": os.getenv("BINANCE_SECRET", ""),
-    "TELEGRAM_TOKEN": os.getenv("TELEGRAM_TOKEN", ""),
-    "TELEGRAM_CHAT_ID": os.getenv("TELEGRAM_CHAT_ID", ""),
-    
-    # --- Operational Settings ---
-    "DRY_RUN": os.getenv("DRY_RUN", "True").lower() == "true",            
-    "SYMBOL": os.getenv("SYMBOL", "TRUMP/USDT"),     
-    "SYMBOLS_LIST": ["TRUMP/USDT", "ETH/USDT", "XAU/USDT", "SOL/USDT"],
-    "MAX_CONCURRENT_TRADES": 3,
-    "MARGIN_MODE": "ISOLATED",
-    "SEED": float(os.getenv("SEED", 10000.0)),              
-    
-    # --- Timeframes ---
-    "SIGNAL_TIMEFRAME": "1h",
-    "TREND_TIMEFRAME": "4h",
-    "CHECK_TIMEFRAME": "1m",
-    "LOOP_INTERVAL": 10,
-    
-    # --- Trading Costs ---
-    "FEE_RATE": 0.0004,         # Standard Taker Fee
-    "MAKER_FEE_RATE": 0.0002,   # Standard Maker Fee
-    "SLIPPAGE": 0.0005,         # Default Slippage (0.05%)
-    "DATA_DIR": "data",
-    
-    # --- Strategy Parameters (Global Defaults) ---
-    "VOL_MULTIPLIER": 2.5,      
-    "TRAILING_ATR_MULT": 4.5,   
-    "RISK_PER_TRADE": 0.02,     
-    "EMA_TREND_PERIOD": 100,
-    "DONCHIAN_PERIOD": 20,
-    "ATR_PERIOD": 14,
-    "AVG_VOL_PERIOD": 20,
-    "INITIAL_SL_ATR": 2.0,
-    "ADX_FILTER_LEVEL": 15,
-    "MAX_LEVERAGE": 5,
+def load_config():
+    """
+    YAML 파일을 로드하고 환경 변수로 필요한 부분을 덮어씌웁니다.
+    config.yaml이 없으면 config.example.yaml을 기본값으로 사용합니다.
+    """
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(base_path, "config.yaml")
+    example_path = os.path.join(base_path, "config.example.yaml")
 
-    # --- Symbol Specific Optimized Parameters ---
-    "SYMBOL_SETTINGS": {
-        "TRUMP/USDT": {
-            "ALLOCATED_SEED": 4000.0,
-            "VOL_MULTIPLIER": 2.5,
-            "TRAILING_ATR_MULT": 4.5,
-            "EMA_TREND_PERIOD": 100,
-            "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 15
-        },
-        "ETH/USDT": {
-            "ALLOCATED_SEED": 2500.0,
-            "VOL_MULTIPLIER": 2.0,
-            "TRAILING_ATR_MULT": 4.5,
-            "EMA_TREND_PERIOD": 200,
-            "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 15
-        },
-        "XAU/USDT": {
-            "ALLOCATED_SEED": 2500.0,
-            "VOL_MULTIPLIER": 2.5,
-            "TRAILING_ATR_MULT": 4.5,
-            "EMA_TREND_PERIOD": 200,
-            "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 25
-        },
-        "SOL/USDT": {
-            "ALLOCATED_SEED": 1000.0,
-            "VOL_MULTIPLIER": 1.5,
-            "TRAILING_ATR_MULT": 4.0,
-            "EMA_TREND_PERIOD": 200,
-            "RISK_PER_TRADE": 0.02,
-            "ADX_FILTER_LEVEL": 15
-        }
-    },
-
-    # --- Strategy Improvements ---
-    "USE_ADAPTIVE_TRAIL": True,
-    "ADAPTIVE_TRAIL_STEPS": [
-        {"pnl_pct": 10, "atr_mult": 3.5},
-        {"pnl_pct": 20, "atr_mult": 2.5}
-    ],
+    # 1. YAML 파일 로드 (실제 설정 파일 우선, 없으면 예제 파일)
+    target_path = config_path if os.path.exists(config_path) else example_path
     
-    # --- The Sniper (v11.0.0) ---
-    "SNIPER_PROXIMITY_PCT": 0.005, 
-}
+    with open(target_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    # 2. 버전 강제 동기화
+    config["VERSION"] = VERSION
+
+    # 3. 환경 변수 (OS Environment)로 중요한 값들 덮어씌우기 (Secrets 등)
+    env_mappings = {
+        "BINANCE_API_KEY": "BINANCE_API_KEY",
+        "BINANCE_SECRET": "BINANCE_SECRET",
+        "TELEGRAM_TOKEN": "TELEGRAM_TOKEN",
+        "TELEGRAM_CHAT_ID": "TELEGRAM_CHAT_ID",
+        "DRY_RUN": "DRY_RUN",
+        "SYMBOL": "SYMBOL",
+        "SEED": "SEED"
+    }
+
+    for config_key, env_key in env_mappings.items():
+        env_val = os.getenv(env_key)
+        if env_val is not None:
+            # 타입 변환 처리
+            if config_key == "DRY_RUN":
+                config[config_key] = env_val.lower() == "true"
+            elif config_key == "SEED":
+                config[config_key] = float(env_val)
+            else:
+                config[config_key] = env_val
+
+    return config
+
+# 전역 CONFIG 객체 생성
+CONFIG = load_config()
+
+# 레거시 코드 호환을 위한 VERSION 전역 변수 유지
+VERSION = CONFIG["VERSION"]

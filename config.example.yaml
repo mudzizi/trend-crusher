@@ -1,0 +1,92 @@
+# TrendCrusher Configuration Example (v11.1.2)
+# Copy this file to config.yaml and update your settings.
+
+# --- VERSION ---
+VERSION: "11.1.2"
+
+# --- API KEYS ---
+# You can use environment variables or set them here directly.
+# If using environment variables, keep them in your .env file or shell.
+# These will be overridden by environment variables if they exist.
+BINANCE_API_KEY: "YOUR_BINANCE_API_KEY"
+BINANCE_SECRET: "YOUR_BINANCE_SECRET"
+TELEGRAM_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN"
+TELEGRAM_CHAT_ID: "YOUR_TELEGRAM_CHAT_ID"
+
+# --- OPERATIONAL SETTINGS ---
+DRY_RUN: true
+SEED: 10000.0
+SYMBOL: "TRUMP/USDT" # Default single symbol for some legacy scripts
+SYMBOLS_LIST:
+  - "TRUMP/USDT"
+  - "ETH/USDT"
+  - "XAU/USDT"
+  - "SOL/USDT"
+MAX_CONCURRENT_TRADES: 3
+MARGIN_MODE: "ISOLATED"
+MAX_LEVERAGE: 5
+
+# --- TIMEFRAMES & INTERVALS ---
+SIGNAL_TIMEFRAME: "1h"
+TREND_TIMEFRAME: "4h"
+CHECK_TIMEFRAME: "1m"
+LOOP_INTERVAL: 10 # seconds
+
+# --- TRADING COSTS ---
+FEE_RATE: 0.0004         # Standard Taker Fee
+MAKER_FEE_RATE: 0.0002   # Standard Maker Fee
+SLIPPAGE: 0.0005         # Default Slippage (0.05%)
+DATA_DIR: "data"
+
+# --- STRATEGY PARAMETERS (GLOBAL DEFAULTS) ---
+VOL_MULTIPLIER: 2.5      
+TRAILING_ATR_MULT: 4.5   
+RISK_PER_TRADE: 0.02     
+EMA_TREND_PERIOD: 100
+DONCHIAN_PERIOD: 20
+ATR_PERIOD: 14
+AVG_VOL_PERIOD: 20
+INITIAL_SL_ATR: 2.0
+ADX_FILTER_LEVEL: 15
+
+# --- SYMBOL SPECIFIC OPTIMIZED PARAMETERS ---
+SYMBOL_SETTINGS:
+  "TRUMP/USDT":
+    ALLOCATED_SEED: 4000.0
+    VOL_MULTIPLIER: 2.5
+    TRAILING_ATR_MULT: 4.5
+    EMA_TREND_PERIOD: 100
+    RISK_PER_TRADE: 0.02
+    ADX_FILTER_LEVEL: 15
+  "ETH/USDT":
+    ALLOCATED_SEED: 2500.0
+    VOL_MULTIPLIER: 2.0
+    TRAILING_ATR_MULT: 4.5
+    EMA_TREND_PERIOD: 200
+    RISK_PER_TRADE: 0.02
+    ADX_FILTER_LEVEL: 15
+  "XAU/USDT":
+    ALLOCATED_SEED: 2500.0
+    VOL_MULTIPLIER: 2.5
+    TRAILING_ATR_MULT: 4.5
+    EMA_TREND_PERIOD: 200
+    RISK_PER_TRADE: 0.02
+    ADX_FILTER_LEVEL: 25
+  "SOL/USDT":
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 1.5
+    TRAILING_ATR_MULT: 4.0
+    EMA_TREND_PERIOD: 200
+    RISK_PER_TRADE: 0.02
+    ADX_FILTER_LEVEL: 15
+
+# --- STRATEGY IMPROVEMENTS ---
+USE_ADAPTIVE_TRAIL: true
+ADAPTIVE_TRAIL_STEPS:
+  - pnl_pct: 10
+    atr_mult: 3.5
+  - pnl_pct: 20
+    atr_mult: 2.5
+
+# --- THE SNIPER ---
+SNIPER_PROXIMITY_PCT: 0.005

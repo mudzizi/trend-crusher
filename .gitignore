@@ -20,6 +20,7 @@ nohup.out
 
 # Secrets
 .env
+config.yaml
 src/config.py.bak
 
 # OS generated files
