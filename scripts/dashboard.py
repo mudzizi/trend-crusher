@@ -27,22 +27,29 @@ def index():
     error_msg = None
     
     try:
-        # 1. Fetch Active Positions from DB
+        # 1. Fetch Active Positions from DB + Bot State
         active_df = db.get_active_trades()
         for _, pos in active_df.iterrows():
             sym = pos['symbol']
             ticker = exchange.fetch_ticker(sym)
             curr_price = float(ticker['last'])
             
+            # Fetch Bot State for SL/Trail info
+            state = db.get_bot_state(sym)
+            sl_price = 0
+            trail_mult = CONFIG.get("TRAILING_ATR_MULT", 4.5)
+            
+            if state:
+                # If we have a state, we can use the max/min price seen to estimate current trail
+                # In a real bot, we'd store the actual SL price in bot_state
+                # For now, we'll use the sl_price from the bot_state if available (need to ensure it's saved there)
+                # Let's assume sl_price might be added or we calculate it
+                sl_price = state.get('sl_price', 0) 
+            
             pnl_pct = ((curr_price / pos['open_price']) - 1) * 100
             if pos['side'] == 'SHORT':
                 pnl_pct = -pnl_pct
                 
-            # SL Status Calculation
-            # We need to estimate current SL since it's not in DB yet (it's managed in-memory by the bot)
-            # But for the dashboard, we'll show distance to initial SL and entry
-            # To be more accurate, the bot should ideally log SL to DB, but for now we'll calculate basic distance
-            
             active_positions.append({
                 "symbol": sym,
                 "side": pos['side'],
@@ -50,46 +57,43 @@ def index():
                 "curr": curr_price,
                 "qty": pos['quantity'],
                 "pnl": round(pnl_pct, 2),
-                "open_time": pos['open_time']
+                "open_time": pos['open_time'],
+                "sl": sl_price
             })
 
-        # 2. Fetch Market Summary for all watched symbols
+        # 2. Fetch Market Summary
         for sym in symbols:
             try:
                 ticker = exchange.fetch_ticker(sym)
-                c_close = float(ticker['last'])
-                
-                # Summary info for the list
                 market_summaries.append({
                     "symbol": sym,
-                    "price": c_close,
+                    "price": float(ticker['last']),
+                    "change": float(ticker.get('percentage', 0)),
                     "weight": CONFIG.get("SYMBOL_WEIGHTS", {}).get(sym, 1.0/len(symbols))
                 })
-            except:
-                continue
+            except: continue
 
     except Exception as e:
         error_msg = f"Dashboard Error: {str(e)}"
         print(traceback.format_exc())
 
-    # 3. Portfolio Overall Stats
+    # 3. Portfolio & History Data
     trades_df = db.get_trade_history()
     trades_list = trades_df.sort_values(by='id', ascending=False).to_dict(orient='records') if not trades_df.empty else []
     
     equity_df = db.get_equity_history()
-    if not equity_df.empty:
-        current_balance = equity_df['balance'].iloc[-1]
-        initial_balance = equity_df['balance'].iloc[0]
-        total_return = ((current_balance / initial_balance) - 1) * 100
-    else:
-        current_balance = CONFIG["SEED"]
-        total_return = 0
-    
-    # Calculate Win Rate
+    chart_data = {
+        "labels": equity_df['timestamp'].tolist() if not equity_df.empty else [],
+        "values": equity_df['balance'].tolist() if not equity_df.empty else []
+    }
+
+    # Performance Stats
     win_rate = 0
+    total_pnl = 0
     if len(trades_list) > 0:
-        wins = len([t for t in trades_list if t['pnl_usdt'] > 0])
-        win_rate = (wins / len(trades_list)) * 100
+        wins = [t for t in trades_list if t['pnl_pct'] > 0]
+        win_rate = (len(wins) / len(trades_list)) * 100
+        total_pnl = sum([t['pnl_usdt'] for t in trades_list])
 
     return render_template('index.html', 
                            version=CONFIG.get("VERSION", "N/A"),
@@ -98,9 +102,10 @@ def index():
                            active_positions=active_positions,
                            error=error_msg,
                            trades=trades_list,
-                           balance=current_balance,
-                           total_return=total_return,
-                           win_rate=round(win_rate, 1))
+                           balance=equity_df['balance'].iloc[-1] if not equity_df.empty else CONFIG["SEED"],
+                           total_return=total_pnl,
+                           win_rate=round(win_rate, 1),
+                           chart_data=chart_data)
 
 @app.route('/static/<filename>')
 def serve_static(filename):

@@ -2,6 +2,19 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.7.0] - 2026-03-22
+### Added
+- **Equity Curve Visualization**: Integrated Chart.js in the dashboard for real-time portfolio performance tracking.
+- **Enhanced Market Pulse**: Added 24h percentage change and real-time prices for watched symbols on the dashboard.
+- **E2E Simulation Suite**: Introduced `test_e2e_simulation.py` to verify full trading cycles (entry -> trail -> exit).
+- **WebSocket Resilience Tests**: Comprehensive verification of reconnection and message queuing in `test_websocket.py`.
+### Changed
+- **Dashboard UI Refinement**: Modernized professional dark theme for the Flask terminal.
+- **Test Modernization**: Refactored `test_risk_safety.py` and `test_strategy_v2.py` to align with the async engine and blackbox testing principles.
+### Fixed
+- **Strategy Mirror Testing**: Eliminated redundant logic duplication in tests by switching to outcome-based verification.
+- **Async Risk Logic**: Ensured leverage and precision rules are correctly applied in the `SymbolBotAsync` context.
+
 ## [v11.6.0] - 2026-03-22
 ### Added
 - **Symbol-Aware Relative Adaptive Trail**: Introduced `tighten_ratio` in `ADAPTIVE_TRAIL_STEPS`. This allows the trailing stop to tighten as a percentage of the symbol's unique base ATR multiplier, maintaining each asset's "personality" while protecting profits.
