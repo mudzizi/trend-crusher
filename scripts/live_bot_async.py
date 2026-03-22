@@ -3,13 +3,27 @@ import ccxt.async_support as ccxt
 import pandas as pd
 import os
 import logging
+import signal
 from datetime import datetime
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
 from src.strategy import TrendCrusherV2
 from src.telegram_utils import TelegramNotifier
+from src.db_manager import DBManager
+from src.websocket_manager import BinanceWebSocketManager
+from src.portfolio_manager_async import PortfolioManagerAsync
 
-# ... (Logging setup remains same)
+# --- Logging Setup ---
+os.makedirs("log", exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
+    handlers=[
+        logging.FileHandler("log/live_bot_async.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("AsyncBot")
 
 class SymbolBotAsync:
     def __init__(self, symbol, exchange, pm, notifier, db):
