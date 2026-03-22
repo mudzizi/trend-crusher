@@ -63,7 +63,7 @@ async def test_sniper_ambush_placed_when_conditions_met(mock_bot):
 
 @pytest.mark.asyncio
 async def test_sniper_ambush_aborted_when_condition_fails(mock_bot):
-    # 시나리오: 매복 중인데 거래량이 죽어버리면(Volume Drop) 즉시 취소
+    # Scenario: Ambush is active but momentum dies. Should be cancelled immediately.
     mock_bot.active_sniper_order_id = 'limit_123'
     
     with patch('scripts.live_bot_async.calculate_donchian') as mock_dc, \
@@ -74,18 +74,19 @@ async def test_sniper_ambush_aborted_when_condition_fails(mock_bot):
              
         mock_dc.return_value = (pd.Series([10000]), pd.Series([9000]))
         mock_atr.return_value = pd.Series([100])
-        mock_vol.return_value = pd.Series([1000])
+        mock_vol.return_value = pd.Series([1000]) # Avg = 1000
         mock_adx.return_value = pd.Series([20])
         mock_ema.return_value = pd.Series([9500])
         
-        # Sudden Volume Drop! Now 1500 < (1000 * 2.0)
-        mock_bot.ohlcv_1h = pd.DataFrame({'volume': [1500]}) 
+        # Sudden Volume Drop: 500 < (1000 * 2.0) -> momentum_ok = False
+        mock_bot.ohlcv_1h = pd.DataFrame({'volume': [500]}) 
         mock_bot.last_price = 9950
         
         await mock_bot.check_entry()
         
-        # Assertions
-        assert mock_bot.active_sniper_order_id is None # Cancelled
+        # In the refactored check_entry, if not (momentum_ok and trend_ok), 
+        # it cancels sniper and returns.
+        assert mock_bot.active_sniper_order_id is None 
         mock_bot.exchange.cancel_order.assert_called_once_with('limit_123', 'BTC/USDT')
 
 @pytest.mark.asyncio

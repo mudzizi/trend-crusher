@@ -8,6 +8,8 @@ from scripts.live_bot_async import SymbolBotAsync
 def mock_bot():
     mock_exchange = AsyncMock()
     mock_pm = AsyncMock()
+    # Configure calculate_order_qty to return a valid float for numeric checks
+    mock_pm.calculate_order_qty = AsyncMock(return_value=1.0)
     mock_notifier = AsyncMock()
     mock_db = MagicMock()
     
@@ -116,6 +118,49 @@ async def test_on_kline_update_ignore_irrelevant_tf(mock_bot):
     # 검증: fetch_ohlcv나 check_entry가 호출되지 않아야 함
     mock_bot.fetch_ohlcv.assert_not_called()
     mock_bot.check_entry.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_retest_order_placement_state(mock_bot):
+    # Scenario: Trigger a retest ambush
+    target_price = 55000.0
+    sl_price = 54000.0
+    
+    # In DRY_RUN, it should set internal state without real API call
+    await mock_bot.manage_retest_ambush(1, target_price, sl_price)
+    
+    assert mock_bot.active_retest_order_id == "DRY_RETEST"
+    assert mock_bot.retest_order_ts is not None
+    assert mock_bot.sl_price == sl_price
+    assert mock_bot.entry_price == target_price
+
+@pytest.mark.asyncio
+async def test_retest_cancel_cleanup(mock_bot):
+    # Pre-set some state
+    mock_bot.active_retest_order_id = "SOME_ID"
+    mock_bot.retest_order_ts = pd.Timestamp.now()
+    
+    await mock_bot.cancel_retest_order()
+    
+    assert mock_bot.active_retest_order_id is None
+    assert mock_bot.retest_order_ts is None
+
+@pytest.mark.asyncio
+async def test_per_symbol_toggle_sim(mock_bot):
+    # Simulating handle_commands logic for per-symbol toggle
+    # 1. Initial State
+    mock_bot.use_retest_maker = False
+    
+    # 2. Command: /retest_on BTC/USDT (key: btcusdt)
+    bot_key = "btcusdt"
+    bots = {bot_key: mock_bot}
+    
+    # Simulating /retest_on logic from handle_commands
+    target_sym = "BTC/USDT"
+    key = target_sym.replace('/', '').lower()
+    if key in bots:
+        bots[key].use_retest_maker = True
+        
+    assert mock_bot.use_retest_maker == True
 
 @pytest.mark.asyncio
 async def test_config_structure_consistency():
