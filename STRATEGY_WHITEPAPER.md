@@ -1,7 +1,7 @@
 # TrendCrusher V11: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.2.0 버전은 웹소켓 기반의 **실시간 인트라-바(Intra-bar) 감지** 엔진을 통해 지표는 1시간을 보되, 실행은 1초를 앞서가는 초저지연 매매 체계를 완성했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.6.0 버전은 리테스트 메이커(Retest Maker) 진입 로직과 비율 기반 어댑티브 트레일을 통해 극강의 효율성을 추구합니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -63,7 +63,7 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 | **XAU/USDT** | -13.93% | **+343.27%** | **+357.20%** | 71.4% |
 
 ## 4. 결론 (Conclusion)
-TrendCrusher V11.1.1은 **"기술적 예리함"**과 **"운영적 견고함"**의 완벽한 결합체입니다. 스나이퍼의 날카로운 타점으로 수익을 극대화하고, 워치독의 끈질긴 생명력으로 시스템의 중단 없는 성장을 보장합니다.
+TrendCrusher V11.6.0은 **"기술적 예리함"**과 **"운영적 견고함"**의 완벽한 결합체입니다.
 
 ---
 *Disclaimer: 본 소프트웨어는 기술적 분석 도구이며, 모든 투자의 책임은 사용자 본인에게 있습니다.*

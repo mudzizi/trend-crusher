@@ -1,8 +1,8 @@
-# TrendCrusher Configuration Example (v11.2.0)
+# TrendCrusher Configuration Example (v11.6.0)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "11.2.0"
+VERSION: "11.6.0"
 
 # --- API KEYS ---
 # You can use environment variables or set them here directly.
@@ -91,10 +91,12 @@ SYMBOL_SETTINGS:
 # --- STRATEGY IMPROVEMENTS ---
 USE_ADAPTIVE_TRAIL: true
 ADAPTIVE_TRAIL_STEPS:
-  - pnl_pct: 10
-    atr_mult: 3.5
-  - pnl_pct: 20
-    atr_mult: 2.5
+  - pnl_pct: 1.5
+    tighten_ratio: 0.8  # Tighten to 80% of original ATR mult
+  - pnl_pct: 3.0
+    tighten_ratio: 0.6  # Tighten to 60% of original ATR mult
+  - pnl_pct: 5.0
+    tighten_ratio: 0.4  # Tighten to 40% of original ATR mult
 
 # --- THE SNIPER ---
 SNIPER_PROXIMITY_PCT: 0.005

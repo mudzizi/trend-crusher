@@ -1,4 +1,4 @@
-# 🛠️ TrendCrusher V11.1.2: Configuration Guide
+# 🛠️ TrendCrusher V11.6.0: Configuration Guide
 
 이 가이드는 `config.yaml` 파일에 포함된 모든 설정 항목의 의미, 작동 방식 및 권장값을 상세히 설명합니다.
 

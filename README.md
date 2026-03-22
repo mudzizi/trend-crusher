@@ -1,7 +1,7 @@
-# 🚀 TrendCrusher V11.2.0: The Real-time Engine
+# 🚀 TrendCrusher V11.6.0: The Intelligent Profit Engine
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
-> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.2.0 버전은 웹소켓을 통한 **실시간 인트라-바(Intra-bar) 감지** 엔진과 YAML 기반의 유연한 설정 체계가 결합된 완성형 트레이딩 봇입니다.
+> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.6.0 버전은 **리테스트 메이커(Retest Maker)** 전략과 **비율 기반 어댑티브 트레일**이 결합된 지능형 트레이딩 봇입니다.
 
 ---
 
@@ -115,5 +115,5 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 3.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V11.2.0 Development Team**
+**TrendCrusher V11.6.0 Development Team**
 *Technical Co-Founder by AI Agent*

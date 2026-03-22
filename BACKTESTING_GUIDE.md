@@ -1,4 +1,4 @@
-# 📊 TrendCrusher V11.2.0: Backtesting Guide
+# 📊 TrendCrusher V11.6.0: Backtesting Guide
 
 이 가이드는 프로젝트에 포함된 다양한 백테스팅 스크립트의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. TrendCrusher는 단순한 수익률 계산을 넘어, 실전 매매에서 발생할 수 있는 슬리피지, 수수료 리베이트, 인트라-바 변동성을 정밀하게 시뮬레이션합니다.
 
