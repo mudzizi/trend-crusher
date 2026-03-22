@@ -54,7 +54,10 @@ def test_close_position_pnl(base_config):
     strategy._close_position(51000.0, pd.Timestamp.now())
     
     assert strategy.position == 0
-    assert strategy.capital == pytest.approx(10097.96)
+    # Price PnL = (51000-50000)*0.1 = 100
+    # Taker Fee = 51000*0.1*0.0005 = 2.55
+    # Net Capital = 10000 + 100 - 2.55 = 10097.45
+    assert strategy.capital == pytest.approx(10097.45)
     assert len(strategy.trades) == 1
 
 def test_adaptive_trailing_stop_logic(base_config):
@@ -91,6 +94,51 @@ def test_adaptive_trailing_stop_logic(base_config):
         if pnl_25 >= step['pnl_pct']:
             curr_mult_25 = min(curr_mult_25, step['atr_mult'])
     assert curr_mult_25 == 2.5
+
+def test_tighten_ratio_logic(base_config):
+    # Case: tighten_ratio is used instead of fixed atr_mult
+    base_config["ADAPTIVE_TRAIL_STEPS"] = [
+        {"pnl_pct": 2.0, "tighten_ratio": 0.5} # Tighten by 50%
+    ]
+    strategy = TrendCrusherV2(config=base_config)
+    atr_trail_mult = base_config["TRAILING_ATR_MULT"] # 4.5
+    
+    # 1. PnL 1% (Below threshold)
+    pnl_1 = 1.0
+    curr_mult_1 = atr_trail_mult
+    for step in base_config["ADAPTIVE_TRAIL_STEPS"]:
+        if pnl_1 >= step['pnl_pct']:
+            curr_mult_1 = min(curr_mult_1, atr_trail_mult * step['tighten_ratio'])
+    assert curr_mult_1 == 4.5
+    
+    # 2. PnL 3% (Above threshold)
+    pnl_3 = 3.0
+    curr_mult_3 = atr_trail_mult
+    for step in base_config["ADAPTIVE_TRAIL_STEPS"]:
+        if pnl_3 >= step['pnl_pct']:
+            curr_mult_3 = min(curr_mult_3, atr_trail_mult * step['tighten_ratio'])
+    assert curr_mult_3 == 2.25 # 4.5 * 0.5
+
+def test_retest_maker_entry_and_fee(base_config):
+    strategy = TrendCrusherV2(config=base_config)
+    
+    # Case A: Market Entry (Taker)
+    strategy._open_position(1, 100.0, 5.0, pd.Timestamp.now(), 0.02, is_maker=False)
+    # Entry Price with Slippage (0.05%): 100.05
+    # Risk = 200, StopDist = 10.05, Qty = 19.9004975
+    # Fee = 100.05 * 19.9004975 * 0.0005 = 0.995522
+    # Cap = 10000 - 0.995522 = 9999.004478
+    assert strategy.capital == pytest.approx(9999.004478)
+    assert strategy.trades[-1]['is_maker'] == False
+    
+    # Reset
+    strategy.capital = 10000.0
+    
+    # Case B: Retest Maker Entry
+    strategy._open_position(1, 100.0, 5.0, pd.Timestamp.now(), 0.02, is_maker=True)
+    # Fee = 100 * 20 * 0.0002 = 0.4
+    assert strategy.capital == pytest.approx(9999.6)
+    assert strategy.trades[-1]['is_maker'] == True
 
 def test_adx_filter_logic_check(base_config):
     # This test verifies if the ADX filter is correctly integrated into entry logic

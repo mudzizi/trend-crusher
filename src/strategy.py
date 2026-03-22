@@ -67,7 +67,11 @@ class TrendCrusherV2:
                         pnl_pct = ((m_close / self.entry_price) - 1) * 100 * self.position
                         for step in self.c.get("ADAPTIVE_TRAIL_STEPS", []):
                             if pnl_pct >= step['pnl_pct']:
-                                curr_atr_mult = min(curr_atr_mult, step['atr_mult'])
+                                if 'tighten_ratio' in step:
+                                    # Proportionally tighten based on symbol's own ATR mult
+                                    curr_atr_mult = min(curr_atr_mult, atr_trail_mult * step['tighten_ratio'])
+                                elif 'atr_mult' in step:
+                                    curr_atr_mult = min(curr_atr_mult, step['atr_mult'])
 
                     if self.position == 1:
                         self.max_price_seen = max(self.max_price_seen, m_close)

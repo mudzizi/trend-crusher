@@ -2,6 +2,13 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.6.0] - 2026-03-22
+### Added
+- **Symbol-Aware Relative Adaptive Trail**: Introduced `tighten_ratio` in `ADAPTIVE_TRAIL_STEPS`. This allows the trailing stop to tighten as a percentage of the symbol's unique base ATR multiplier, maintaining each asset's "personality" while protecting profits.
+- **Improved Default Steps**: Updated configuration examples to use realistic profit-taking intervals (1.5%, 3.0%, 5.0%) based on live market observations.
+### Changed
+- Refactored `src/strategy.py` to support both legacy `atr_mult` and the new `tighten_ratio` for backward compatibility.
+
 ## [v11.5.0] - 2026-03-22
 ### Added
 - **Retest Maker Mode (True Maker)**: Implemented a new entry strategy that waits for a price pullback (retest) to the breakout level after a signal, enabling 100% Maker fills.
