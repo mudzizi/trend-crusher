@@ -531,7 +531,9 @@ async def send_summary(bots, notifier, pm):
         if bot.position != 0:
             active_count += 1
             pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
-            status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+            leverage = pm.config.get("MAX_LEVERAGE", 1)
+            roe = pnl * leverage
+            status = f"{'LONG' if bot.position==1 else 'SHORT'} (Asset: {pnl:+.2f}% | ROE: {roe:+.2f}%)"
         elif bot.active_sniper_order_id:
             status = "🎯 AMBUSHING (Limit Set)"
         
@@ -572,17 +574,17 @@ async def heartbeat_loop(bots, notifier, pm):
         count += 1
         
         # 1. Log Brief Status every minute (Visibility in watchdog.log)
+        leverage = pm.config.get("MAX_LEVERAGE", 1)
         for bot in bots.values():
             status = "IDLE"
             if bot.position != 0:
                 pnl = ((bot.last_price / bot.entry_price) - 1) * 100 * bot.position
-                status = f"{'LONG' if bot.position==1 else 'SHORT'} ({pnl:+.2f}%)"
+                roe = pnl * leverage
+                status = f"{'LONG' if bot.position==1 else 'SHORT'} (Asset: {pnl:+.2f}% | ROE: {roe:+.2f}%)"
             elif bot.active_sniper_order_id:
                 status = "🎯 AMBUSHING"
-            
-            # Simple indicators check log
-            logger.info(f"💓 [{bot.symbol}] Price: {bot.last_price:,.2f} | Status: {status}")
 
+            logger.info(f"💓 [{bot.symbol}] Price: {bot.last_price:,.2f} | Status: {status}")
         # 2. Telegram Heartbeat every hour
         if count >= 60:
             await send_summary(bots, notifier, pm)

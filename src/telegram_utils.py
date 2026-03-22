@@ -93,10 +93,14 @@ class TelegramNotifier:
 
     def notify_exit(self, type, price, pnl_pct, pnl_usdt):
         icon = "✅" if pnl_pct > 0 else "❌"
+        leverage = CONFIG.get("MAX_LEVERAGE", 1)
+        roe = pnl_pct * leverage
+        
         msg = (
             f"{icon} *[EXIT] {type}*\n"
             f"💰 Price: {price:,.2f}\n"
-            f"📈 PnL: {pnl_pct:+.2f}%\n"
+            f"📈 Asset PnL: {pnl_pct:+.2f}%\n"
+            f"🔥 ROE ({leverage}x): {roe:+.2f}%\n"
             f"💵 Profit: {pnl_usdt:+.2f} USDT"
         )
         self.send_message(msg)
