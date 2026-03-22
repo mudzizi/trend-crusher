@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-from src.strategy import AggressiveVBOStrategy
+import os
+from src.strategy import TrendCrusherV2
 
 def calculate_mdd(equity_curve):
     if not equity_curve: return 0
@@ -10,21 +11,29 @@ def calculate_mdd(equity_curve):
     return np.max(drawdown)
 
 def run_eth_optimization():
-    df_1h = pd.read_csv("data/ETH_USDT_1h.csv")
-    df_4h = pd.read_csv("data/ETH_USDT_4h.csv")
+    symbol = "ETH/USDT"
+    clean_sym = symbol.replace('/', '_')
+    f1h, f4h, f1m = f"data/{clean_sym}_1h.csv", f"data/{clean_sym}_4h.csv", f"data/{clean_sym}_1m.csv"
+    
+    if not all(os.path.exists(f) for f in [f1h, f4h, f1m]):
+        print(f"Skipping {symbol}: Files not found (requires 1h, 4h, and 1m).")
+        return pd.DataFrame()
+
+    df_1h = pd.read_csv(f1h)
+    df_4h = pd.read_csv(f4h)
+    df_1m = pd.read_csv(f1m)
     
     risks = [0.01, 0.015, 0.02]
     results = []
     
     for r in risks:
-        strategy = AggressiveVBOStrategy()
-        trades, equity_curve = strategy.run(df_1h, df_4h, risk_pct=r)
+        strategy = TrendCrusherV2()
+        trades, equity_curve = strategy.run_precision_backtest(df_1h, df_4h, df_1m, risk_pct=r)
         
         final_return = ((strategy.capital / strategy.initial_capital) - 1) * 100
         mdd = calculate_mdd(equity_curve) * 100
         total_trades = len([t for t in trades if t['type'] == 'CLOSE'])
         
-        # Risk-Adjusted Return (Final Return / MDD)
         rar = final_return / mdd if mdd > 0 else 0
         
         results.append({
@@ -39,5 +48,6 @@ def run_eth_optimization():
 
 if __name__ == "__main__":
     summary = run_eth_optimization()
-    print("\n[ETH Aggressive VBO] Risk Optimization Results (1-Year):")
-    print(summary.to_string(index=False))
+    if not summary.empty:
+        print("\n[ETH Aggressive VBO] Risk Optimization Results (1-Year):")
+        print(summary.to_string(index=False))

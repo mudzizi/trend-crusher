@@ -1,23 +1,25 @@
-# Trading Session Log (2026-03-22) - Milestone: Dashboard & QA Pro (v11.7.0)
+# Trading Session Log (2026-03-22) - Milestone: Strategy Engine Synchronization (v11.8.0)
 
 ## ✅ 완료된 작업
-1. **대시보드 시각화 고도화 (v11.7.0)**:
-   - **실시간 자산 곡선(Equity Curve)**: Chart.js를 이용한 포트폴리오 성과 시각화 도입.
-   - **마켓 펄스(Market Pulse)**: 24시간 변동률 및 실시간 가격 지표 강화.
-   - **포지션 정밀 모니터링**: 손절가(SL) 및 트레일링 스탑 진척도 시각화 보완.
-   - **UI/UX 개선**: 전문가용 다크 테마 레이아웃으로 전면 개편.
+1. **전략 엔진 단일화 및 모듈화 (v11.8.0)**:
+   - **Single Source of Truth**: `src/strategy.py`의 `TrendCrusherV2`를 라이브 봇과 모든 백테스터가 공유하는 단일 엔진으로 리팩토링.
+   - **로직 동기화**: `check_entry_signal`, `check_exit_signal` 메서드 도입으로 백테스트와 실전 매매 사이의 의사결정 로직 완벽 일치.
+   - **유연한 파라미터 제어**: 최적화 스크립트의 소문자 키워드 인자를 전략 엔진의 대문자 `CONFIG` 키로 자동 매핑하는 기능 구현.
 
-2. **테스트 아키텍처 현대화 (QA Pro)**:
-   - **통합 시뮬레이션(E2E)**: `test_e2e_simulation.py` 도입으로 진입-추적-청산 전 과정 자동화 검증.
-   - **비동기 리스크 검증**: `test_risk_safety.py`를 비동기 엔진용으로 리팩토링하여 레버리지 및 정밀도 제어 완벽 보장.
-   - **전략 블랙박스 테스트**: 기존의 로직 복사형 테스트를 결과 중심의 블랙박스 테스트로 전면 교체 (`test_strategy_v2.py`).
-   - **WebSocket 복원력 테스트**: 연결 끊김 및 자동 재접속 시나리오 100% 검증 (`test_websocket.py`).
+2. **데이터베이스 및 상태 관리 보완**:
+   - **자동 마이그레이션**: `bot_state` 테이블에 `sl_price` 컬럼 자동 추가 로직 구현하여 11.2.0 등 구버전과의 호환성 보장.
+   - **안전한 포지션 복구**: 봇 재시작 시 기존 포지션과 손절가(SL) 정보를 정확히 계승하도록 `initialize` 및 `persist_state` 강화.
 
-3. **시스템 품질 지표**:
-   - 총 62개 테스트 케이스 100% 통과 (Pass).
-   - 실전 운영 가용성(Reliability) 확인 완료.
+3. **시스템 무결성 및 품질 보증**:
+   - **테스트 케이스 동기화**: 변경된 엔진 인터페이스에 맞춰 `test_strategy_v2.py` 및 `test_config_loading.py` 수정.
+   - **100% Pass**: 핵심 유닛 테스트 16개 및 전체 테스트 스위트 검증 완료.
+   - **문서 최신화**: `BACKTESTING_GUIDE.md`를 최신 리팩토링 구조에 맞게 전면 개편.
+
+4. **레거시 스크립트 복구**:
+   - 파손되었던 `backtester.py`, `precision_backtester.py`, `eth_optimizer.py` 등을 새 엔진 기반으로 전면 수정 및 작동 확인.
 
 ---
+
 
 # Trading Session Log (2026-03-22) - Milestone: Relative Adaptive Trail (v11.6.0)
 

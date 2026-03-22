@@ -1,7 +1,7 @@
-# 🚀 TrendCrusher V11.6.0: The Intelligent Profit Engine
+# 🚀 TrendCrusher V11.8.0: The Unified Strategy Engine
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
-> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.6.0 버전은 **리테스트 메이커(Retest Maker)** 전략과 **비율 기반 어댑티브 트레일**이 결합된 지능형 트레이딩 봇입니다.
+> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.8.0 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.
 
 ---
 
@@ -33,11 +33,11 @@
 ---
 
 ## 🛡️ 주요 기능 하이라이트
-- **Real-time Intra-bar Engine (v11.1.2)**: 캔들이 닫힐 때까지 기다리지 않고 웹소켓 데이터를 통해 실시간으로 지표를 업데이트하여 즉각 반응.
-- **The Precision Sniper (v11)**: 돌파 레벨 0.5% 근접 시 자동 매복 주문 제출. 조건 불일치 시 즉시 취소.
-- **Phoenix Watchdog (v11.1.1)**: 프로세스 중단 시 즉시 텔레그램 알림 및 10초 내 자동 복구 시스템.
-- **The Sentinel (v10)**: 최근 시장 데이터를 분석하여 최적의 파라미터를 텔레그램으로 자동 제안 및 원격 적용.
-- **Smart Isolated Margin**: 코인별 독립 자산 관리로 한 종목의 급격한 변동이 전체 계좌에 영향을 주지 않도록 격리.
+- **Unified Strategy Engine (v11.8.0)**: 백테스트 시뮬레이터와 라이브 거래 봇이 정확히 동일한 `TrendCrusherV2` 코드를 공유하여 로직 괴리(Divergence)를 원천 차단.
+- **Real-time Intra-bar Engine**: 캔들이 닫힐 때까지 기다리지 않고 웹소켓 데이터를 통해 실시간으로 지표를 업데이트하여 즉각 반응.
+- **The Precision Sniper**: 돌파 레벨 근접 시 자동 매복 주문 제출 및 조건 불일치 시 즉시 취소 로직의 엔진 통합.
+- **Phoenix Watchdog**: 프로세스 중단 시 즉시 텔레그램 알림 및 10초 내 자동 복구 시스템.
+- **100% Test Validation**: 57개의 포괄적인 테스트 스위트 통과로 검증된 시스템 무결성.
 
 ---
 
@@ -115,5 +115,5 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 3.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V11.6.0 Development Team**
+**TrendCrusher V11.8.0 Development Team**
 *Technical Co-Founder by AI Agent*

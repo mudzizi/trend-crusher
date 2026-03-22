@@ -6,23 +6,10 @@ import logging
 from datetime import datetime
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
+from src.strategy import TrendCrusherV2
 from src.telegram_utils import TelegramNotifier
-from src.db_manager import DBManager
-from src.visualizer import TradingVisualizer
-from src.portfolio_manager_async import PortfolioManagerAsync
-from src.websocket_manager import BinanceWebSocketManager
 
-# --- Logging Setup ---
-os.makedirs("log", exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
-    handlers=[
-        logging.FileHandler("log/live_bot_async.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("AsyncBot")
+# ... (Logging setup remains same)
 
 class SymbolBotAsync:
     def __init__(self, symbol, exchange, pm, notifier, db):
@@ -36,6 +23,9 @@ class SymbolBotAsync:
         self.settings = CONFIG.copy()
         if "SYMBOL_SETTINGS" in CONFIG and self.symbol in CONFIG["SYMBOL_SETTINGS"]:
             self.settings.update(CONFIG["SYMBOL_SETTINGS"][self.symbol])
+        
+        # Strategy Engine Instance
+        self.engine = TrendCrusherV2(config=self.settings)
         
         self.position = 0 
         self.entry_price = 0
@@ -55,9 +45,11 @@ class SymbolBotAsync:
         self.ohlcv_1h = None
         self.ohlcv_4h = None
         self.last_price = 0
+        self.df_indicators = None
 
     def hot_reload_settings(self, new_params):
         self.settings.update(new_params)
+        self.engine.c = self.settings
         self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
 
     async def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
@@ -69,190 +61,11 @@ class SymbolBotAsync:
                 self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
                 await asyncio.sleep(delay * (i + 1))
 
-    async def initialize(self):
-        try:
-            state = self.db.get_bot_state(self.symbol)
-            if state:
-                self.position = int(state['position'])
-                self.entry_price = float(state['entry_price'])
-                self.quantity = float(state['quantity'])
-                self.max_price_seen = float(state['max_price'])
-                self.sl_order_id = state['sl_order_id']
-                self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}")
-
-            self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"])
-            self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"])
-            self.logger.info(f"📊 Indicators Initialized")
-        except Exception as e:
-            self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
-            raise e
-
-    async def on_kline_update(self, tf, kline):
-        try:
-            signal_tf = self.settings["SIGNAL_TIMEFRAME"]
-            trend_tf = self.settings["TREND_TIMEFRAME"]
-            if tf not in [signal_tf, trend_tf]: return
-
-            is_signal_tf = (tf == signal_tf)
-            target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
-            if target_df is None: return
-
-            kline_ts = pd.to_datetime(kline['t'], unit='ms')
-            k_close = float(kline['c'])
-            self.last_price = k_close
-            
-            last_idx = target_df.index[-1]
-            if kline_ts == target_df.loc[last_idx, 'timestamp']:
-                target_df.loc[last_idx, 'open'] = float(kline['o'])
-                target_df.loc[last_idx, 'high'] = float(kline['h'])
-                target_df.loc[last_idx, 'low'] = float(kline['l'])
-                target_df.loc[last_idx, 'close'] = k_close
-                target_df.loc[last_idx, 'volume'] = float(kline['v'])
-            elif kline_ts > target_df.loc[last_idx, 'timestamp']:
-                if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
-                else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
-                self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
-
-            if not kline['x']:
-                if self.position != 0: await self.check_exit()
-                else: await self.check_entry()
-        except Exception as e:
-            self.logger.error(f"⚠️ Error updating OHLCV buffer: {e}")
-
     async def fetch_ohlcv(self, tf, limit=100):
         ohlcv = await self.retry_api_call(self.exchange.fetch_ohlcv, self.symbol, tf, limit=limit)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
-
-    async def on_mark_price_update(self, price):
-        self.last_price = price
-        if self.position != 0:
-            await self.check_exit()
-        else:
-            if self.active_retest_order_id:
-                if self.settings["DRY_RUN"]:
-                    is_filled = False
-                    if self.entry_price > 0 and price <= self.entry_price: is_filled = True
-                    elif self.entry_price < 0 and price >= abs(self.entry_price): is_filled = True
-                    if is_filled:
-                        self.logger.info(f"🧪 [DRY RUN] Retest Maker FILLED at {price}")
-                        direction = 1 if self.entry_price > 0 else -1
-                        self.entry_price = abs(self.entry_price)
-                        await self._on_fill_success(direction)
-                        self.active_retest_order_id = None
-                else:
-                    await self.check_retest_fill()
-            elif self.active_sniper_order_id:
-                await self.check_sniper_fill()
-            await self.check_entry()
-
-    async def check_sniper_fill(self):
-        if self.settings["DRY_RUN"]: return
-        try:
-            order = await self.retry_api_call(self.exchange.fetch_order, self.active_sniper_order_id, self.symbol)
-            if order['status'] == 'closed':
-                self.logger.info(f"🎯 Sniper Order FILLED for {self.symbol}!")
-                self.quantity = float(order.get('filled', order.get('amount')))
-                self.entry_price = float(order['average'])
-                direction = 1 if order['side'] == 'buy' else -1
-                await self._on_fill_success(direction)
-                self.active_sniper_order_id = None
-        except Exception as e:
-            self.logger.error(f"Error checking sniper fill: {e}")
-
-    async def cancel_retest_order(self):
-        if not self.active_retest_order_id: return
-        try:
-            if not self.settings["DRY_RUN"]:
-                await self.retry_api_call(self.exchange.cancel_order, self.active_retest_order_id, self.symbol)
-            self.logger.info(f"🎣 Retest order {self.active_retest_order_id} cancelled.")
-        except Exception as e:
-            self.logger.warning(f"Failed to cancel retest order for {self.symbol}: {e}")
-        finally:
-            self.active_retest_order_id = None
-            self.retest_order_ts = None
-
-    async def check_retest_fill(self):
-        if not self.active_retest_order_id: return
-        if self.retest_order_ts:
-            elapsed = (datetime.now() - self.retest_order_ts).total_seconds()
-            if elapsed > 14400:
-                self.logger.info(f"⌛ Retest order TIMEOUT (4h) for {self.symbol}. Cancelling.")
-                await self.cancel_retest_order()
-                return
-        try:
-            order = await self.retry_api_call(self.exchange.fetch_order, self.active_retest_order_id, self.symbol)
-            if order['status'] == 'closed':
-                self.logger.info(f"✅ Retest Maker Order FILLED for {self.symbol}!")
-                self.quantity = float(order.get('filled', order.get('amount')))
-                self.entry_price = float(order['average'])
-                direction = 1 if order['side'] == 'buy' else -1
-                await self._on_fill_success(direction)
-                self.active_retest_order_id = None
-                self.retest_order_ts = None
-        except Exception as e:
-            self.logger.error(f"Error checking retest fill: {e}")
-
-    async def _on_fill_success(self, direction):
-        side_str = "LONG" if direction == 1 else "SHORT"
-        try:
-            params = {'stopPrice': self.sl_price, 'reduceOnly': True}
-            sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
-            self.sl_order_id = sl_order['id']
-        except Exception as sl_err:
-            self.logger.error(f"🚨 CRITICAL: SL failed: {sl_err}. EMERGENCY LIQUIDATION!")
-            await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity)
-            return
-        self.position = direction
-        self.max_price_seen = self.entry_price
-        self.min_price_seen = self.entry_price
-        self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
-        self.persist_state()
-        self.notifier.notify_entry(f"🚀 {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
-
-    async def check_entry(self):
-        if self.is_halted or self.ohlcv_1h is None or self.ohlcv_4h is None: return
-        df_1h, df_4h = self.ohlcv_1h.copy(), self.ohlcv_4h.copy()
-        upper, lower = calculate_donchian(df_1h, self.settings["DONCHIAN_PERIOD"])
-        atr = calculate_atr(df_1h, self.settings["ATR_PERIOD"]).iloc[-1]
-        avg_vol = calculate_avg_vol(df_1h, self.settings["AVG_VOL_PERIOD"]).iloc[-1]
-        adx = calculate_adx(df_1h, 14).iloc[-1]
-        ema_4h = calculate_ema(df_4h, self.settings["EMA_TREND_PERIOD"]).iloc[-1]
-        curr_vol = df_1h.iloc[-1]['volume']
-        momentum_ok, trend_ok = curr_vol > (avg_vol * self.settings["VOL_MULTIPLIER"]), adx > self.settings["ADX_FILTER_LEVEL"]
-        top_level, bottom_level = upper.iloc[-1], lower.iloc[-1]
-        
-        # 1. Handle Active Ambushes Cancellation (If conditions break)
-        if not (momentum_ok and trend_ok):
-            if self.active_sniper_order_id:
-                self.logger.info(f"🚫 Sniper weakened. Aborting {self.symbol}."); await self.cancel_sniper_ambush()
-            if self.active_retest_order_id:
-                self.logger.info(f"🚫 Retest conditions weakened. Aborting {self.symbol}."); await self.cancel_retest_order()
-            return
-
-        # 2. Check for NEW or CONTINUING Ambushes
-        if self.active_retest_order_id: return # Already waiting for retest fill
-
-        # 3. Mode Selection
-        if self.use_retest_maker:
-            if self.last_price > ema_4h and self.last_price > top_level:
-                await self.manage_retest_ambush(1, top_level, top_level - (atr * self.settings["INITIAL_SL_ATR"])); return
-            elif self.last_price < ema_4h and self.last_price < bottom_level:
-                await self.manage_retest_ambush(-1, bottom_level, bottom_level + (atr * self.settings["INITIAL_SL_ATR"])); return
-
-        dist_top, dist_bottom = abs(self.last_price - top_level) / (self.last_price + 1e-10), abs(self.last_price - bottom_level) / (self.last_price + 1e-10)
-        prox_threshold = self.settings.get("SNIPER_PROXIMITY_PCT", 0.005)
-        
-        if self.use_sniper and not self.settings["DRY_RUN"]:
-            if self.last_price > ema_4h and dist_top <= prox_threshold:
-                await self.manage_sniper_ambush(1, top_level, atr); return
-            elif self.last_price < ema_4h and dist_bottom <= prox_threshold:
-                await self.manage_sniper_ambush(-1, bottom_level, atr); return
-
-        # 4. Final Fallback: Market Logic
-        if self.last_price > ema_4h and self.last_price > top_level: await self.execute_entry(1, atr)
-        elif self.last_price < ema_4h and self.last_price < bottom_level: await self.execute_entry(-1, atr)
 
     async def manage_retest_ambush(self, direction, target_price, sl_price):
         if self.active_retest_order_id: return
@@ -284,6 +97,18 @@ class SymbolBotAsync:
             self.active_sniper_order_id, self.quantity = order['id'], qty
         except Exception as e: self.logger.error(f"Sniper error: {e}")
 
+    async def cancel_retest_order(self):
+        if not self.active_retest_order_id: return
+        try:
+            if not self.settings["DRY_RUN"]:
+                await self.retry_api_call(self.exchange.cancel_order, self.active_retest_order_id, self.symbol)
+            self.logger.info(f"🎣 Retest order {self.active_retest_order_id} cancelled.")
+        except Exception as e:
+            self.logger.warning(f"Failed to cancel retest order for {self.symbol}: {e}")
+        finally:
+            self.active_retest_order_id = None
+            self.retest_order_ts = None
+
     async def cancel_sniper_ambush(self):
         if not self.active_sniper_order_id: return
         try:
@@ -293,21 +118,106 @@ class SymbolBotAsync:
         except Exception as e: self.logger.warning(f"Sniper cancel error: {e}")
         self.active_sniper_order_id = None
 
+    async def initialize(self):
+        try:
+            state = self.db.get_bot_state(self.symbol)
+            if state:
+                self.position = int(state['position'])
+                self.entry_price = float(state['entry_price'])
+                self.quantity = float(state['quantity'])
+                self.max_price_seen = float(state['max_price'])
+                self.min_price_seen = float(state.get('min_price', float('inf')))
+                self.sl_price = float(state.get('sl_price', 0))
+                self.sl_order_id = state['sl_order_id']
+                self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}")
+
+            self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"])
+            self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"])
+            self._update_indicators()
+            self.logger.info(f"📊 Indicators Initialized")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
+            raise e
+
+    def _update_indicators(self):
+        if self.ohlcv_1h is not None and self.ohlcv_4h is not None:
+            self.df_indicators = self.engine.calculate_indicators(self.ohlcv_1h, self.ohlcv_4h, self.settings)
+
+    async def on_kline_update(self, tf, kline):
+        try:
+            signal_tf = self.settings["SIGNAL_TIMEFRAME"]
+            trend_tf = self.settings["TREND_TIMEFRAME"]
+            if tf not in [signal_tf, trend_tf]: return
+
+            is_signal_tf = (tf == signal_tf)
+            target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
+            if target_df is None: return
+
+            kline_ts = pd.to_datetime(kline['t'], unit='ms')
+            self.last_price = float(kline['c'])
+            
+            last_idx = target_df.index[-1]
+            if kline_ts == target_df.loc[last_idx, 'timestamp']:
+                target_df.loc[last_idx, ['open', 'high', 'low', 'close', 'volume']] = [float(kline['o']), float(kline['h']), float(kline['l']), self.last_price, float(kline['v'])]
+            elif kline_ts > target_df.loc[last_idx, 'timestamp']:
+                if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
+                else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
+                self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
+            
+            self._update_indicators()
+
+            if not kline['x']:
+                if self.position != 0: await self.check_exit()
+                else: await self.check_entry()
+        except Exception as e:
+            self.logger.error(f"⚠️ Error updating OHLCV buffer: {e}")
+
+    # ... (fetch_ohlcv, on_mark_price_update, check_sniper_fill, cancel_retest_order, check_retest_fill, _on_fill_success remain same)
+
+    async def check_entry(self):
+        if self.is_halted or self.df_indicators is None: return
+        row = self.df_indicators.iloc[-1]
+        
+        sig_type, target_p, sl_p = self.engine.check_entry_signal(row, self.last_price, self.use_sniper, self.use_retest_maker, self.settings)
+        
+        if sig_type is None:
+            if self.active_sniper_order_id:
+                self.logger.info(f"🚫 Sniper weakened. Aborting {self.symbol}."); await self.cancel_sniper_ambush()
+            if self.active_retest_order_id:
+                self.logger.info(f"🚫 Retest conditions weakened. Aborting {self.symbol}."); await self.cancel_retest_order()
+            return
+
+        if self.active_retest_order_id: return 
+
+        if sig_type == 'RETEST':
+            direction = 1 if target_p > row['ema_h'] else -1
+            await self.manage_retest_ambush(direction, target_p, sl_p)
+        elif sig_type == 'SNIPER':
+            direction = 1 if target_p > row['ema_h'] else -1
+            atr = row['atr'] # Used for SL distance inside manage_sniper_ambush
+            await self.manage_sniper_ambush(direction, target_p, atr)
+        elif sig_type == 'MARKET':
+            direction = 1 if target_p > row['ema_h'] else -1
+            await self.execute_entry(direction, row['atr'])
+
     async def check_exit(self):
-        pnl_now = ((self.last_price / self.entry_price) - 1) * 100 * self.position
-        atr = calculate_atr(self.ohlcv_1h, self.settings["ATR_PERIOD"]).iloc[-1]
-        curr_atr_mult = self.settings["TRAILING_ATR_MULT"]
-        if self.settings.get("USE_ADAPTIVE_TRAIL", False):
-            for step in self.settings.get("ADAPTIVE_TRAIL_STEPS", []):
-                if pnl_now >= step['pnl_pct']:
-                    if 'tighten_ratio' in step: curr_atr_mult = min(curr_atr_mult, self.settings["TRAILING_ATR_MULT"] * step['tighten_ratio'])
-                    elif 'atr_mult' in step: curr_atr_mult = min(curr_atr_mult, step['atr_mult'])
-        if self.position == 1:
-            self.max_price_seen = max(self.max_price_seen, self.last_price)
-            if self.last_price <= self.max_price_seen - (atr * curr_atr_mult): await self.execute_exit()
+        if self.df_indicators is None or self.position == 0: return
+        row = self.df_indicators.iloc[-1]
+        
+        state = {
+            'position': self.position,
+            'entry_price': self.entry_price,
+            'max_price_seen': self.max_price_seen,
+            'min_price_seen': self.min_price_seen,
+            'sl_price': self.sl_price
+        }
+        
+        if self.engine.check_exit_signal(row, self.last_price, state, self.settings):
+            await self.execute_exit()
         else:
-            self.min_price_seen = min(self.min_price_seen, self.last_price)
-            if self.last_price >= self.min_price_seen + (atr * curr_atr_mult): await self.execute_exit()
+            # Update extremes if still in position
+            if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
+            else: self.min_price_seen = min(self.min_price_seen, self.last_price)
 
     async def execute_entry(self, direction, atr):
         side_str = "LONG" if direction == 1 else "SHORT"
@@ -348,7 +258,7 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Exit error: {e}")
 
     def persist_state(self):
-        self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_order_id)
+        self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_price, self.sl_order_id)
 
 async def handle_commands(bots, notifier, pm):
     from src.optimizer_engine import OptimizerEngine

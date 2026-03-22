@@ -34,10 +34,11 @@ def test_open_position_state(base_config):
     direction = 1 
     price = 50000.0
     atr = 500.0
+    sl_price = price - (atr * base_config["INITIAL_SL_ATR"])
     timestamp = pd.Timestamp('2024-03-16 12:00:00')
     risk_pct = 0.02
     
-    strategy._open_position(direction, price, atr, timestamp, risk_pct)
+    strategy._open_position(direction, price, sl_price, timestamp, risk_pct)
     
     assert strategy.position == 1
     assert strategy.entry_price == 50025.0 # with slippage
@@ -126,7 +127,9 @@ def test_retest_maker_entry_and_fee(base_config):
     strategy = TrendCrusherV2(config=base_config)
     
     # Case A: Market Entry (Taker)
-    strategy._open_position(1, 100.0, 5.0, pd.Timestamp.now(), 0.02, is_maker=False)
+    price = 100.0
+    sl_price = 90.0 # 100 - (5*2)
+    strategy._open_position(1, price, sl_price, pd.Timestamp.now(), 0.02, is_maker=False)
     # Entry Price with Slippage (0.05%): 100.05
     # Risk = 200, StopDist = 10.05, Qty = 19.9004975
     # Fee = 100.05 * 19.9004975 * 0.0005 = 0.995522
@@ -138,7 +141,7 @@ def test_retest_maker_entry_and_fee(base_config):
     strategy.capital = 10000.0
     
     # Case B: Retest Maker Entry
-    strategy._open_position(1, 100.0, 5.0, pd.Timestamp.now(), 0.02, is_maker=True)
+    strategy._open_position(1, 100.0, 90.0, pd.Timestamp.now(), 0.02, is_maker=True)
     # Fee = 100 * 20 * 0.0002 = 0.4
     assert strategy.capital == pytest.approx(9999.6)
     assert strategy.trades[-1]['is_maker'] == True

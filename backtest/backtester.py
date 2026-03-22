@@ -1,9 +1,10 @@
 import pandas as pd
 import numpy as np
 import os
-from src.strategy import AggressiveVBOStrategy
+from src.strategy import TrendCrusherV2
 
 class MultiSymbolOptimizer:
+    # ... (init and calculate_mdd remain same)
     def __init__(self, symbols, timeframe='1h'):
         self.symbols = symbols
         self.timeframe = timeframe
@@ -21,16 +22,18 @@ class MultiSymbolOptimizer:
             clean_sym = sym.replace('/', '_')
             f1h = f"data/{clean_sym}_1h.csv"
             f4h = f"data/{clean_sym}_4h.csv"
+            f1m = f"data/{clean_sym}_1m.csv" # Need 1m for precision backtest
             
-            if not os.path.exists(f1h) or not os.path.exists(f4h):
-                print(f"Skipping {sym}: Files not found.")
+            if not os.path.exists(f1h) or not os.path.exists(f4h) or not os.path.exists(f1m):
+                print(f"Skipping {sym}: Files not found (requires 1h, 4h, and 1m for precision).")
                 continue
             
             df_1h = pd.read_csv(f1h)
             df_4h = pd.read_csv(f4h)
+            df_1m = pd.read_csv(f1m)
             
-            strategy = AggressiveVBOStrategy()
-            trades, equity_curve = strategy.run(df_1h, df_4h)
+            strategy = TrendCrusherV2()
+            trades, equity_curve = strategy.run_precision_backtest(df_1h, df_4h, df_1m)
             
             total_trades = len([t for t in trades if t['type'] == 'CLOSE'])
             wins = 0

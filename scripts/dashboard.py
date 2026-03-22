@@ -36,15 +36,10 @@ def index():
             
             # Fetch Bot State for SL/Trail info
             state = db.get_bot_state(sym)
-            sl_price = 0
-            trail_mult = CONFIG.get("TRAILING_ATR_MULT", 4.5)
+            sl_price = 0.0
             
             if state:
-                # If we have a state, we can use the max/min price seen to estimate current trail
-                # In a real bot, we'd store the actual SL price in bot_state
-                # For now, we'll use the sl_price from the bot_state if available (need to ensure it's saved there)
-                # Let's assume sl_price might be added or we calculate it
-                sl_price = state.get('sl_price', 0) 
+                sl_price = float(state.get('sl_price', 0.0))
             
             pnl_pct = ((curr_price / pos['open_price']) - 1) * 100
             if pos['side'] == 'SHORT':
@@ -53,10 +48,10 @@ def index():
             active_positions.append({
                 "symbol": sym,
                 "side": pos['side'],
-                "entry": pos['open_price'],
+                "entry": float(pos['open_price']),
                 "curr": curr_price,
-                "qty": pos['quantity'],
-                "pnl": round(pnl_pct, 2),
+                "qty": float(pos['quantity']),
+                "pnl": round(float(pnl_pct), 2),
                 "open_time": pos['open_time'],
                 "sl": sl_price
             })

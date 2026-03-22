@@ -49,17 +49,23 @@ class DBManager:
                     quantity REAL,
                     max_price REAL,
                     min_price REAL,
+                    sl_price REAL,
                     sl_order_id TEXT,
                     last_updated DATETIME DEFAULT (datetime('now','localtime'))
                 )
             """)
+            # Migration: Add sl_price if missing
+            try:
+                conn.execute("ALTER TABLE bot_state ADD COLUMN sl_price REAL DEFAULT 0")
+            except:
+                pass
 
-    def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_order_id):
+    def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id):
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO bot_state (symbol, position, entry_price, quantity, max_price, min_price, sl_order_id, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (symbol, position, entry_price, quantity, max_price, min_price, sl_order_id))
+                INSERT OR REPLACE INTO bot_state (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id))
 
     def get_bot_state(self, symbol):
         with self._get_connection() as conn:

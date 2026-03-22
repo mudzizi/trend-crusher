@@ -52,6 +52,12 @@
     </div>
 
     <div class="container">
+        {% if error %}
+        <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> {{ error }}
+        </div>
+        {% endif %}
+
         <!-- Dashboard Top Row: Chart & Market -->
         <div class="row">
             <div class="col-lg-8">

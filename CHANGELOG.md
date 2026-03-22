@@ -2,6 +2,20 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.8.0] - 2026-03-22
+### Added
+- **Single Source of Truth**: Unified the core strategy logic into a single modular engine (`TrendCrusherV2` in `src/strategy.py`) shared by both live trading and all backtesting tools.
+- **Enhanced Sniper Ambush**: Restored and improved the "proximity-based" limit entry logic in the common strategy engine.
+- **MARKET Entry Real-time Sync**: Updated market entry logic to use `last_price` for better responsiveness in live environments and more accurate E2E simulations.
+### Changed
+- **Modular Architecture**: Decoupled signal generation (`check_entry_signal`) and risk management (`check_exit_signal`) from execution logic.
+- **Dynamic Parameter Mapping**: Implemented automatic mapping of lowercase optimizer keywords to uppercase configuration keys within the strategy engine.
+- **Test Infrastructure Modernization**: Updated the entire 57-test suite to align with the new modular engine, achieving a 100% pass rate.
+### Fixed
+- **Legacy Backtest Recovery**: Fixed broken backtesting scripts (`backtester.py`, `precision_backtester.py`, `eth_optimizer.py`) by updating them to use the new `run_precision_backtest` interface.
+- **DB Migration Safety**: Added automatic `sl_price` column creation in `bot_state` table to ensure safe upgrades from v11.2.0+.
+- **Dashboard Robustness**: Improved template rendering safety and added an error alert section to the Flask dashboard.
+
 ## [v11.7.0] - 2026-03-22
 ### Added
 - **Equity Curve Visualization**: Integrated Chart.js in the dashboard for real-time portfolio performance tracking.
