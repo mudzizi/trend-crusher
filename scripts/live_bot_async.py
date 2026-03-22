@@ -171,20 +171,26 @@ class SymbolBotAsync:
             self.last_price = float(kline['c'])
             
             last_idx = target_df.index[-1]
+            # Update the last candle with real-time data
             if kline_ts == target_df.loc[last_idx, 'timestamp']:
-                target_df.loc[last_idx, ['open', 'high', 'low', 'close', 'volume']] = [float(kline['o']), float(kline['h']), float(kline['l']), self.last_price, float(kline['v'])]
+                target_df.loc[last_idx, ['open', 'high', 'low', 'close', 'volume']] = [
+                    float(kline['o']), float(kline['h']), float(kline['l']), self.last_price, float(kline['v'])
+                ]
             elif kline_ts > target_df.loc[last_idx, 'timestamp']:
+                # New candle started
                 if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
                 else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
                 self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
             
+            # Re-calculate indicators with the latest price in the dataframe
             self._update_indicators()
 
+            # Perform entry/exit checks on every update (intra-bar)
             if not kline['x']:
                 if self.position != 0: await self.check_exit()
                 else: await self.check_entry()
         except Exception as e:
-            self.logger.error(f"⚠️ Error updating OHLCV buffer: {e}")
+            self.logger.error(f"⚠️ Error updating OHLCV buffer for {self.symbol}: {e}")
 
     # ... (fetch_ohlcv, on_mark_price_update, check_sniper_fill, cancel_retest_order, check_retest_fill, _on_fill_success remain same)
 
@@ -235,19 +241,26 @@ class SymbolBotAsync:
 
     async def execute_entry(self, direction, atr):
         side_str = "LONG" if direction == 1 else "SHORT"
-        self.sl_price = self.last_price - (atr * self.settings["INITIAL_SL_ATR"]) if direction == 1 else self.last_price + (atr * self.settings["INITIAL_SL_ATR"])
+        self.sl_price = float(self.last_price - (atr * self.settings["INITIAL_SL_ATR"]) if direction == 1 else self.last_price + (atr * self.settings["INITIAL_SL_ATR"]))
+        
         qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
-        if qty <= 0: return
-        self.quantity = qty
+        if qty is None or qty <= 0:
+            self.logger.warning(f"🚫 Entry skipped: Invalid quantity ({qty}) for {self.symbol}"); return
+        
+        self.quantity = float(qty)
         try:
             if not self.settings["DRY_RUN"]:
                 side = 'buy' if direction == 1 else 'sell'
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
                 self.quantity = float(order.get('filled', self.quantity))
-                try: await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, {'stopPrice': self.sl_price, 'reduceOnly': True})
+                
+                try: 
+                    params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+                    await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
                 except Exception as sl_err:
                     self.logger.error(f"🚨 CRITICAL SL FAILED: {sl_err}")
                     await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity); return
+            
             self.position, self.entry_price = direction, self.last_price
             self.max_price_seen = self.min_price_seen = self.entry_price
             self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
@@ -434,28 +447,47 @@ async def main():
     exchange = ccxt.binance({'apiKey': CONFIG["BINANCE_API_KEY"], 'secret': CONFIG["BINANCE_SECRET"], 'options': {'defaultType': 'future'}, 'enableRateLimit': True})
     db, pm, notifier = DBManager(), PortfolioManagerAsync(exchange, CONFIG), TelegramNotifier()
     notifier.set_commands()
+    
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s, loop, notifier, exchange)))
+    
     try:
-        symbols = CONFIG["SYMBOLS_LIST"]
-        bots = {s.replace('/', '').lower(): SymbolBotAsync(s, exchange, pm, notifier, db) for s in symbols}
-        for bot in bots.values(): await bot.initialize()
+        symbols = CONFIG.get("SYMBOLS_LIST", [])
+        if not symbols:
+            logger.error("❌ No symbols found in SYMBOLS_LIST. Check config.yaml."); return
+
+        # Map 'btcusdt' (WS stream key) to Bot instance
+        bots = {}
+        for s in symbols:
+            bot_instance = SymbolBotAsync(s, exchange, pm, notifier, db)
+            await bot_instance.initialize()
+            key = s.replace('/', '').lower()
+            bots[key] = bot_instance
+            
         ws_manager = BinanceWebSocketManager(symbols)
         asyncio.create_task(ws_manager.connect())
         asyncio.create_task(handle_commands(bots, notifier, pm))
         asyncio.create_task(heartbeat_loop(bots, notifier, pm))
         asyncio.create_task(auto_sentinel_loop(bots, notifier, pm))
-        logger.info(f"🚀 v{CONFIG['VERSION']}-async Engine Started.")
+        
+        logger.info(f"🚀 v{CONFIG['VERSION']}-async Engine Started for: {symbols}")
         notifier.notify_status(f"🛰️ The Sentinel Active (v{CONFIG['VERSION']})")
         await send_summary(bots, notifier, pm)
+        
         while True:
             try:
                 msg = await ws_manager.get_next_message()
-                stream, symbol_key = msg.get('e'), msg.get('s', '').lower()
+                if not msg: continue
+                
+                stream = msg.get('e')
+                symbol_key = msg.get('s', '').lower()
+                
                 if symbol_key in bots:
                     bot = bots[symbol_key]
-                    if stream == 'markPriceUpdate': await bot.on_mark_price_update(float(msg['p']))
-                    elif stream == 'kline': await bot.on_kline_update(msg['k']['i'], msg['k'])
+                    if stream == 'markPriceUpdate': 
+                        await bot.on_mark_price_update(float(msg['p']))
+                    elif stream == 'kline': 
+                        await bot.on_kline_update(msg['k']['i'], msg['k'])
             except Exception as loop_e:
                 logger.error(f"⚠️ Error in main event loop: {loop_e}")
                 await asyncio.sleep(1)
@@ -463,7 +495,9 @@ async def main():
     except Exception as e:
         logger.error(f"💥 FATAL ERROR: {e}", exc_info=True)
         notifier.notify_error(f"🚨 *[CRASH]* {str(e)[:200]}")
-    finally: await exchange.close()
+    finally:
+        await exchange.close()
+        logger.info("📡 Exchange connection closed.")
 
 import signal
 if __name__ == "__main__":
