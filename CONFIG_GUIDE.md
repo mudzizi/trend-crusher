@@ -1,6 +1,6 @@
-# 🛠️ TrendCrusher V11.8.0: Configuration Guide
+# 🛠️ TrendCrusher V11.9.0: Configuration Guide
 
-이 가이드는 `config.yaml` 파일에 포함된 모든 설정 항목의 의미, 작동 방식 및 권장값을 상세히 설명합니다. v11.8.0 리팩토링을 통해 **코인별 맞춤형 전략 설정**이 더욱 강력해졌습니다.
+이 가이드는 `config.yaml` 파일에 포함된 모든 설정 항목의 의미, 작동 방식 및 권장값을 상세히 설명합니다. v11.9.0 리팩토링을 통해 **신호 안정성(Hysteresis)** 기능이 추가되었습니다.
 
 ---
 
@@ -24,6 +24,8 @@ TrendCrusher는 세 가지 진입 방식을 지원합니다. 전역 설정(`USE_
 | **Market** | `false` / `false` | 캔들 마감 시 조건 충족하면 즉시 시장가 진입. | Taker 수수료 / 높은 슬리피지 |
 | **Sniper** | **`true`** / `false` | 돌파가 임박(`Proximity`)하면 미리 지정가를 걸어 매복. | **Maker 수수료** / 제로 슬리피지 |
 | **Retest** | `false` / **`true`** | 돌파 후 다시 돌파 레벨로 가격이 되돌아올 때 지정가 진입. | **Maker 수수료** / 최저 리스크 |
+
+> **v11.9.0 Update**: Sniper/Retest 대기 중에는 **히스테리시스**가 적용되어, `SNIPER_PROXIMITY_PCT` 기준의 2배(최대 1.0%)까지 가격이 벌어져도 주문을 유지합니다.
 
 ---
 

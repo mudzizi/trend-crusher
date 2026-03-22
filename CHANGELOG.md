@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.9.0] - 2026-03-23
+### Added
+- **Signal Hysteresis (Ambush Stability)**: Introduced a 20% hysteresis buffer for Volume and ADX filters when an order is already active (Ambushing). This prevents "order spam" and unnecessary cancellations caused by minor intra-bar flickering.
+- **Dynamic Proximity Hysteresis**: Expanded the Sniper proximity threshold from 0.5% to 1.0% once a limit order is placed, allowing for small price fluctuations without losing the ambush position.
+- **Volume Burst Persistence**: Added `prev_volume` and `prev_avg_vol` tracking to indicators. The system now maintains a signal if a volume burst occurred in the previous bar, preventing " 정각(top-of-the-hour)" signal loss when new candles start with zero volume.
+- **Stabilized Backtest Engine**: Synchronized `run_precision_backtest` and `run_streaming_backtest` with live hysteresis logic for 100% behavior parity.
+- **New Test Suite**: Added `tests/test_hysteresis_persistence.py` to verify all stabilization edge cases.
+
 ## [v11.8.0] - 2026-03-22
 ### Added
 - **Look-ahead Bias Removal**: Introduced `run_streaming_backtest` in `TrendCrusherV2`, a minute-by-minute simulation that reconstructs developing indicators exactly as the live bot does.

@@ -1,7 +1,7 @@
-# TrendCrusher V11.8.0: Strategy Whitepaper
+# TrendCrusher V11.9.0: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.8.0 버전은 백테스트와 라이브 거래 로직을 하나로 통합한 **'단일 진실 공급원(Single Source of Truth)'** 구조와 **'하이퍼-리얼리스틱 스트리밍 시뮬레이션'**을 통해 이론과 실전의 간극을 제로화했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.9.0 버전은 **'신호 안정성 강화(Hysteresis)'**와 **'봉 전환 지속성(Persistence)'**을 통해 실전 거래에서의 불필요한 주문 취소(Order Spam)를 획기적으로 줄였습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 
@@ -10,23 +10,32 @@ TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 
 1.  **Donchian Channel Breakout**: 가격이 직전 20개 봉의 최고점을 돌파(Long)하거나 최저점을 이탈(Short)할 때 신호 발생.
 2.  **EMA Trend Filter**: 상위 타임프레임(4h)의 EMA 위에 있을 때만 진입. (상승장/하락장 판별)
 3.  **Volume Burst Filter**: 돌파 시점의 거래량이 평균 대비 설정 배수(2.0~3.0x) 이상 폭발해야 진입. 1분 단위 스트리밍 거래량을 합산하여 실시간 감지.
+    -   **Persistence**: 새로운 봉이 시작될 때 거래량이 일시적으로 낮아지는 현상을 방지하기 위해 직전 봉의 거래량 버스트 여부를 함께 체크.
 4.  **ADX Filter**: 추세 강도가 명확할 때(ADX 15~25 이상)만 진입하여 횡보장 배제.
 
-### 2.2. 청산 및 리스크 관리 (Exit & Risk Control)
+### 2.2. 신호 안정성 및 히스테리시스 (Signal Stability)
+V11.9.0에서 도입된 핵심 기능으로, 이미 주문이 나간 대기 상태(`Ambushing`)에서 사소한 지표 흔들림으로 인해 주문이 취소되는 것을 방지합니다.
+-   **Filter Hysteresis (20%)**: 거래량과 ADX가 기준치의 80% 수준까지만 유지되어도 대기 주문을 유지.
+-   **Proximity Hysteresis (2.0x)**: Sniper 모드의 진입 근접도 범위를 대기 중에는 기존 0.5%에서 **1.0%**로 확장.
+
+### 2.3. 청산 및 리스크 관리 (Exit & Risk Control)
 1.  **Adaptive Trailing Stop**: 수익률(2%, 5%, 8% 등)에 따라 손절 ATR 배수를 동적으로 조절하여 이익을 보존.
 2.  **Risk-based Sizing**: 모든 매매는 손절 시 해당 코인 할당 자산의 일정 비율(기본 2~5%)만 손실되도록 수량을 자동 계산.
 
-### 2.3. 하이퍼-리얼리스틱 시뮬레이션 (Hyper-Sim Technology)
-TrendCrusher v11.8.0의 가장 큰 기술적 진보입니다.
+### 2.4. 하이퍼-리얼리스틱 시뮬레이션 (Hyper-Sim Technology)
+TrendCrusher v11.9.0의 가장 큰 기술적 진보입니다.
 1.  **Look-ahead Bias 제거**: 매 분(1m)마다 지표를 재구성하여, "미래의 완성된 봉"을 보지 않고 현재 시점의 미완성 지표로만 의사결정을 시뮬레이션합니다.
 2.  **실시간 진입가 반영**: 봉이 닫힌 후 진입하는 것이 아니라, 조건이 충족되는 찰나의 실시간 가격으로 체결가를 산출하여 현실성을 극대화합니다.
+3.  **Hysteresis Parity**: 라이브 봇의 히스테리시스 로직을 백테스트 엔진에도 완벽히 이식하여 실전과 동일한 퍼포먼스 검증.
 
-### 2.4. 선제적 지정가 매복 시스템 (The Sniper)
+### 2.5. 선제적 지정가 매복 시스템 (The Sniper)
 1.  **Proximity Ambush**: 가격이 돌파 레벨에 근접(0.5~1.0%)하면 미리 지정가 주문을 배치.
-2.  **Instant Cancellation**: 모멘텀(거래량)이나 추세(ADX)가 약해지면 즉시 매복 주문을 취소하여 위험 노출 최소화.
+2.  **Stable Positioning**: 히스테리시스 덕분에 가격이 박스권 내에서 미세하게 움직여도 매복 상태를 끈기 있게 유지.
+3.  **Instant Abort**: 지표가 완전히 붕괴(기준치 80% 미만)되거나 가격이 1.0% 이상 멀어지면 즉시 주문 취소.
 
-### 2.5. 운영 안정성 (Phoenix & Sentinel)
-1.  **External Watchdog (Phoenix)**: 봇 외부 감시 프로세스가 프로세스 상태를 실시간 모니터링하여 침묵 속의 사망 시 즉시 자동 재시작.
+### 2.6. 운영 안정성 (Phoenix & Sentinel)
+... (생략) ...
+
 2.  **The Sentinel**: 최근 시장 데이터를 분석하여 최적 파라미터를 도출하고 텔레그램을 통해 실시간 핫-리로드(Hot-Reload) 제안.
 
 ## 3. 정밀 검증 성과 (Hyper-Sim Results)
