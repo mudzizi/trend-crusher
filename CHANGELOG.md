@@ -2,6 +2,34 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.5.0] - 2026-03-22
+### Added
+- **Retest Maker Mode (True Maker)**: Implemented a new entry strategy that waits for a price pullback (retest) to the breakout level after a signal, enabling 100% Maker fills.
+- **Differentiated Fee Structure**: Introduced a realistic fee model applying Maker fees (0.02%) vs Taker fees (0.05%) based on the chosen entry mode.
+- **3-Way Strategy Duel**: The optimizer now compares **Market**, **Sniper**, and **Retest Maker** modes to identify the most efficient entry method for each asset.
+- **Timeout Management**: Added a 4-hour window for Retest Maker orders to prevent entries on stale or weakened signals.
+### Changed
+- **Performance Breakthrough**: Confirmed that `Retest Maker` significantly reduces MDD (Drawdown) for assets like BTC by filtering out high-slippage entries.
+- **Realized Results**: All backtesting now reflects real-world Taker fees for breakout-style entries by default.
+
+## [v11.4.0] - 2026-03-21
+### Added
+- **Sniper vs Market Dual-Optimization**: The backtesting engine now supports both Sniper (Limit Entry) and Market (Close-based Entry) modes.
+- **Intra-bar Breakout Simulation**: Implemented granular price movement tracking in `run_precision_backtest` to accurately simulate Sniper entries at precise Donchian levels.
+- **Automated Mode Selection**: The optimizer now automatically identifies and proposes the best entry mode (Sniper or Market) for each symbol based on historical efficiency.
+- **Enhanced Sentinel Reports**: Telegram and CSV reports now include the "Mode" field to guide users on the best strategy for each asset.
+
+## [v11.3.0] - 2026-03-21
+### Added
+- **Mega-Optimizer V2**: High-performance parallelized optimization engine using `ProcessPoolExecutor` for 10x faster backtesting.
+- **Advanced Parameter Grid**: Expanded optimization to include `ADX_FILTER_LEVEL`, `DONCHIAN_PERIOD`, and `EMA_TREND_PERIOD` alongside Volatility and Trailing ATR.
+- **Unified Symbol Discovery**: Integrated `get_top_symbols` into `BinanceDataFetcher` for consistent high-volume asset identification across the system.
+- **The Sentinel Proposal**: Automated Telegram reporting of Top 3 high-potential symbols with their optimal configurations after each run.
+### Changed
+- **Optimized Discovery Period**: Set the default backtesting window to 90 days for improved relevance to current market volatility.
+- **Enhanced Strategy Interface**: Modified `TrendCrusherV2.run_precision_backtest` to support direct parameter injection for more granular optimization control.
+- **Robust Symbol Filtering**: Improved `BinanceDataFetcher` to correctly handle `/:` symbol formats and exclude non-standard or leveraged tokens.
+
 ## [v11.2.0] - 2026-03-21
 ### Added
 - **Real-time OHLCV Updates**: Modified `SymbolBotAsync` to update OHLCV buffers in real-time (2s interval) via WebSocket kline streams. This eliminates the delay caused by waiting for candle closes and ensures volume-based and breakout signals are triggered instantly.

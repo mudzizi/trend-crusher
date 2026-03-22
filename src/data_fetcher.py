@@ -32,17 +32,52 @@ class BinanceDataFetcher:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df
 
-    def save_all(self):
+    def get_top_symbols(self, limit=20):
+        print(f"Fetching top {limit} symbols by volume...")
+        try:
+            tickers = self.exchange.fetch_tickers()
+            # USDT-M Futures only (e.g., 'BTC/USDT:USDT')
+            usdt_tickers = []
+            for symbol, ticker in tickers.items():
+                if '/USDT:USDT' in symbol:
+                    # Filter out leveraged tokens or unusual non-alphabet symbols
+                    clean_sym = symbol.split(':')[0]
+                    if any(c.isalpha() for c in clean_sym):
+                        usdt_tickers.append({
+                            'symbol': clean_sym,
+                            'volume': float(ticker.get('quoteVolume', 0))
+                        })
+            
+            sorted_tickers = sorted(usdt_tickers, key=lambda x: x['volume'], reverse=True)[:limit]
+            return [t['symbol'] for t in sorted_tickers]
+        except Exception as e:
+            print(f"Error fetching top symbols: {e}")
+            return []
+
+    def save_all(self, symbol=None, days=None):
         os.makedirs(self.c["DATA_DIR"], exist_ok=True)
-        symbol = self.c["SYMBOL"]
-        days = self.c["BACKTEST_DAYS"]
+        symbol = symbol if symbol else self.c["SYMBOL"]
+        days = days if days else self.c["BACKTEST_DAYS"]
+        
+        # Clean symbol name for filename
+        clean_sym = symbol.replace('/', '_').replace(':', '_')
         
         for tf in [self.c["SIGNAL_TIMEFRAME"], self.c["TREND_TIMEFRAME"], self.c["CHECK_TIMEFRAME"]]:
+            filename = f"{self.c['DATA_DIR']}/{clean_sym}_{tf}.csv"
+            
+            # Skip if recently updated (within 1 hour)
+            if os.path.exists(filename):
+                mtime = os.path.getmtime(filename)
+                if time.time() - mtime < 3600:
+                    print(f"Data for {symbol} {tf} is up to date. Skipping...")
+                    continue
+
             df = self.fetch_ohlcv(symbol, tf, days)
-            filename = f"{self.c['DATA_DIR']}/{symbol.replace('/', '_')}_{tf}.csv"
             df.to_csv(filename, index=False)
             print(f"Saved to {filename}")
 
 if __name__ == "__main__":
     fetcher = BinanceDataFetcher()
-    fetcher.save_all()
+    top_symbols = fetcher.get_top_symbols()
+    print(f"Top Symbols: {top_symbols}")
+    # fetcher.save_all()
