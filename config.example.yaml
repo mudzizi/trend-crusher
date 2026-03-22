@@ -13,7 +13,7 @@ TELEGRAM_CHAT_ID: "YOUR_TELEGRAM_CHAT_ID"
 
 # --- OPERATIONAL SETTINGS ---
 DRY_RUN: true
-SEED: 1000.0
+SEED: 10000.0
 SYMBOLS_LIST:
   - "BTC/USDT"
   - "ETH/USDT"
@@ -48,7 +48,7 @@ SYMBOL_SETTINGS:
   "BTC/USDT":
     USE_SNIPER: false
     USE_RETEST_MAKER: true # Wait for retest on BTC for safer, zero-slippage entry
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 1.5    # BTC has high baseline volume, lower multiplier is okay
     EMA_TREND_PERIOD: 200  # Conservative macro filter
     TRAILING_ATR_MULT: 4.5
@@ -56,7 +56,7 @@ SYMBOL_SETTINGS:
   "ETH/USDT":
     USE_SNIPER: true       # Sniper ambush works well for ETH breakouts
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 2.0
     EMA_TREND_PERIOD: 100
     TRAILING_ATR_MULT: 4.0 # Slightly tighter exit for ETH
@@ -64,7 +64,7 @@ SYMBOL_SETTINGS:
   "SOL/USDT":
     USE_SNIPER: true
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 2.5    # Requires stronger momentum
     ADX_FILTER_LEVEL: 20   # Filter out choppy SOL movements
     TRAILING_ATR_MULT: 4.5
@@ -72,7 +72,7 @@ SYMBOL_SETTINGS:
   "XRP/USDT":
     USE_SNIPER: false
     USE_RETEST_MAKER: false # Use Market entry for XRP due to "wick" volatility
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 2.0
     ADX_FILTER_LEVEL: 25   # XRP needs very strong trends to perform
     TRAILING_ATR_MULT: 3.5 # Aggressive profit taking for XRP
@@ -80,7 +80,7 @@ SYMBOL_SETTINGS:
   "TRUMP/USDT":
     USE_SNIPER: false      # Volatile meme coins are better with Market entry
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 3.0    # Require 3x average volume for high-risk assets
     ADX_FILTER_LEVEL: 20
     TRAILING_ATR_MULT: 5.0 # Let meme trends run further
@@ -88,7 +88,7 @@ SYMBOL_SETTINGS:
   "XAU/USDT":
     USE_SNIPER: true
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 1000.0
+    ALLOCATED_SEED: 10000.0
     VOL_MULTIPLIER: 2.5
     EMA_TREND_PERIOD: 200  # Gold is highly trend-dependent
     ADX_FILTER_LEVEL: 30   # Only enter Gold on massive breakouts
@@ -96,11 +96,11 @@ SYMBOL_SETTINGS:
 # --- ADAPTIVE TRAILING STOP ---
 USE_ADAPTIVE_TRAIL: true
 ADAPTIVE_TRAIL_STEPS:
-  - pnl_pct: 1.5
+  - pnl_pct: 2.0
     tighten_ratio: 0.8  # Tighten to 80% of current ATR mult
-  - pnl_pct: 3.0
-    tighten_ratio: 0.6  # Tighten to 60% of current ATR mult
   - pnl_pct: 5.0
+    tighten_ratio: 0.6  # Tighten to 60% of current ATR mult
+  - pnl_pct: 8.0
     tighten_ratio: 0.4  # Tighten to 40% of current ATR mult
 
 # --- MISC ---

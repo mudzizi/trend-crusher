@@ -1,75 +1,74 @@
-# 📊 TrendCrusher V11.6.0: Backtesting Guide
+# 📊 TrendCrusher V11.8.0: The Ultimate Backtesting Guide
 
-이 가이드는 프로젝트에 포함된 다양한 백테스팅 스크립트의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. 최신 업데이트를 통해 모든 백테스팅 스크립트는 라이브 거래 봇(`live_bot_async.py`)과 동일한 **`TrendCrusherV2`** 전략 엔진을 공유하며, 이는 백테스트 결과와 실전 매매 사이의 로직 괴리(Divergence)를 제거합니다.
-
----
-
-## 🚀 핵심 업데이트: 전략 엔진 동기화 (Single Source of Truth)
-
-기존의 파편화된 백테스트 로직이 `src/strategy.py`의 `TrendCrusherV2` 클래스로 단일화되었습니다.
-- **공통 엔진**: `calculate_indicators`, `check_entry_signal`, `check_exit_signal` 메서드가 백테스트와 라이브 봇에서 동일하게 호출됩니다.
-- **정밀 시뮬레이션**: `run_precision_backtest` 메서드는 1시간봉 신호와 1분봉 데이터(체크용)를 사용하여 슬리피지, 수수료, 인트라-바 손절을 정확하게 계산합니다.
+이 가이드는 TrendCrusher의 업계 최고 수준 정밀 백테스팅 엔진과 시뮬레이션 도구들의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. v11.8.0은 **Look-ahead Bias(미래 참조 오류)**를 원천 차단한 실전형 엔진을 제공합니다.
 
 ---
 
-## 1. 📂 스크립트 요약 (Quick Summary)
+## 🚀 핵심 기술: 스트리밍 시뮬레이션 (Streaming Simulation)
 
-| 파일명 | 유형 | 주요 목적 | 엔진 |
+기존 백테스트의 가장 큰 약점은 1시간봉이 마감된 후의 지표를 사용하여 그 시간대 내부의 진입을 결정하는 '미래 참조'였습니다. TrendCrusher v11.8.0은 이를 혁신적으로 해결했습니다.
+
+### 1. 단일 진실 공급원 (Single Source of Truth)
+- **공통 엔진**: `src/strategy.py`의 `TrendCrusherV2`가 라이브 거래와 모든 백테스트의 유일한 판단 기준입니다.
+- **로직 완벽 일치**: `check_entry_signal`과 `check_exit_signal` 메서드가 실전 매매와 백테스트에서 100% 동일하게 실행됩니다.
+
+### 2. 제로 바이어스 (No Look-ahead Bias)
+- **분 단위 지표 재구성**: `run_streaming_backtest` 메서드는 1분봉 데이터를 스트리밍하듯 읽으며, 매 분마다 **'현재까지 진행된 미완성 1시간봉'**을 기반으로 지표를 계산합니다.
+- **현실적인 거래량 판단**: 1시간이 끝나기 전, 실제로 거래량이 터지는 찰나의 순간을 포착하여 진입 타이밍을 시뮬레이션합니다.
+
+---
+
+## 📂 스크립트 요약 (Simulation Suite)
+
+| 파일명 | 유형 | 주요 목적 | 엔진 모드 |
 | :--- | :--- | :--- | :--- |
-| `backtest/precision_backtester.py` | 표준 | 가장 정확한 1분 단위 정밀 백테스트 실행 | `TrendCrusherV2` |
-| `scripts/mega_optimizer_v2.py` | 최적화 | 병렬 프로세싱을 이용한 다중 종목/파라미터 최적화 | `TrendCrusherV2` |
-| `backtest/parameter_optimizer.py` | 탐색 | 특정 종목에 대한 그리드 서치(Grid Search) 최적화 | `TrendCrusherV2` |
-| `backtest/sniper_backtester.py` | 비교 | **스나이퍼(지정가)** vs 시장가 진입의 알파(Alpha) 분석 | `TrendCrusherV2` (Ext) |
-| `scripts/backtest_portfolio.py` | 포트폴리오 | 종목별 비중을 고려한 전체 자산 합산 수익률 계산 | `TrendCrusherV2` |
+| `scripts/run_realistic_simulation.py` | **최고 정밀** | ** Look-ahead Bias 0%** 초정밀 스트리밍 시뮬레이션 | `Streaming` |
+| `backtest/precision_backtester.py` | 표준 | 인트라-바 검증을 포함한 빠른 정밀 백테스트 | `Precision` |
+| `scripts/mega_optimizer_v2.py` | 최적화 | 다중 종목에 대한 고속 파라미터 그리드 서치 | `Precision` |
+| `backtest/sniper_backtester.py` | 분석 | 지정가 매복(Sniper)의 수수료 절감 효과 분석 | `Precision` |
 
 ---
 
-## 2. 📝 스크립트별 상세 분석
+## 📝 주요 도구 상세 가이드
 
-### 🏗️ Standard: `backtest/precision_backtester.py`
-리팩토링된 전략 엔진의 성능을 확인하는 표준 스크립트입니다.
-- **특징:** 1시간봉(신호) + 4시간봉(추세) + 1분봉(검증) 데이터를 모두 사용하여 실전에 가장 가까운 결과를 냅니다.
-- **실행법:** `python3 backtest/precision_backtester.py`
+### 🏗️ Ultra-Realistic: `scripts/run_realistic_simulation.py`
+가장 권장되는 최종 검증 도구입니다. 
+- **특징:** 1분 단위 스트리밍 업데이트를 시뮬레이션하여 실전과 가장 유사한 수익률을 산출합니다.
+- **결과물:** 
+    - `reports/{SYMBOL}/{MODE}/{TIMESTAMP}/` 경로에 구조화된 저장.
+    - **Visual Chart**: 지표, 거래 시점, 자산 곡선이 통합된 4단 패널 PNG.
+    - **Trade Log**: 모든 진입/청산의 상세 내역 CSV.
+- **실행:** `python3 scripts/run_realistic_simulation.py`
 
-### 🧠 Optimizer: `scripts/mega_optimizer_v2.py` (권장)
-바이낸스 상위 종목들에 대해 최적의 파라미터 세트를 찾아줍니다.
-- **특징:** 
-    - `ProcessPoolExecutor`를 사용한 병렬 최적화로 속도가 매우 빠릅니다.
-    - Market, Sniper, Retest_Maker 세 가지 모드를 모두 시뮬레이션하여 가장 효율적인 모드를 제안합니다.
-- **결과 지표:** `Efficiency` (수익률 / MDD). 이 수치가 높을수록 안정적인 설정입니다.
-- **실행법:** `python3 scripts/mega_optimizer_v2.py [종목개수] [기간(일)]`
-
-### 🎯 Advanced: `backtest/sniper_backtester.py`
-TrendCrusher의 핵심인 **'스나이퍼 엔진'**의 가치를 정량화합니다.
-- **특징:** 
-    - 돌파 시점의 가격 움직임을 1분 단위로 분석하여 지정가 체결 가능성을 판별합니다.
-    - 체결 성공 시 **지정가 수수료(0.02%) 및 제로 슬리피지**를 적용하여 시장가 진입 대비 추가 수익(Alpha)을 계산합니다.
-- **실행법:** `python3 backtest/sniper_backtester.py`
-
-### 💼 Portfolio: `scripts/backtest_portfolio.py`
-여러 종목에 자산 배분을 했을 때의 통합 성과를 보여줍니다.
-- **특징:** 개별 종목의 변동성이 상쇄되는 '분산 투자 효과'를 MDD 수치로 확인할 수 있습니다.
-- **실행법:** `python3 scripts/backtest_portfolio.py`
+### 🧠 Hyper-Optimizer: `scripts/mega_optimizer_v2.py`
+수백 개의 파라미터 조합 중 수익/리스크 비율이 가장 좋은 최적값을 찾아줍니다.
+- **지표:** `Return/MDD Efficiency`가 가장 높은 조합을 우선 제안합니다.
+- **실행:** `python3 scripts/mega_optimizer_v2.py [종목수] [기간]`
 
 ---
 
-## 3. 📊 결과 해석 및 실전 적용
+## 📊 결과 해석 및 시각화 (Visualization)
 
-1. **로직 일관성 확인**: 
-   백테스트 결과가 좋다면, 해당 파라미터를 `config.yaml`의 `SYMBOL_SETTINGS`에 적용하세요. 라이브 봇은 백테스트와 **정확히 동일한 코드**로 진입과 청산을 결정합니다.
+v11.8.0은 데이터 수치를 넘어 시각적인 직관을 제공합니다.
 
-2. **MDD (최대 낙폭) 기준**:
-   실전 운영을 위해서는 MDD가 15~20% 이하인 설정을 권장합니다. MDD가 너무 높다면 `RISK_PER_TRADE`를 낮추거나 `ADX_FILTER_LEVEL`을 높이십시오.
+1.  **종합 시각 리포트 (Visual Chart)**:
+    - **Price Panel**: 진입(▲/▼)과 청산(X) 지점을 가격 차트 위에 지표와 함께 표시.
+    - **ADX/Volume Panel**: 진입 당시의 추세 강도와 거래량 폭발 여부 검증.
+    - **Equity Panel**: 리스크 5% 등의 복리 효과가 자산 곡선에 미치는 영향 확인.
 
-3. **거래 횟수와 신뢰도**:
-   테스트 기간 동안 거래 횟수가 너무 적으면 통계적 유의성이 떨어집니다. 최소 30회 이상의 거래가 발생한 설정을 신뢰하세요.
+2.  **대시보드 통합**:
+    - `python3 scripts/dashboard.py` 실행 후 웹 브라우저에서 모든 백테스트 이미지와 CSV를 즉시 확인 및 다운로드 가능.
 
 ---
 
 ## 🛠️ 백테스팅 실행 시 주의사항
-- **데이터 필수**: `data/` 폴더에 `{SYMBOL}_1h.csv`, `4h.csv`, `1m.csv`가 모두 존재해야 합니다. (부족할 경우 `BinanceDataFetcher`를 통해 다운로드됩니다.)
-- **수수료 및 슬리피지**: `TrendCrusherV2`는 기본적으로 시장가 0.05%, 지정가 0.02%의 수수료를 적용합니다. 보수적인 결과를 위해 `config.yaml`에서 슬리피지를 조절할 수 있습니다.
+
+- **증분 데이터 업데이트**: `BinanceDataFetcher`는 이제 기존 데이터가 있다면 마지막 시점 이후의 데이터만 추가로 가져옵니다. 업데이트 속도가 매우 빠릅니다.
+- **현실적인 비용 설정**: 
+    - **Sniper/Market**: Taker 수수료(0.05%) + 현실적인 슬리피지 적용.
+    - **Retest Maker**: **Maker 수수료(0.02%)** + 제로 슬리피지 적용.
+- **리스크 경고**: 백테스트에서 MDD가 20%를 넘는다면 실전에서는 더 큰 심리적 고통이 따를 수 있습니다. `RISK_PER_TRADE`를 조절하여 본인에게 맞는 설정을 찾으세요.
 
 ---
 **TrendCrusher Development Team**
-*Your Technical Co-Founder for Algo-Trading*
+*The Gold Standard in Realistic Trading Simulation*

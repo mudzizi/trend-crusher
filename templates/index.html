@@ -147,6 +147,50 @@
             </div>
         </div>
 
+        <!-- Backtest Analysis Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-transparent border-0 pt-4 px-4 d-flex justify-content-between">
+                        <h5 class="fw-bold mb-0 text-info">Realistic Backtest Analysis (No-Bias)</h5>
+                        <div class="text-secondary small">Latest Hyper-Sim Results</div>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if backtest_reports %}
+                        <table class="table table-dark table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">File Name</th>
+                                    <th>Type</th>
+                                    <th>Size</th>
+                                    <th>Generated At</th>
+                                    <th class="pe-4 text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for report in backtest_reports %}
+                                <tr>
+                                    <td class="ps-4 py-3">{{ report.name }}</td>
+                                    <td><span class="badge bg-secondary">{{ report.type }}</span></td>
+                                    <td class="text-secondary small">{{ report.size }}</td>
+                                    <td class="text-secondary small">{{ report.date }}</td>
+                                    <td class="pe-4 text-end">
+                                        <a href="/reports/{{ report.name }}" class="btn btn-sm btn-outline-info px-3" target="_blank">View / Download</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else: %}
+                        <div class="p-5 text-center text-secondary">
+                            <p>No realistic backtest reports found. Run <code>scripts/run_realistic_simulation.py</code> to generate analysis.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- History -->
         <div class="row mt-4">
             <div class="col-12">

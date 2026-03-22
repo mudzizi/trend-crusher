@@ -11,8 +11,10 @@ import time
 
 # --- Flask Setup ---
 base_dir = os.path.dirname(os.path.abspath(__file__))
-template_dir = os.path.join(os.path.dirname(base_dir), 'templates')
-static_dir = os.path.join(os.path.dirname(base_dir), 'static')
+project_root = os.path.dirname(base_dir)
+template_dir = os.path.join(project_root, 'templates')
+static_dir = os.path.join(project_root, 'static')
+reports_dir = os.path.join(project_root, 'reports')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 db = DBManager()
@@ -90,6 +92,30 @@ def index():
         win_rate = (len(wins) / len(trades_list)) * 100
         total_pnl = sum([t['pnl_usdt'] for t in trades_list])
 
+    # 4. Fetch Backtest Reports (Recursive Scan)
+    backtest_reports = []
+    if os.path.exists(reports_dir):
+        for root, dirs, files in os.walk(reports_dir):
+            for f in files:
+                if f.endswith(".csv") or f.endswith(".txt") or f.endswith(".png"):
+                    f_path = os.path.join(root, f)
+                    stats = os.stat(f_path)
+                    
+                    # Create a display name that shows the folder context
+                    rel_path = os.path.relpath(f_path, reports_dir)
+                    
+                    f_type = "Trade Log" if "trades" in f else ("Equity" if "equity" in f else ("Summary" if f.endswith(".txt") else "Visual Chart"))
+                    
+                    backtest_reports.append({
+                        "name": rel_path,
+                        "date": time.strftime('%m-%d %H:%M', time.localtime(stats.st_mtime)),
+                        "size": f"{stats.st_size / 1024:.1f} KB",
+                        "type": f_type
+                    })
+        
+        # Sort by date (newest first)
+        backtest_reports = sorted(backtest_reports, key=lambda x: x['date'], reverse=True)
+
     return render_template('index.html', 
                            version=CONFIG.get("VERSION", "N/A"),
                            symbols=symbols,
@@ -100,15 +126,16 @@ def index():
                            balance=equity_df['balance'].iloc[-1] if not equity_df.empty else CONFIG["SEED"],
                            total_return=total_pnl,
                            win_rate=round(win_rate, 1),
-                           chart_data=chart_data)
+                           chart_data=chart_data,
+                           backtest_reports=backtest_reports)
 
 @app.route('/static/<filename>')
 def serve_static(filename):
-    return send_from_directory("static", filename)
+    return send_from_directory(static_dir, filename)
 
 @app.route('/reports/<filename>')
 def serve_report(filename):
-    return send_from_directory("reports", filename)
+    return send_from_directory(reports_dir, filename)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

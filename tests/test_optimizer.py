@@ -67,11 +67,11 @@ def test_symbol_bot_hot_reload(mock_config):
     mock_notifier = MagicMock()
     mock_pm = MagicMock()
     
-    # 클래스 직접 초기화 확인
-    bot = SymbolBotAsync("BTC/USDT", mock_exchange, mock_pm, mock_notifier, mock_db)
+    # 클래스 직접 초기화 확인 (XRP uses global defaults)
+    bot = SymbolBotAsync("XRP/USDT", mock_exchange, mock_pm, mock_notifier, mock_db)
     
-    # 초기 설정 확인 (mock_config fixture 사용)
-    assert bot.settings["VOL_MULTIPLIER"] == 2.5
+    # 초기 설정 확인 (Global defaults in CONFIG)
+    assert bot.settings["EMA_TREND_PERIOD"] == 100
     
     # 핫 리로드 수행
     new_params = {"VOL_MULTIPLIER": 3.5, "ADX_FILTER_LEVEL": 30}
