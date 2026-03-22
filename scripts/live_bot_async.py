@@ -192,7 +192,79 @@ class SymbolBotAsync:
         except Exception as e:
             self.logger.error(f"⚠️ Error updating OHLCV buffer for {self.symbol}: {e}")
 
-    # ... (fetch_ohlcv, on_mark_price_update, check_sniper_fill, cancel_retest_order, check_retest_fill, _on_fill_success remain same)
+    async def on_mark_price_update(self, price):
+        self.last_price = price
+        if self.position != 0:
+            await self.check_exit()
+        else:
+            if self.active_retest_order_id:
+                if self.settings["DRY_RUN"]:
+                    is_filled = False
+                    if self.entry_price > 0 and price <= self.entry_price: is_filled = True
+                    elif self.entry_price < 0 and price >= abs(self.entry_price): is_filled = True
+                    if is_filled:
+                        self.logger.info(f"🧪 [DRY RUN] Retest Maker FILLED at {price}")
+                        direction = 1 if self.entry_price > 0 else -1
+                        self.entry_price = abs(self.entry_price)
+                        await self._on_fill_success(direction)
+                        self.active_retest_order_id = None
+                else:
+                    await self.check_retest_fill()
+            elif self.active_sniper_order_id:
+                await self.check_sniper_fill()
+            await self.check_entry()
+
+    async def check_sniper_fill(self):
+        if self.settings["DRY_RUN"]: return
+        try:
+            order = await self.retry_api_call(self.exchange.fetch_order, self.active_sniper_order_id, self.symbol)
+            if order['status'] == 'closed':
+                self.logger.info(f"🎯 Sniper Order FILLED for {self.symbol}!")
+                self.quantity = float(order.get('filled', order.get('amount')))
+                self.entry_price = float(order['average'])
+                direction = 1 if order['side'] == 'buy' else -1
+                await self._on_fill_success(direction)
+                self.active_sniper_order_id = None
+        except Exception as e:
+            self.logger.error(f"Error checking sniper fill: {e}")
+
+    async def check_retest_fill(self):
+        if not self.active_retest_order_id: return
+        if self.retest_order_ts:
+            elapsed = (datetime.now() - self.retest_order_ts).total_seconds()
+            if elapsed > 14400:
+                self.logger.info(f"⌛ Retest order TIMEOUT (4h) for {self.symbol}. Cancelling.")
+                await self.cancel_retest_order()
+                return
+        try:
+            order = await self.retry_api_call(self.exchange.fetch_order, self.active_retest_order_id, self.symbol)
+            if order['status'] == 'closed':
+                self.logger.info(f"✅ Retest Maker Order FILLED for {self.symbol}!")
+                self.quantity = float(order.get('filled', order.get('amount')))
+                self.entry_price = float(order['average'])
+                direction = 1 if order['side'] == 'buy' else -1
+                await self._on_fill_success(direction)
+                self.active_retest_order_id = None
+                self.retest_order_ts = None
+        except Exception as e:
+            self.logger.error(f"Error checking retest fill: {e}")
+
+    async def _on_fill_success(self, direction):
+        side_str = "LONG" if direction == 1 else "SHORT"
+        try:
+            params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+            sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
+            self.sl_order_id = sl_order['id']
+        except Exception as sl_err:
+            self.logger.error(f"🚨 CRITICAL: SL failed: {sl_err}. EMERGENCY LIQUIDATION!")
+            await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity)
+            return
+        self.position = direction
+        self.max_price_seen = self.entry_price
+        self.min_price_seen = self.entry_price
+        self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
+        self.persist_state()
+        self.notifier.notify_entry(f"🚀 {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
 
     async def check_entry(self):
         if self.is_halted or self.df_indicators is None: return
