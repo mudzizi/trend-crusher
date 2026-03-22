@@ -1,13 +1,11 @@
-# TrendCrusher Configuration Example (v11.6.0)
+# TrendCrusher Configuration Example (v11.8.0)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "11.6.0"
+VERSION: "11.8.0"
 
 # --- API KEYS ---
-# You can use environment variables or set them here directly.
-# If using environment variables, keep them in your .env file or shell.
-# These will be overridden by environment variables if they exist.
+# OVERRIDE: Environment variables will override these values if they exist.
 BINANCE_API_KEY: "YOUR_BINANCE_API_KEY"
 BINANCE_SECRET: "YOUR_BINANCE_SECRET"
 TELEGRAM_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN"
@@ -15,32 +13,24 @@ TELEGRAM_CHAT_ID: "YOUR_TELEGRAM_CHAT_ID"
 
 # --- OPERATIONAL SETTINGS ---
 DRY_RUN: true
-SEED: 10000.0
-SYMBOL: "TRUMP/USDT" # Default single symbol for some legacy scripts
+SEED: 1000.0
 SYMBOLS_LIST:
-  - "TRUMP/USDT"
+  - "BTC/USDT"
   - "ETH/USDT"
-  - "XRP/USDT"
-  - "XAU/USDT"
+  - "TRUMP/USDT"
   - "SOL/USDT"
 MAX_CONCURRENT_TRADES: 3
 MARGIN_MODE: "ISOLATED"
 MAX_LEVERAGE: 5
 
-# --- TIMEFRAMES & INTERVALS ---
-SIGNAL_TIMEFRAME: "1h"
-TREND_TIMEFRAME: "4h"
-CHECK_TIMEFRAME: "1m"
-LOOP_INTERVAL: 10 # seconds
+# --- GLOBAL MODE DEFAULTS ---
+# These apply to all symbols unless overridden in SYMBOL_SETTINGS.
+USE_SNIPER: true          # Pre-emptive Limit Entry (Maker)
+USE_RETEST_MAKER: false   # Post-breakout Pullback Entry (Maker)
+# If both are false, the bot uses Market Entry (Taker) on signal close.
 
-# --- TRADING COSTS ---
-FEE_RATE: 0.0004         # Standard Taker Fee
-MAKER_FEE_RATE: 0.0002   # Standard Maker Fee
-SLIPPAGE: 0.0005         # Default Slippage (0.05%)
-DATA_DIR: "data"
-
-# --- STRATEGY PARAMETERS (GLOBAL DEFAULTS) ---
-VOL_MULTIPLIER: 2.5      
+# --- GLOBAL STRATEGY PARAMETERS ---
+VOL_MULTIPLIER: 2.0      
 TRAILING_ATR_MULT: 4.5   
 RISK_PER_TRADE: 0.02     
 EMA_TREND_PERIOD: 100
@@ -49,54 +39,72 @@ ATR_PERIOD: 14
 AVG_VOL_PERIOD: 20
 INITIAL_SL_ATR: 2.0
 ADX_FILTER_LEVEL: 15
+SNIPER_PROXIMITY_PCT: 0.005 # 0.5% proximity to trigger Sniper ambush
 
-# --- SYMBOL SPECIFIC OPTIMIZED PARAMETERS ---
+# --- SYMBOL SPECIFIC OVERRIDES (RECOMMENDED DEFAULTS) ---
+# You can customize ANY parameter for specific coins here.
+# These values are based on 1-year historical backtest optimizations.
 SYMBOL_SETTINGS:
-  "TRUMP/USDT":
-    ALLOCATED_SEED: 4000.0
-    VOL_MULTIPLIER: 2.5
-    TRAILING_ATR_MULT: 4.5
-    EMA_TREND_PERIOD: 100
-    RISK_PER_TRADE: 0.02
-    ADX_FILTER_LEVEL: 15
-  "ETH/USDT":
-    ALLOCATED_SEED: 2500.0
-    VOL_MULTIPLIER: 2.0
-    TRAILING_ATR_MULT: 4.5
-    EMA_TREND_PERIOD: 200
-    RISK_PER_TRADE: 0.02
-    ADX_FILTER_LEVEL: 15
-  "XRP/USDT":
-    ALLOCATED_SEED: 1500.0
-    VOL_MULTIPLIER: 2.0
-    TRAILING_ATR_MULT: 4.0
-    EMA_TREND_PERIOD: 100
-    RISK_PER_TRADE: 0.02
-    ADX_FILTER_LEVEL: 20
-  "XAU/USDT":
-    ALLOCATED_SEED: 2500.0
-    VOL_MULTIPLIER: 2.5
-    TRAILING_ATR_MULT: 4.5
-    EMA_TREND_PERIOD: 200
-    RISK_PER_TRADE: 0.02
-    ADX_FILTER_LEVEL: 25
-  "SOL/USDT":
+  "BTC/USDT":
+    USE_SNIPER: false
+    USE_RETEST_MAKER: true # Wait for retest on BTC for safer, zero-slippage entry
     ALLOCATED_SEED: 1000.0
-    VOL_MULTIPLIER: 1.5
-    TRAILING_ATR_MULT: 4.0
-    EMA_TREND_PERIOD: 200
-    RISK_PER_TRADE: 0.02
-    ADX_FILTER_LEVEL: 15
+    VOL_MULTIPLIER: 1.5    # BTC has high baseline volume, lower multiplier is okay
+    EMA_TREND_PERIOD: 200  # Conservative macro filter
+    TRAILING_ATR_MULT: 4.5
+  
+  "ETH/USDT":
+    USE_SNIPER: true       # Sniper ambush works well for ETH breakouts
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 2.0
+    EMA_TREND_PERIOD: 100
+    TRAILING_ATR_MULT: 4.0 # Slightly tighter exit for ETH
+  
+  "SOL/USDT":
+    USE_SNIPER: true
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 2.5    # Requires stronger momentum
+    ADX_FILTER_LEVEL: 20   # Filter out choppy SOL movements
+    TRAILING_ATR_MULT: 4.5
+  
+  "XRP/USDT":
+    USE_SNIPER: false
+    USE_RETEST_MAKER: false # Use Market entry for XRP due to "wick" volatility
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 2.0
+    ADX_FILTER_LEVEL: 25   # XRP needs very strong trends to perform
+    TRAILING_ATR_MULT: 3.5 # Aggressive profit taking for XRP
+  
+  "TRUMP/USDT":
+    USE_SNIPER: false      # Volatile meme coins are better with Market entry
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 3.0    # Require 3x average volume for high-risk assets
+    ADX_FILTER_LEVEL: 20
+    TRAILING_ATR_MULT: 5.0 # Let meme trends run further
+  
+  "XAU/USDT":
+    USE_SNIPER: true
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 1000.0
+    VOL_MULTIPLIER: 2.5
+    EMA_TREND_PERIOD: 200  # Gold is highly trend-dependent
+    ADX_FILTER_LEVEL: 30   # Only enter Gold on massive breakouts
 
-# --- STRATEGY IMPROVEMENTS ---
+# --- ADAPTIVE TRAILING STOP ---
 USE_ADAPTIVE_TRAIL: true
 ADAPTIVE_TRAIL_STEPS:
   - pnl_pct: 1.5
-    tighten_ratio: 0.8  # Tighten to 80% of original ATR mult
+    tighten_ratio: 0.8  # Tighten to 80% of current ATR mult
   - pnl_pct: 3.0
-    tighten_ratio: 0.6  # Tighten to 60% of original ATR mult
+    tighten_ratio: 0.6  # Tighten to 60% of current ATR mult
   - pnl_pct: 5.0
-    tighten_ratio: 0.4  # Tighten to 40% of original ATR mult
+    tighten_ratio: 0.4  # Tighten to 40% of current ATR mult
 
-# --- THE SNIPER ---
-SNIPER_PROXIMITY_PCT: 0.005
+# --- MISC ---
+SIGNAL_TIMEFRAME: "1h"
+TREND_TIMEFRAME: "4h"
+CHECK_TIMEFRAME: "1m"
+DATA_DIR: "data"

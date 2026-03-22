@@ -1,6 +1,6 @@
-# 🛠️ TrendCrusher V11.6.0: Configuration Guide
+# 🛠️ TrendCrusher V11.8.0: Configuration Guide
 
-이 가이드는 `config.yaml` 파일에 포함된 모든 설정 항목의 의미, 작동 방식 및 권장값을 상세히 설명합니다.
+이 가이드는 `config.yaml` 파일에 포함된 모든 설정 항목의 의미, 작동 방식 및 권장값을 상세히 설명합니다. v11.8.0 리팩토링을 통해 **코인별 맞춤형 전략 설정**이 더욱 강력해졌습니다.
 
 ---
 
@@ -15,76 +15,61 @@
 
 ---
 
-## 2. 🚀 Operational Settings (운영 설정)
+## 2. 🚀 Strategy Modes (진입 모드 설정)
 
-| 항목 | 설명 | 권장값 / 주의사항 |
-| :--- | :--- | :--- |
-| `DRY_RUN` | 가상 매매 여부 | **`true`** (초기 세팅 시), **`false`** (실전 투입 시). |
-| `SEED` | 시작 자본 (USDT) | 초기 백테스트 및 DRY_RUN 기준 자산. (예: `10000.0`) |
-| `SYMBOLS_LIST` | 동시 감시 종목 | `["TRUMP/USDT", "ETH/USDT", "XAU/USDT"]`. 너무 많으면 리스크 분산은 되나 관리가 복잡해짐. |
-| `MAX_CONCURRENT_TRADES` | 동시 최대 진입 종목 수 | `3` ~ `5`. 전체 자산의 급격한 변동을 막기 위한 안전장치. |
-| `MARGIN_MODE` | 마진 모드 | **`ISOLATED`** (격리 마진). 교차(Cross) 마진은 리스크 전이 위험으로 비권장. |
-| `MAX_LEVERAGE` | 사용할 레버리지 배수 | `5` (안전), `10` (공격). 초보자는 5배 이하 권장. |
+TrendCrusher는 세 가지 진입 방식을 지원합니다. 전역 설정(`USE_SNIPER` 등)보다 `SYMBOL_SETTINGS` 내의 개별 설정이 우선합니다.
+
+| 모드 | 설정값 (`Sniper` / `Retest`) | 설명 | 수수료/슬리피지 |
+| :--- | :--- | :--- | :--- |
+| **Market** | `false` / `false` | 캔들 마감 시 조건 충족하면 즉시 시장가 진입. | Taker 수수료 / 높은 슬리피지 |
+| **Sniper** | **`true`** / `false` | 돌파가 임박(`Proximity`)하면 미리 지정가를 걸어 매복. | **Maker 수수료** / 제로 슬리피지 |
+| **Retest** | `false` / **`true`** | 돌파 후 다시 돌파 레벨로 가격이 되돌아올 때 지정가 진입. | **Maker 수수료** / 최저 리스크 |
 
 ---
 
-## 3. 🕒 Timeframes & Intervals (주기 설정)
+## 3. 🧠 SYMBOL_SETTINGS (코인별 개별 설정)
+
+특정 코인의 특성에 맞춰 전역 설정을 덮어쓸 수 있습니다.
+
+```yaml
+SYMBOL_SETTINGS:
+  "BTC/USDT":
+    USE_RETEST_MAKER: true  # 비트코인은 리테스트 시에만 진입하여 안정성 확보
+    EMA_TREND_PERIOD: 200   # 더 긴 호흡의 추세 필터 적용
+    ALLOCATED_SEED: 3000.0  # 이 종목에만 할당할 자산
+  "TRUMP/USDT":
+    USE_SNIPER: false       # 변동성이 큰 알트코인은 시장가로 확실히 체결
+    VOL_MULTIPLIER: 3.0     # 더 강력한 거래량 폭발 요구
+```
+
+---
+
+## 4. 🕒 Timeframes & Intervals (주기 설정)
 
 | 항목 | 설명 | 권장값 / 주의사항 |
 | :--- | :--- | :--- |
 | `SIGNAL_TIMEFRAME` | 메인 신호 발생 주기 | **`1h`**. 너무 짧으면 노이즈가 많고, 길면 진입 기회가 적음. |
 | `TREND_TIMEFRAME` | 대세 판단 주기 | **`4h`**. 메인 주기보다 긴 타임프레임으로 추세 필터링. |
-| `CHECK_TIMEFRAME` | 내부 연산 최소 주기 | **`1m`**. 웹소켓 데이터 동기화 및 내부 계산용. |
-| `LOOP_INTERVAL` | 레거시 폴링 엔진 주기 | `10` (초). 비동기 엔진에서는 주로 하트비트용으로 사용됨. |
+| `CHECK_TIMEFRAME` | 내부 연산 최소 주기 | **`1m`**. 백테스트 검증 및 내부 계산용. |
 
 ---
 
-## 4. 🧠 Strategy Pillars (전략 파라미터)
-
-| 항목 | 설명 | 권장값 (Standard) |
-| :--- | :--- | :--- |
-| `DONCHIAN_PERIOD` | 돈치안 채널 기간 | `20`. 지난 20개 봉의 고점/저점을 기준으로 돌파 판단. |
-| `ATR_PERIOD` | 변동성 측정 기간 | `14`. 손절가(SL) 및 트레일링 스탑 계산의 기준. |
-| `AVG_VOL_PERIOD` | 평균 거래량 기간 | `20`. 평소 거래량 대비 현재 폭발 정도를 비교. |
-| `VOL_MULTIPLIER` | 거래량 폭발 배수 | **`2.0` ~ `2.5`**. 거래량이 평소보다 이 배수만큼 터져야 진입. |
-| `ADX_FILTER_LEVEL` | 추세 강도 문턱치 | **`15` ~ `25`**. 25 이상이면 매우 강력한 추세로 판단. |
-| `EMA_TREND_PERIOD` | 대세 이평선 기간 | `100` 또는 `200`. 가격이 이 위에 있을 때만 LONG 진입. |
-
----
-
-## 5. 🎯 The Sniper (지정가 매복 주문)
-
-| 항목 | 설명 | 권장값 / 주의사항 |
-| :--- | :--- | :--- |
-| `SNIPER_PROXIMITY_PCT` | 매복 주문 시작 거리 | **`0.005`** (0.5%). 가격이 돌파선 0.5% 이내로 접근 시 Limit 주문 제출. |
-| `MAKER_FEE_RATE` | 지정가 수수료율 | 바이낸스 기준 보통 `0.0002` (0.02%). 시장가보다 저렴함. |
-
----
-
-## 6. 🛡️ Risk Management (리스크 관리)
+## 5. 🛡️ Risk & Trailing (리스크 관리)
 
 | 항목 | 설명 | 권장값 / 주의사항 |
 | :--- | :--- | :--- |
 | `RISK_PER_TRADE` | 회당 리스크 비중 | **`0.02`** (2%). 손절 시 전체 자산의 2%만 손실되도록 수량 조절. |
 | `INITIAL_SL_ATR` | 초기 손절폭 (ATR 배수) | `2.0`. 진입가 기준 `2.0 * ATR` 거리에 손절선 배치. |
 | `USE_ADAPTIVE_TRAIL` | 적응형 트레일링 사용 | **`true`**. 수익이 날수록 익절선을 타이트하게 올림. |
-| `ADAPTIVE_TRAIL_STEPS` | 트레일링 단계 설정 | 수익률 10%, 20% 등 구간별로 ATR 배수를 줄여 수익 보존. |
+| `ADAPTIVE_TRAIL_STEPS` | 트레일링 단계 설정 | `tighten_ratio`를 통해 구간별로 ATR 배수를 줄여 수익 보존. |
 
 ---
 
-## 💎 심볼별 최적화 권장값 (Optimized Examples)
+## 💎 전략적 설정 팁 (Strategy Tips)
 
-시장 성격에 따라 다음과 같이 조정하는 것을 추천합니다.
-
-- **변동성 큰 알트코인 (예: TRUMP/USDT)**
-  - `VOL_MULTIPLIER`: 2.5 (높은 거래량 요구)
-  - `TRAILING_ATR_MULT`: 4.5 (널널한 익절 공간)
-- **메이저 코인 (예: ETH/USDT)**
-  - `VOL_MULTIPLIER`: 2.0 (상대적으로 낮은 문턱치)
-  - `ADX_FILTER_LEVEL`: 15 (완만한 추세 대응)
-- **안전자산/금 (예: XAU/USDT)**
-  - `ADX_FILTER_LEVEL`: 25 (강력한 추세에서만 진입)
-  - `EMA_TREND_PERIOD`: 200 (매우 보수적인 필터링)
+1.  **메이저 코인 (BTC, ETH)**: `USE_RETEST_MAKER` 또는 `USE_SNIPER`를 사용하여 Maker 수수료 혜택을 극대화하세요.
+2.  **급등주/알트코인**: 돌파 시 가격이 순식간에 멀어질 수 있으므로 `Market` 진입(둘 다 false)이 유리할 수 있습니다.
+3.  **손절 방어**: `INITIAL_SL_ATR`은 최소 1.5 이상을 권장합니다. 너무 낮으면 시장의 일시적인 노이즈에 털릴 수 있습니다.
 
 ---
-**주의:** 본 파라미터는 백테스트 결과를 기반으로 제안된 것이며, 실제 시장 상황에 따라 성과가 다를 수 있습니다. 주기적으로 Sentinel을 통해 최적화를 진행하세요.
+**주의:** 모든 설정 변경 후에는 반드시 `python3 backtest/precision_backtester.py`를 통해 시뮬레이션 결과를 먼저 확인하십시오.
