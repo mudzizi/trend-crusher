@@ -40,9 +40,14 @@ class TrendCrusherV2:
         ema_vals = calculate_ema(df_t, period=config.get("EMA_TREND_PERIOD", 200))
         df_h = pd.DataFrame({'timestamp': df_t['timestamp'], 'ema_h': ema_vals}).set_index('timestamp')
         df = df.set_index('timestamp').join(df_h).ffill()
+        
+        # Add persistence features to prevent signal loss during candle transitions
+        df['prev_volume'] = df['volume'].shift(1)
+        df['prev_avg_vol'] = df['avg_vol'].shift(1)
+        
         return df
 
-    def check_entry_signal(self, row, last_price, use_sniper=False, retest_maker=False, config=None):
+    def check_entry_signal(self, row, last_price, use_sniper=False, retest_maker=False, config=None, is_ambushing=False):
         """
         Logic to determine if a new position should be opened.
         Returns: (signal_type, price, sl_price) or (None, None, None)
@@ -52,8 +57,15 @@ class TrendCrusherV2:
         adx_threshold = c.get("ADX_FILTER_LEVEL", 25.0)
         initial_sl_atr = c.get("INITIAL_SL_ATR", 2.0)
 
-        is_vol_burst = row['volume'] > (row['avg_vol'] * vol_mult)
-        is_trending = row['adx'] > adx_threshold
+        # Apply Hysteresis: If already ambushing, allow signal to be slightly weaker (80% of threshold)
+        hysteresis_mult = 0.8 if is_ambushing else 1.0
+        
+        # Volume Burst Persistence: Check current OR previous bar
+        curr_burst = row['volume'] > (row['avg_vol'] * vol_mult * hysteresis_mult)
+        prev_burst = row.get('prev_volume', 0) > (row.get('prev_avg_vol', 0) * vol_mult * hysteresis_mult)
+        is_vol_burst = curr_burst or prev_burst
+        
+        is_trending = row['adx'] > (adx_threshold * hysteresis_mult)
         
         if not (is_vol_burst and is_trending):
             return None, None, None
@@ -68,14 +80,17 @@ class TrendCrusherV2:
         
         elif use_sniper:
             prox_threshold = c.get("SNIPER_PROXIMITY_PCT", 0.005)
+            # Apply wider proximity hysteresis if already ambushing (1.0% vs 0.5%)
+            prox_mult = 2.0 if is_ambushing else 1.0
+            
             dist_top = abs(last_price - row['upper']) / (last_price + 1e-10)
             dist_bottom = abs(last_price - row['lower']) / (last_price + 1e-10)
 
             # Sniper Ambush: Close to breakout level (with small epsilon for precision)
-            if last_price > row['ema_h'] and dist_top <= (prox_threshold + 1e-6):
+            if last_price > row['ema_h'] and dist_top <= (prox_threshold * prox_mult + 1e-6):
                 sl = row['upper'] - (row['atr'] * initial_sl_atr)
                 return 'SNIPER', row['upper'], sl
-            elif last_price < row['ema_h'] and dist_bottom <= (prox_threshold + 1e-6):
+            elif last_price < row['ema_h'] and dist_bottom <= (prox_threshold * prox_mult + 1e-6):
                 sl = row['lower'] + (row['atr'] * initial_sl_atr)
                 return 'SNIPER', row['lower'], sl
             
@@ -136,6 +151,11 @@ class TrendCrusherV2:
                 tf_delta = pd.to_timedelta(config["SIGNAL_TIMEFRAME"])
                 intra_data = df_check_idx.loc[curr_time : curr_time + tf_delta]
                 for m_time, m_row in intra_data.iterrows():
+                    # Hysteresis check for pending RETEST
+                    sig_type_h, _, _ = self.check_entry_signal(row, m_row['close'], use_sniper, retest_maker, config, is_ambushing=True)
+                    if sig_type_h != 'RETEST':
+                        pending_maker_order = None; break
+
                     if (pending_maker_order['side'] == 1 and m_row['low'] <= pending_maker_order['price']) or \
                        (pending_maker_order['side'] == -1 and m_row['high'] >= pending_maker_order['price']):
                         self._open_position(pending_maker_order['side'], pending_maker_order['price'], pending_maker_order['sl'], m_time, risk_pct, is_maker=True)
@@ -143,13 +163,17 @@ class TrendCrusherV2:
                 if pending_maker_order and (curr_time - pending_maker_order['timestamp']).total_seconds() > 14400: pending_maker_order = None
 
             if self.position == 0 and not pending_maker_order and curr_time > self.last_close_time:
-                sig_type, target_p, sl_p = self.check_entry_signal(row, row['close'], use_sniper, retest_maker, config)
+                sig_type, target_p, sl_p = self.check_entry_signal(row, row['close'], use_sniper, retest_maker, config, is_ambushing=False)
                 if sig_type == 'RETEST':
                     pending_maker_order = {'side': (1 if target_p > row['ema_h'] else -1), 'price': target_p, 'sl': sl_p, 'timestamp': curr_time}
                 elif sig_type == 'SNIPER':
                     tf_delta = pd.to_timedelta(config["SIGNAL_TIMEFRAME"])
                     intra_data = df_check_idx.loc[curr_time : curr_time + tf_delta]
                     for m_time, m_row in intra_data.iterrows():
+                        # Hysteresis check for Sniper while searching intra-bar
+                        sig_type_h, _, _ = self.check_entry_signal(row, m_row['close'], use_sniper, retest_maker, config, is_ambushing=True)
+                        if sig_type_h != 'SNIPER': break # Signal lost intra-bar
+
                         if (target_p > row['ema_h'] and m_row['high'] >= target_p) or (target_p < row['ema_h'] and m_row['low'] <= target_p):
                             self._open_position((1 if target_p > row['ema_h'] else -1), target_p, sl_p, m_time, risk_pct, is_sniper=True); break
                 elif sig_type == 'MARKET':
@@ -300,7 +324,11 @@ class TrendCrusherV2:
 
             # --- 2. Check Pending Retest Order ---
             elif pending_maker_order:
-                if (pending_maker_order['side'] == 1 and m_lows[i] <= pending_maker_order['price']) or \
+                # Hysteresis check for pending RETEST
+                sig_type_h, _, _ = self.check_entry_signal(row, last_price, use_sniper, retest_maker, config, is_ambushing=True)
+                if sig_type_h != 'RETEST':
+                    pending_maker_order = None
+                elif (pending_maker_order['side'] == 1 and m_lows[i] <= pending_maker_order['price']) or \
                    (pending_maker_order['side'] == -1 and m_highs[i] >= pending_maker_order['price']):
                     self._open_position(pending_maker_order['side'], pending_maker_order['price'], pending_maker_order['sl'], pd.Timestamp(curr_time), risk_pct, is_maker=True)
                     pending_maker_order = None
@@ -309,12 +337,7 @@ class TrendCrusherV2:
 
             # --- 3. New Signal Discovery ---
             if self.position == 0 and not pending_maker_order and pd.Timestamp(curr_time) > self.last_close_time:
-                # Real-time Volume Check:
-                # In this optimized version, we use the PREVIOUS bar's avg_vol (already in row)
-                # and compare it with CURRENT cumulative volume of the active bar.
-                
-                # We can approximate current volume for speed or sum it up.
-                # Let's sum it up correctly using index.
+                # ... (volume calculation)
                 current_bar_1m_start_idx = i - (i % 60)
                 current_cum_vol = np.sum(m_vols[current_bar_1m_start_idx : i+1])
                 
@@ -323,11 +346,15 @@ class TrendCrusherV2:
                 live_row['volume'] = current_cum_vol
                 live_row['close'] = last_price
                 
-                sig_type, target_p, sl_p = self.check_entry_signal(live_row, last_price, use_sniper, retest_maker, config)
+                # Determine is_ambushing state for SNIPER (if it was already triggered in this candle)
+                # In streaming mode, we don't have active_sniper_order_id, but we can check if it just triggered.
+                sig_type, target_p, sl_p = self.engine.check_entry_signal(live_row, last_price, use_sniper, retest_maker, config, is_ambushing=False)
                 
                 if sig_type == 'RETEST':
                     pending_maker_order = {'side': (1 if target_p > row['ema_h'] else -1), 'price': target_p, 'sl': sl_p, 'timestamp': pd.Timestamp(curr_time)}
                 elif sig_type == 'SNIPER':
+                    # Check again with hysteresis to see if it would have been kept if already active
+                    # (This is a bit redundant for new signal, but good for consistency)
                     if (target_p > row['ema_h'] and m_highs[i] >= target_p) or (target_p < row['ema_h'] and m_lows[i] <= target_p):
                         self._open_position((1 if target_p > row['ema_h'] else -1), target_p, sl_p, pd.Timestamp(curr_time), risk_pct, is_sniper=True)
                 elif sig_type == 'MARKET':

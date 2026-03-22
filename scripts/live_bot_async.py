@@ -270,7 +270,13 @@ class SymbolBotAsync:
         if self.is_halted or self.df_indicators is None: return
         row = self.df_indicators.iloc[-1]
         
-        sig_type, target_p, sl_p = self.engine.check_entry_signal(row, self.last_price, self.use_sniper, self.use_retest_maker, self.settings)
+        # Determine if we already have an active ambush order
+        is_ambushing = bool(self.active_sniper_order_id or self.active_retest_order_id)
+        
+        sig_type, target_p, sl_p = self.engine.check_entry_signal(
+            row, self.last_price, self.use_sniper, self.use_retest_maker, self.settings, 
+            is_ambushing=is_ambushing
+        )
         
         if sig_type is None:
             if self.active_sniper_order_id:
