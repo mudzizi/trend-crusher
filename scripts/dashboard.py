@@ -26,6 +26,7 @@ def index():
     symbols = CONFIG.get("SYMBOLS_LIST", [CONFIG["SYMBOL"]])
     market_summaries = []
     active_positions = []
+    live_monitors = [] # Initialize outside try
     error_msg = None
     
     try:
@@ -33,19 +34,21 @@ def index():
         active_df = db.get_active_trades()
         for _, pos in active_df.iterrows():
             sym = pos['symbol']
-            ticker = exchange.fetch_ticker(sym)
-            curr_price = float(ticker['last'])
+            try:
+                ticker = exchange.fetch_ticker(sym)
+                curr_price = float(ticker['last'])
+            except: curr_price = 0
             
             # Fetch Bot State for SL/Trail info
             state = db.get_bot_state(sym)
             sl_price = 0.0
-            
             if state:
                 sl_price = float(state.get('sl_price', 0.0))
             
-            pnl_pct = ((curr_price / pos['open_price']) - 1) * 100
-            if pos['side'] == 'SHORT':
-                pnl_pct = -pnl_pct
+            pnl_pct = 0
+            if pos['open_price'] > 0:
+                pnl_pct = ((curr_price / pos['open_price']) - 1) * 100
+                if pos['side'] == 'SHORT': pnl_pct = -pnl_pct
                 
             active_positions.append({
                 "symbol": sym,
@@ -58,8 +61,7 @@ def index():
                 "sl": sl_price
             })
 
-        # 2. Fetch Live Monitoring Data (New)
-        live_monitors = []
+        # 2. Fetch Live Monitoring Data
         try:
             live_status_df = db.get_all_live_status()
             for _, row in live_status_df.iterrows():
@@ -104,7 +106,7 @@ def index():
     equity_df = db.get_equity_history()
     chart_data = {
         "labels": equity_df['timestamp'].tolist() if not equity_df.empty else [],
-        "values": equity_df['balance'].tolist() if not equity_df.empty else []
+        "equity_values": equity_df['balance'].tolist() if not equity_df.empty else []
     }
 
     # Performance Stats

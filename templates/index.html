@@ -239,7 +239,7 @@
                 labels: {{ chart_data.labels|tojson }},
                 datasets: [{
                     label: 'Portfolio Equity (USDT)',
-                    data: {{ chart_data.values|tojson }},
+                    data: {{ chart_data.equity_values|tojson }},
                     borderColor: '#38bdf8',
                     backgroundColor: 'rgba(56, 189, 248, 0.1)',
                     fill: true,
