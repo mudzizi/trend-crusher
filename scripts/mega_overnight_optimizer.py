@@ -9,7 +9,7 @@ from src.strategy import TrendCrusherV2
 from src.config import CONFIG
 
 # --- [USER CONFIGURATION] ---
-SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT"]
+SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
 QUARTERS = 4  # Number of 90-day periods to analyze
 # ----------------------------
 

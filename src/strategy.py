@@ -348,7 +348,7 @@ class TrendCrusherV2:
                 
                 # Determine is_ambushing state for SNIPER (if it was already triggered in this candle)
                 # In streaming mode, we don't have active_sniper_order_id, but we can check if it just triggered.
-                sig_type, target_p, sl_p = self.engine.check_entry_signal(live_row, last_price, use_sniper, retest_maker, config, is_ambushing=False)
+                sig_type, target_p, sl_p = self.check_entry_signal(live_row, last_price, use_sniper, retest_maker, config, is_ambushing=False)
                 
                 if sig_type == 'RETEST':
                     pending_maker_order = {'side': (1 if target_p > row['ema_h'] else -1), 'price': target_p, 'sl': sl_p, 'timestamp': pd.Timestamp(curr_time)}
