@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.9.4] - 2026-03-23
+### Added
+- **Hyper-Precision PnL Tracking**: The bot now fully synchronizes its internal PnL calculation with the exchange's actual execution data (`average` price and real `fee`), completely eliminating discrepancies caused by slippage.
+- **Independent SEED Equity Tracking**: Equity curves and dashboard balances are now strictly calculated based on the internal `SEED` plus cumulative realized PnL. This prevents cross-contamination from manual trades or other bots using the same Binance account.
+- **Multi-Symbol Overnight Optimizer**: Added `scripts/mega_overnight_optimizer.py`, a multiprocessing-powered tool that concurrently tests exhaustive parameter grids across multiple symbols (ETH, BTC, SOL, XRP, TRUMP, XAU) partitioned by 90-day quarters.
+
 ## [v11.9.1] - 2026-03-23
 ### Fixed
 - **Emergency Shutdown Logic**: Completely overhauled the `/close_all` command. It now uses `force_exit()` to check actual exchange positions via API and close them regardless of internal bot state.

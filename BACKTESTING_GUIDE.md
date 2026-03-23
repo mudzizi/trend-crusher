@@ -1,12 +1,12 @@
-# 📊 TrendCrusher V11.9.0: The Ultimate Backtesting Guide
+# 📊 TrendCrusher V11.9.4: The Ultimate Backtesting Guide
 
-이 가이드는 TrendCrusher의 업계 최고 수준 정밀 백테스팅 엔진과 시뮬레이션 도구들의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. v11.9.0은 **Look-ahead Bias(미래 참조 오류)**를 원천 차단한 실전형 엔진을 제공합니다.
+이 가이드는 TrendCrusher의 업계 최고 수준 정밀 백테스팅 엔진과 시뮬레이션 도구들의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. v11.9.4은 **Look-ahead Bias(미래 참조 오류)**를 원천 차단한 실전형 엔진을 제공합니다.
 
 ---
 
 ## 🚀 핵심 기술: 스트리밍 시뮬레이션 (Streaming Simulation)
 
-기존 백테스트의 가장 큰 약점은 1시간봉이 마감된 후의 지표를 사용하여 그 시간대 내부의 진입을 결정하는 '미래 참조'였습니다. TrendCrusher v11.9.0은 이를 혁신적으로 해결했습니다.
+기존 백테스트의 가장 큰 약점은 1시간봉이 마감된 후의 지표를 사용하여 그 시간대 내부의 진입을 결정하는 '미래 참조'였습니다. TrendCrusher v11.9.4은 이를 혁신적으로 해결했습니다.
 
 ### 1. 단일 진실 공급원 (Single Source of Truth)
 - **공통 엔진**: `src/strategy.py`의 `TrendCrusherV2`가 라이브 거래와 모든 백테스트의 유일한 판단 기준입니다.
@@ -49,7 +49,7 @@
 
 ## 📊 결과 해석 및 시각화 (Visualization)
 
-v11.9.0은 데이터 수치를 넘어 시각적인 직관을 제공합니다.
+v11.9.4은 데이터 수치를 넘어 시각적인 직관을 제공합니다.
 
 1.  **종합 시각 리포트 (Visual Chart)**:
     - **Price Panel**: 진입(▲/▼)과 청산(X) 지점을 가격 차트 위에 지표와 함께 표시.
