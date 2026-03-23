@@ -119,6 +119,9 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     print(f"   - Testing {len(tasks)} new combinations...")
     
     best_res, best_eff = None, -9999
+    completed = 0
+    total_tasks = len(tasks)
+    q_start_time = time.time()
     
     if not os.path.exists(full_log_file):
         with open(full_log_file, 'w', newline='') as f:
@@ -134,9 +137,16 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
                     writer.writerow(res); f.flush(); os.fsync(f.fileno())
                     if res['Eff'] > best_eff and res['Trades'] >= 1: # Lowered trade limit for XAU
                         best_eff, best_res = res['Eff'], res
+                
+                completed += 1
+                if completed % 50 == 0 or completed == total_tasks:
+                    ts = datetime.now().strftime('%H:%M:%S')
+                    elapsed = time.time() - q_start_time
+                    print(f"   - [{ts}] Progress: {completed}/{total_tasks} ({completed/total_tasks*100:.1f}%) | Elapsed: {str(timedelta(seconds=int(elapsed)))}")
     return best_res
 
 def main():
+    start_time = time.time()
     base_repo_dir = "reports/mega_optimization"
     os.makedirs(base_repo_dir, exist_ok=True)
     completed_set = load_completed_combos(base_repo_dir)
@@ -165,7 +175,11 @@ def main():
                 pd.DataFrame(all_best_results).to_csv(summary_file, index=False)
                 print(f"✅ Best for {sym} {best['Quarter']}: Return {best['Return']}% | Trades {best['Trades']}")
 
-    print(f"\nOPTIMIZATION COMPLETE! Results in: {session_dir}")
+    duration = time.time() - start_time
+    print(f"\n{'='*60}")
+    print(f"OPTIMIZATION COMPLETE! Results in: {session_dir}")
+    print(f"Total Time Taken: {str(timedelta(seconds=int(duration)))}")
+    print(f"{'='*60}")
 
 if __name__ == "__main__":
     main()

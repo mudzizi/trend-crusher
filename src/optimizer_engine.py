@@ -15,6 +15,7 @@ class OptimizerEngine:
     """
     def __init__(self, config=CONFIG):
         self.config = config
+        self.symbol = config.get("SYMBOL", "BTC/USDT") # Default for tests
         self.param_grid = {
             "VOL_MULTIPLIER": [1.5, 2.0, 2.5, 3.0],
             "ADX_FILTER_LEVEL": [15, 20, 25, 30],
@@ -25,6 +26,7 @@ class OptimizerEngine:
         """
         Runs a grid search over the last N days of data to find optimal settings.
         """
+        self.symbol = symbol # Update for tracking
         logger.info(f"🧠 Optimizing {symbol} using last {lookback_days} days...")
         
         # 1. Update/Fetch latest data
@@ -33,18 +35,15 @@ class OptimizerEngine:
         
         clean_sym = symbol.replace('/', '_')
         try:
-            df_sig = pd.read_csv(f"data/{clean_sym}_1h.csv")
-            df_trend = pd.read_csv(f"data/{clean_sym}_4h.csv")
             df_check = pd.read_csv(f"data/{clean_sym}_1m.csv")
         except FileNotFoundError:
             logger.error(f"Data files not found for {symbol}")
             return None
 
         # Filter for recent N days
+        df_check['timestamp'] = pd.to_datetime(df_check['timestamp'])
         cutoff = pd.Timestamp.now() - pd.Timedelta(days=lookback_days)
-        df_sig['timestamp'] = pd.to_datetime(df_sig['timestamp'])
-        df_sig = df_sig[df_sig['timestamp'] > cutoff]
-        # (Other DFs will be aligned inside the strategy runner)
+        df_check = df_check[df_check['timestamp'] > cutoff]
 
         results = []
         
@@ -55,30 +54,29 @@ class OptimizerEngine:
                     
                     test_cfg = self.config.copy()
                     test_cfg.update({
+                        "SYMBOL": symbol,
                         "VOL_MULTIPLIER": vol_m,
                         "ADX_FILTER_LEVEL": adx_f,
                         "EMA_TREND_PERIOD": ema_p,
-                        "USE_ADAPTIVE_TRAIL": True # Always use safety features
+                        "USE_ADAPTIVE_TRAIL": True
                     })
-                    
                     strategy = TrendCrusherV2(config=test_cfg)
-                    trades, equity_curve = strategy.run_precision_backtest(df_sig, df_trend, df_check)
-                    
-                    if not equity_curve: continue
-                    
-                    final_return = ((equity_curve[-1] / test_cfg["SEED"]) - 1) * 100
-                    mdd = self._calculate_mdd(equity_curve) * 100
-                    efficiency = final_return / (mdd + 1e-6) # Return/MDD Ratio
-                    
-                    results.append({
-                        "vol_m": vol_m,
-                        "adx_f": adx_f,
-                        "ema_p": ema_p,
-                        "return": final_return,
-                        "mdd": mdd,
-                        "efficiency": efficiency,
-                        "trades": len(trades) // 2
-                    })
+                    trades, equity_curve, _ = strategy.run_streaming_backtest(df_check)
+
+                    if len(trades) >= 2:
+                        final_return = ((strategy.capital / test_cfg["SEED"]) - 1) * 100
+                        mdd = self._calculate_mdd(equity_curve) * 100
+                        efficiency = final_return / (mdd + 0.1) # Handle low MDD
+                        
+                        results.append({
+                            "vol_m": vol_m,
+                            "adx_f": adx_f,
+                            "ema_p": ema_p,
+                            "return": final_return,
+                            "mdd": mdd,
+                            "efficiency": efficiency,
+                            "trades": len(trades) // 2
+                        })
 
         if not results:
             return None
@@ -90,6 +88,7 @@ class OptimizerEngine:
         return best
 
     def _calculate_mdd(self, equity_curve):
+        if not equity_curve: return 0
         curve = np.array(equity_curve)
         peak = np.maximum.accumulate(curve)
         drawdown = (peak - curve) / (peak + 1e-10)

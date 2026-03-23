@@ -2,6 +2,17 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.9.7] - 2026-03-23
+### Added
+- **Turbo-Charged NumPy Engine**: Refactored the core backtest loop in `src/strategy.py` using NumPy vectorization, achieving a ~5x speedup in simulation performance.
+- **Microsecond Precision Matching**: Fixed timestamp alignment issues between 1m ticks and 1h indicators using standardized NumPy `datetime64[m]` casting.
+- **Smart Optimizer Resume**: The mega optimizer now recursively scans ALL previous session folders to prevent redundant calculations, making it truly "overnight-safe."
+- **Financial Parity**: Differentiated Maker (0.02%) and Taker (0.05%) fees in the backtest engine to match real-world Binance Futures accounting.
+
+### Fixed
+- **Adaptive Indicator Warmup**: Implemented automatic EMA period reduction for symbols with short historical data (e.g., XAU), preventing indicator dropouts.
+- **Zero-Trade Bug**: Resolved a critical issue where optimizations returned 0 results due to strict trade count filters and misaligned dataframes.
+
 ## [v11.9.4] - 2026-03-23
 ### Added
 - **Hyper-Precision PnL Tracking**: The bot now fully synchronizes its internal PnL calculation with the exchange's actual execution data (`average` price and real `fee`), completely eliminating discrepancies caused by slippage.

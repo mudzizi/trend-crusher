@@ -61,9 +61,21 @@ class TrendCrusherV2:
         self.sl_price = sl
         self.quantity = self.calculate_position_size(self.entry_price, self.sl_price, risk_pct)
         if self.quantity > 0:
+            # Deduct entry fee immediately
+            fee_rate = 0.0002 if is_maker else 0.0005
+            fee = self.entry_price * self.quantity * fee_rate
+            self.capital -= fee
+            
             self.position = direction
             self.max_price_seen = self.min_price_seen = self.entry_price
-            self.trades.append({'time': timestamp, 'type': 'OPEN', 'side': 'LONG' if direction==1 else 'SHORT', 'price': self.entry_price})
+            self.trades.append({
+                'time': timestamp, 
+                'type': 'OPEN', 
+                'side': 'LONG' if direction==1 else 'SHORT', 
+                'price': self.entry_price,
+                'is_sniper': is_sniper,
+                'is_maker': is_maker
+            })
 
     def _close_position(self, price, timestamp):
         if self.position == 0: return

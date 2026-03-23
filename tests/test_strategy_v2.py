@@ -139,6 +139,7 @@ def test_retest_maker_entry_and_fee(base_config):
     
     # Reset
     strategy.capital = 10000.0
+    strategy.position = 0
     
     # Case B: Retest Maker Entry
     strategy._open_position(1, 100.0, 90.0, pd.Timestamp.now(), 0.02, is_maker=True)
