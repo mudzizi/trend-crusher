@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v11.9.1] - 2026-03-23
+### Fixed
+- **Emergency Shutdown Logic**: Completely overhauled the `/close_all` command. It now uses `force_exit()` to check actual exchange positions via API and close them regardless of internal bot state.
+- **Async Synchronization**: Implemented `asyncio.gather` for emergency shutdown tasks to ensure all closure orders are dispatched before the process terminates.
+- **ZeroDivisionError**: Fixed a crash in `execute_exit()` when calculating PnL if `entry_price` was zero or uninitialized.
+
 ## [v11.9.0] - 2026-03-23
 ### Added
 - **Signal Hysteresis (Ambush Stability)**: Introduced a 20% hysteresis buffer for Volume and ADX filters when an order is already active (Ambushing). This prevents "order spam" and unnecessary cancellations caused by minor intra-bar flickering.

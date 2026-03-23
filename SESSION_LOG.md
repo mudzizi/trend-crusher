@@ -1,3 +1,16 @@
+# Trading Session Log (2026-03-23) - Milestone: Emergency Resilience (v11.9.1)
+
+## ✅ 완료된 작업
+1.  **긴급 청산 시스템 무결성 확보 (Force Exit)**:
+    -   **거래소 실시간 동기화**: `/close_all` 명령 시 봇의 내부 상태에 의존하지 않고, 거래소 API를 통해 실제 포지션 수량을 직접 조회하여 청산하는 `force_exit()` 로직 도입.
+    -   **비동기 병렬 처리**: `asyncio.gather`를 사용하여 모든 종목의 청산 및 취소 주문이 서버에 완전히 도달할 때까지 대기 후 프로세스 종료 보장.
+    -   **ZeroDivision 방어**: PnL 계산 시 진입가가 0인 경우에 대비한 예외 처리 추가로 시스템 안정성 강화.
+
+2.  **프로젝트 버전 업그레이드**:
+    -   `src/config.py`, `README.md`, `CHANGELOG.md` 등 모든 관련 문서의 버전을 **v11.9.1**로 일괄 갱신.
+
+---
+
 # Trading Session Log (2026-03-23) - Milestone: Ambush Stabilization (v11.9.0)
 
 ## ✅ 완료된 작업

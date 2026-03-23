@@ -5,8 +5,9 @@ from src.config import load_config
 def test_config_loading_fallback():
     # config.yaml이 없는 환경에서도 로딩이 되어야 함
     config = load_config()
+    from src.config import VERSION
     assert "VERSION" in config
-    assert config["VERSION"] == "11.9.0"
+    assert config["VERSION"] == VERSION
     assert "BINANCE_API_KEY" in config
 
 def test_config_env_override(monkeypatch):

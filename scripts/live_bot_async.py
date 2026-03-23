@@ -330,16 +330,22 @@ class SymbolBotAsync:
             if not self.settings["DRY_RUN"]:
                 side = 'buy' if direction == 1 else 'sell'
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
+                
+                # IMPORTANT: Use actual exchange-reported fill price and quantity
+                self.entry_price = float(order.get('average', order.get('price', self.last_price)))
                 self.quantity = float(order.get('filled', self.quantity))
                 
                 try: 
                     params = {'stopPrice': self.sl_price, 'reduceOnly': True}
-                    await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
+                    sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
+                    self.sl_order_id = sl_order['id']
                 except Exception as sl_err:
                     self.logger.error(f"🚨 CRITICAL SL FAILED: {sl_err}")
                     await self.exchange.create_market_order(self.symbol, 'sell' if direction == 1 else 'buy', self.quantity); return
+            else:
+                self.entry_price = self.last_price
             
-            self.position, self.entry_price = direction, self.last_price
+            self.position = direction
             self.max_price_seen = self.min_price_seen = self.entry_price
             self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
             self.persist_state()
@@ -347,20 +353,97 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Entry error: {e}")
 
     async def execute_exit(self):
-        pnl_pct = ((self.last_price / self.entry_price) - 1) * 100 * self.position
+        # Guard against ZeroDivision or invalid state
+        if self.position == 0: return
+        
         try:
+            pnl_pct = 0
+            pnl_usdt = 0
+            exit_price = self.last_price
+            
             if not self.settings["DRY_RUN"]:
                 side = 'sell' if self.position == 1 else 'buy'
-                await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
+                # 1. Execute Market Order and get the REAL response
+                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
+                
+                # 2. Extract REAL filled price and total cost from exchange
+                exit_price = float(order.get('average', order.get('price', self.last_price)))
+                filled_qty = float(order.get('filled', self.quantity))
+                
+                # 3. Calculate REAL PnL using exchange-provided fill price
+                pnl_usdt = (exit_price - self.entry_price) * filled_qty * self.position
+                
+                # 4. Extract REAL fee if available, else estimate
+                fee = order.get('fee', {}).get('cost', exit_price * filled_qty * 0.0005)
+                pnl_usdt -= float(fee)
+                
                 if self.sl_order_id:
                     try: await self.retry_api_call(self.exchange.cancel_order, self.sl_order_id, self.symbol)
                     except: pass
-            self.db.log_trade_close(self.symbol, self.last_price, pnl_pct, 0)
-            await self.pm.update_balance_after_trade(self.symbol, 0)
+            else:
+                # Dry Run fallback
+                pnl_usdt = (exit_price - self.entry_price) * self.quantity * self.position
+            
+            if self.entry_price > 0:
+                pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
+            
+            # 5. Log to DB and Update Internal Equity (SEED + Accumulated PnL)
+            self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
+            
+            # Update internal portfolio manager with the trade's PnL
+            await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
+            
+            # Record total equity based on internal tracking (SEED + PnL)
+            new_total_equity = await self.pm.get_total_equity()
+            self.db.log_equity(new_total_equity, 'TOTAL')
+            
             self.position, self.sl_order_id = 0, None
             self.persist_state()
-            self.notifier.notify_exit(f"Async {self.symbol}", self.last_price, pnl_pct, 0)
+            self.notifier.notify_exit(f"Async {self.symbol}", exit_price, pnl_pct, pnl_usdt)
         except Exception as e: self.logger.error(f"Exit error: {e}")
+
+    async def force_exit(self):
+        """
+        Hyper-safe exit that checks actual exchange positions to close them.
+        """
+        try:
+            if self.settings["DRY_RUN"]:
+                self.position = 0
+                self.persist_state()
+                return
+
+            # 1. Fetch real position from exchange to ensure closure
+            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
+            pos = next((p for p in positions if p['symbol'] == self.symbol), None)
+            
+            if pos and float(pos['contracts']) != 0:
+                side = 'sell' if float(pos['contracts']) > 0 else 'buy'
+                qty = abs(float(pos['contracts']))
+                self.logger.info(f"🆘 Force closing {qty} {self.symbol} ({side})")
+                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, qty)
+                
+                # Try to calculate PnL using the real response
+                if self.entry_price > 0:
+                    exit_price = float(order.get('average', order.get('price', self.last_price)))
+                    pnl_usdt = (exit_price - self.entry_price) * qty * self.position
+                    fee = order.get('fee', {}).get('cost', exit_price * qty * 0.0005)
+                    pnl_usdt -= float(fee)
+                    
+                    pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
+                    self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
+                    await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
+                    
+                    new_total_equity = await self.pm.get_total_equity()
+                    self.db.log_equity(new_total_equity, 'TOTAL')
+                
+            # 2. Cancel all open orders for this symbol
+            await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
+            
+            # 3. Reset internal state
+            self.position = 0
+            self.persist_state()
+        except Exception as e:
+            self.logger.error(f"❌ Force exit failed for {self.symbol}: {e}")
 
     def persist_state(self):
         self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_price, self.sl_order_id)
@@ -446,13 +529,21 @@ async def handle_commands(bots, notifier, pm):
                         for b in bots.values(): b.is_halted = False
                         notifier.notify_status("▶️ New entries RESUMED.")
                     elif cmd == "/close_all":
-                        notifier.notify_status("⚠️ EMERGENCY SHUTDOWN...")
+                        notifier.notify_status("🆘 EMERGENCY SHUTDOWN: Force closing all positions and cancelling orders...")
+                        tasks = []
                         for b in bots.values():
-                            if b.position != 0: await b.execute_exit()
-                            if b.active_sniper_order_id: await b.cancel_sniper_ambush()
-                            if b.active_retest_order_id: await b.cancel_retest_order()
+                            # Use force_exit to ensure actual exchange data cleanup
+                            tasks.append(b.force_exit())
+                        
+                        if tasks:
+                            await asyncio.gather(*tasks, return_exceptions=True)
+                        
+                        notifier.notify_status("🛑 ALL positions force-closed. Bot process terminating.")
+                        await asyncio.sleep(2) 
                         os._exit(0)
-        except Exception as e: logger.error(f"Command Error: {e}")
+                # Correctly end the for loop here
+        except Exception as e:
+            logger.error(f"Command processing error: {e}")
         await asyncio.sleep(10)
 
 async def auto_sentinel_loop(bots, notifier, pm):
