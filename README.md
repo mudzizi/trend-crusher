@@ -1,7 +1,7 @@
-# 🚀 TrendCrusher V11.9.6: The Unified Strategy Engine
+# 🚀 TrendCrusher V11.9.7: The Unified Strategy Engine
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
-> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.9.6 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.
+> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V11.9.7 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.
 
 ---
 
@@ -115,5 +115,5 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 3.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V11.9.6 Development Team**
+**TrendCrusher V11.9.7 Development Team**
 *Technical Co-Founder by AI Agent*

@@ -5,7 +5,6 @@ import itertools
 import time
 import csv
 import glob
-import traceback
 from datetime import datetime, timedelta
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from src.strategy import TrendCrusherV2, get_all_base_bars
@@ -13,7 +12,8 @@ from src.indicators import calculate_donchian, calculate_ema, calculate_atr, cal
 from src.config import CONFIG
 
 # --- [USER CONFIGURATION] ---
-SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
+#SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
+SYMBOLS = ["ETH_USDT"]
 QUARTERS = 4
 # ----------------------------
 
@@ -26,9 +26,7 @@ def calculate_mdd(equity_curve):
 
 def load_completed_combos(base_dir):
     completed = set()
-    print(f"🔍 Scanning all previous reports in {base_dir} for resume...")
     csv_files = glob.glob(os.path.join(base_dir, "**", "*.csv"), recursive=True)
-    
     for log_file in csv_files:
         try:
             df = pd.read_csv(log_file)
@@ -57,6 +55,7 @@ def worker_task(task_args):
         
         ret = ((strategy.capital / CONFIG["SEED"]) - 1) * 100
         mdd = calculate_mdd(equity_curve) * 100
+        # Efficiency Score: Prioritize higher return with lower MDD
         efficiency = ret / (mdd + 0.1) if mdd > 0 else ret / 0.1
         
         return {
@@ -64,22 +63,16 @@ def worker_task(task_args):
             "Vol": vol, "Trail": trail, "ADX": adx, "Don": don, "Adapt": "Yes" if len(adapt) > 0 else "No",
             "Return": round(ret, 2), "MDD": round(mdd, 2), "Eff": round(efficiency, 2), "Trades": len(trades)
         }
-    except Exception as e:
-        # In multi-processing, we need to print or return the error
-        print(f"❌ Worker Error for {sym} {combo}: {e}")
-        return None
+    except: return None
 
 def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_log_file, completed_set):
     q_name = f"Q{quarter_idx}"
-    
-    # Check data availability for this range
     data_1m_filtered = df_1m[(df_1m['timestamp'] >= start_date) & (df_1m['timestamp'] < end_date)].copy()
-    if len(data_1m_filtered) < 1440 * 7: # Need at least 7 days of data
-        print(f"⚠️ [{q_name}] Skipping {sym}: Insufficient data ({len(data_1m_filtered)} mins found).")
-        return None
+    if len(data_1m_filtered) < 1440 * 3: return None # Min 3 days
 
     print(f"🚀 [{q_name}] Optimizing {sym} | {start_date.date()} ~ {end_date.date()}")
 
+    # Grids
     vol_multipliers = [1.5, 2.0, 2.5]
     trailing_mults = [3.5, 4.5]
     adx_thresholds = [15, 20]
@@ -88,11 +81,19 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     modes = [('Market', False, False), ('Sniper', True, False), ('Retest', False, True)]
     adaptive_options = [[], [{"pnl_pct": 2.0, "tighten_ratio": 0.5}], [{"pnl_pct": 5.0, "tighten_ratio": 0.7}]]
     
-    # 1. Pre-calculation
-    print(f"   - Pre-calculating core indicators...")
+    # 1. Pre-calculation (Robust to short data)
     df_1h_base = get_all_base_bars(data_1m_filtered, "1h")
     df_4h_base = get_all_base_bars(data_1m_filtered, "4h")
-    ema_h = calculate_ema(df_4h_base, 200).reindex(df_1h_base['timestamp']).ffill().values
+    
+    # Adaptive EMA Period
+    ema_period = 200
+    if len(df_4h_base) < ema_period:
+        ema_period = max(10, len(df_4h_base) // 2)
+    
+    ema_values = calculate_ema(df_4h_base, ema_period)
+    ema_s = pd.Series(ema_values.values, index=df_4h_base['timestamp'])
+    ema_h = ema_s.reindex(df_1h_base['timestamp']).ffill().values
+    
     atr = calculate_atr(df_1h_base, 14)
     avg_vol = calculate_avg_vol(df_1h_base, 20)
     adx = calculate_adx(df_1h_base, 14)
@@ -102,9 +103,10 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
         df_ind = df_1h_base.copy()
         df_ind['upper'], df_ind['lower'] = calculate_donchian(df_ind, dp)
         df_ind['ema_h'], df_ind['atr'], df_ind['avg_vol'], df_ind['adx'] = ema_h, atr, avg_vol, adx
-        ind_cache[dp] = df_ind.dropna()
+        # Drop only essential NaNs
+        ind_cache[dp] = df_ind.dropna(subset=['upper', 'lower', 'atr', 'avg_vol', 'adx'])
 
-    # 2. Filtering
+    # 2. Tasks
     all_combos = list(itertools.product(vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, risk_pcts, modes, adaptive_options))
     tasks = []
     for combo in all_combos:
@@ -113,84 +115,57 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
         if key not in completed_set:
             tasks.append((data_1m_filtered, ind_cache[don], combo, sym, q_name))
 
-    total_tasks = len(tasks)
-    if total_tasks == 0:
-        print(f"   - All combinations already completed. Skipping.")
-        return None
-
-    print(f"   - Testing {total_tasks} combinations...")
+    if not tasks: return None
+    print(f"   - Testing {len(tasks)} new combinations...")
     
     best_res, best_eff = None, -9999
-    completed = 0
     
-    # Write Header if file is new
     if not os.path.exists(full_log_file):
         with open(full_log_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"])
-            writer.writeheader()
+            csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"]).writeheader()
 
     with open(full_log_file, 'a', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"])
-        
         with ProcessPoolExecutor() as executor:
-            futures = {executor.submit(worker_task, t): t[2] for t in tasks}
+            futures = {executor.submit(worker_task, t): t for t in tasks}
             for future in as_completed(futures):
-                try:
-                    res = future.result()
-                    if res:
-                        writer.writerow(res)
-                        f.flush()
-                        os.fsync(f.fileno()) # Force write to disk
-                        
-                        if res['Eff'] > best_eff and res['Trades'] >= 3:
-                            best_eff, best_res = res['Eff'], res
-                except Exception as e:
-                    print(f"❌ Error in worker: {e}")
-                
-                completed += 1
-                if completed % 100 == 0 or completed == total_tasks:
-                    print(f"   - Progress: {completed}/{total_tasks} ({completed/total_tasks*100:.1f}%)")
-    
+                res = future.result()
+                if res:
+                    writer.writerow(res); f.flush(); os.fsync(f.fileno())
+                    if res['Eff'] > best_eff and res['Trades'] >= 1: # Lowered trade limit for XAU
+                        best_eff, best_res = res['Eff'], res
     return best_res
 
 def main():
     base_repo_dir = "reports/mega_optimization"
     os.makedirs(base_repo_dir, exist_ok=True)
-    
     completed_set = load_completed_combos(base_repo_dir)
-    print(f"✅ Smart Resume: Found {len(completed_set)} previous results.")
     
-    today_id = datetime.now().strftime('%Y%m%d')
-    session_dir = f"{base_repo_dir}/run_{today_id}"
+    log_date = datetime.now().strftime('%Y%m%d_%H%M')
+    session_dir = f"{base_repo_dir}/run_{log_date}"
     os.makedirs(session_dir, exist_ok=True)
     
     full_log_file = f"{session_dir}/full_details.csv"
-    summary_file = f"{session_dir}/summary.csv"
-    
-    print(f"📂 Saving results to: {session_dir}")
+    summary_file = f"{session_dir}/best_summary.csv"
     
     all_best_results = []
     for sym in SYMBOLS:
         print(f"\n{'='*20} STARTING SYMBOL: {sym} {'='*20}")
         data_path = f"data/{sym}_1m.csv"
-        if not os.path.exists(data_path):
-            print(f"❌ Data file not found: {data_path}")
-            continue
-            
+        if not os.path.exists(data_path): continue
         df_1m = pd.read_csv(data_path, parse_dates=['timestamp'])
         latest_date = df_1m['timestamp'].max()
         
         for q in range(1, QUARTERS + 1):
             end_date = latest_date - timedelta(days=(q-1)*90)
             start_date = end_date - timedelta(days=90)
-            
             best = optimize_symbol_quarter(sym, q, df_1m, start_date, end_date, full_log_file, completed_set)
             if best:
                 all_best_results.append(best)
                 pd.DataFrame(all_best_results).to_csv(summary_file, index=False)
-                print(f"✅ Best for {sym} Q{q}: Return {best['Return']}% | MDD {best['MDD']}%")
+                print(f"✅ Best for {sym} {best['Quarter']}: Return {best['Return']}% | Trades {best['Trades']}")
 
-    print(f"\nOVERNIGHT OPTIMIZATION COMPLETE!")
+    print(f"\nOPTIMIZATION COMPLETE! Results in: {session_dir}")
 
 if __name__ == "__main__":
     main()
