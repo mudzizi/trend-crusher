@@ -3,14 +3,18 @@ import numpy as np
 import os
 import itertools
 import time
+import csv
+import glob
+import traceback
 from datetime import datetime, timedelta
-from concurrent.futures import ProcessPoolExecutor
-from src.strategy import TrendCrusherV2
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from src.strategy import TrendCrusherV2, get_all_base_bars
+from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
 from src.config import CONFIG
 
 # --- [USER CONFIGURATION] ---
 SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
-QUARTERS = 4  # Number of 90-day periods to analyze
+QUARTERS = 4
 # ----------------------------
 
 def calculate_mdd(equity_curve):
@@ -20,100 +24,157 @@ def calculate_mdd(equity_curve):
     drawdown = (peak - curve) / (peak + 1e-10)
     return np.max(drawdown)
 
+def load_completed_combos(base_dir):
+    completed = set()
+    print(f"🔍 Scanning all previous reports in {base_dir} for resume...")
+    csv_files = glob.glob(os.path.join(base_dir, "**", "*.csv"), recursive=True)
+    
+    for log_file in csv_files:
+        try:
+            df = pd.read_csv(log_file)
+            if 'Adapt' in df.columns and 'Symbol' in df.columns:
+                for _, row in df.iterrows():
+                    key = (str(row['Symbol']), str(row['Quarter']), str(row['Mode']), float(row['Risk']), 
+                           float(row['Vol']), float(row['Trail']), float(row['ADX']), int(row['Don']), str(row['Adapt']))
+                    completed.add(key)
+        except: continue
+    return completed
+
 def worker_task(task_args):
-    """
-    Function executed by each process.
-    """
-    data_1m, start_date, end_date, combo = task_args
-    vol, trail, adx, don, risk, (m_name, sniper, retest), adapt = combo
-    
-    strategy = TrendCrusherV2(config=CONFIG)
-    trades, equity_curve, _ = strategy.run_streaming_backtest(
-        data_1m,
-        vol_mult=vol,
-        atr_trail_mult=trail,
-        risk_pct=risk,
-        adx_threshold=adx,
-        donchian_period=don,
-        use_sniper=sniper,
-        retest_maker=retest,
-        use_adaptive=len(adapt) > 0,
-        adaptive_steps=adapt
-    )
-    
-    if len(trades) >= 3:
+    try:
+        data_1m, df_ind, combo, sym, quarter_name = task_args
+        vol, trail, adx, don, risk, (m_name, sniper, retest), adapt = combo
+        
+        strategy = TrendCrusherV2(config=CONFIG)
+        trades, equity_curve, _ = strategy.run_streaming_backtest(
+            data_1m,
+            vol_mult=vol, atr_trail_mult=trail, risk_pct=risk,
+            adx_threshold=adx, donchian_period=don,
+            use_sniper=sniper, retest_maker=retest,
+            use_adaptive=len(adapt) > 0, adaptive_steps=adapt,
+            pre_calculated_ind=df_ind
+        )
+        
         ret = ((strategy.capital / CONFIG["SEED"]) - 1) * 100
         mdd = calculate_mdd(equity_curve) * 100
-        # Efficiency Score: Prioritize higher return with lower MDD
         efficiency = ret / (mdd + 0.1) if mdd > 0 else ret / 0.1
+        
         return {
-            "Efficiency": efficiency,
-            "Return": ret,
-            "MDD": mdd,
-            "Trades": len(trades),
-            "Config": {
-                "Mode": m_name, "Risk": risk, "Vol": vol, "Trail": trail, 
-                "ADX": adx, "Don": don, "Adapt": "Yes" if len(adapt) > 0 else "No",
-                "Adapt_Steps": adapt
-            }
+            "Symbol": sym, "Quarter": quarter_name, "Mode": m_name, "Risk": risk,
+            "Vol": vol, "Trail": trail, "ADX": adx, "Don": don, "Adapt": "Yes" if len(adapt) > 0 else "No",
+            "Return": round(ret, 2), "MDD": round(mdd, 2), "Eff": round(efficiency, 2), "Trades": len(trades)
         }
-    return None
+    except Exception as e:
+        # In multi-processing, we need to print or return the error
+        print(f"❌ Worker Error for {sym} {combo}: {e}")
+        return None
 
-def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date):
-    print(f"🚀 [Q{quarter_idx}] Optimizing {sym} | {start_date.date()} ~ {end_date.date()}")
+def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_log_file, completed_set):
+    q_name = f"Q{quarter_idx}"
     
+    # Check data availability for this range
     data_1m_filtered = df_1m[(df_1m['timestamp'] >= start_date) & (df_1m['timestamp'] < end_date)].copy()
-    if len(data_1m_filtered) < 1440: return None
+    if len(data_1m_filtered) < 1440 * 7: # Need at least 7 days of data
+        print(f"⚠️ [{q_name}] Skipping {sym}: Insufficient data ({len(data_1m_filtered)} mins found).")
+        return None
 
-    # Comprehensive Grid
-    vol_multipliers = [1.5, 2.0, 2.5, 3.0]
-    trailing_mults = [2.5, 3.5, 4.5]
-    adx_thresholds = [15, 20, 25]
-    donchian_periods = [10, 20, 30]
+    print(f"🚀 [{q_name}] Optimizing {sym} | {start_date.date()} ~ {end_date.date()}")
+
+    vol_multipliers = [1.5, 2.0, 2.5]
+    trailing_mults = [3.5, 4.5]
+    adx_thresholds = [15, 20]
+    donchian_periods = [10, 20]
     risk_pcts = [0.02, 0.05, 0.10]
-    modes = [
-        ('Market', False, False),
-        ('Sniper', True, False),
-        ('Retest', False, True)
-    ]
-    adaptive_options = [
-        [], # None
-        [{"pnl_pct": 2.0, "tighten_ratio": 0.5}], # Aggressive
-        [{"pnl_pct": 5.0, "tighten_ratio": 0.7}], # Moderate
-        [{"pnl_pct": 3.0, "tighten_ratio": 0.6}, {"pnl_pct": 10.0, "tighten_ratio": 0.4}] # Two-step
-    ]
+    modes = [('Market', False, False), ('Sniper', True, False), ('Retest', False, True)]
+    adaptive_options = [[], [{"pnl_pct": 2.0, "tighten_ratio": 0.5}], [{"pnl_pct": 5.0, "tighten_ratio": 0.7}]]
     
-    combinations = list(itertools.product(vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, risk_pcts, modes, adaptive_options))
+    # 1. Pre-calculation
+    print(f"   - Pre-calculating core indicators...")
+    df_1h_base = get_all_base_bars(data_1m_filtered, "1h")
+    df_4h_base = get_all_base_bars(data_1m_filtered, "4h")
+    ema_h = calculate_ema(df_4h_base, 200).reindex(df_1h_base['timestamp']).ffill().values
+    atr = calculate_atr(df_1h_base, 14)
+    avg_vol = calculate_avg_vol(df_1h_base, 20)
+    adx = calculate_adx(df_1h_base, 14)
     
-    best_res = None
-    max_workers = os.cpu_count() or 4
+    ind_cache = {}
+    for dp in donchian_periods:
+        df_ind = df_1h_base.copy()
+        df_ind['upper'], df_ind['lower'] = calculate_donchian(df_ind, dp)
+        df_ind['ema_h'], df_ind['atr'], df_ind['avg_vol'], df_ind['adx'] = ema_h, atr, avg_vol, adx
+        ind_cache[dp] = df_ind.dropna()
+
+    # 2. Filtering
+    all_combos = list(itertools.product(vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, risk_pcts, modes, adaptive_options))
+    tasks = []
+    for combo in all_combos:
+        vol, trail, adx_val, don, risk, (m_name, sniper, retest), adapt = combo
+        key = (str(sym), str(q_name), str(m_name), float(risk), float(vol), float(trail), float(adx_val), int(don), "Yes" if len(adapt) > 0 else "No")
+        if key not in completed_set:
+            tasks.append((data_1m_filtered, ind_cache[don], combo, sym, q_name))
+
+    total_tasks = len(tasks)
+    if total_tasks == 0:
+        print(f"   - All combinations already completed. Skipping.")
+        return None
+
+    print(f"   - Testing {total_tasks} combinations...")
     
-    # Prepare task list
-    tasks = [(data_1m_filtered, start_date, end_date, combo) for combo in combinations]
+    best_res, best_eff = None, -9999
+    completed = 0
     
-    print(f"   - Testing {len(tasks)} combinations using {max_workers} cores...")
+    # Write Header if file is new
+    if not os.path.exists(full_log_file):
+        with open(full_log_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"])
+            writer.writeheader()
+
+    with open(full_log_file, 'a', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"])
+        
+        with ProcessPoolExecutor() as executor:
+            futures = {executor.submit(worker_task, t): t[2] for t in tasks}
+            for future in as_completed(futures):
+                try:
+                    res = future.result()
+                    if res:
+                        writer.writerow(res)
+                        f.flush()
+                        os.fsync(f.fileno()) # Force write to disk
+                        
+                        if res['Eff'] > best_eff and res['Trades'] >= 3:
+                            best_eff, best_res = res['Eff'], res
+                except Exception as e:
+                    print(f"❌ Error in worker: {e}")
+                
+                completed += 1
+                if completed % 100 == 0 or completed == total_tasks:
+                    print(f"   - Progress: {completed}/{total_tasks} ({completed/total_tasks*100:.1f}%)")
     
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        results = list(executor.map(worker_task, tasks))
-    
-    # Filter and find best
-    valid_results = [r for r in results if r is not None]
-    if not valid_results: return None
-    
-    best_res = max(valid_results, key=lambda x: x['Efficiency'])
     return best_res
 
 def main():
-    os.makedirs("reports/mega_optimization", exist_ok=True)
-    results_file = f"reports/mega_optimization/results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    base_repo_dir = "reports/mega_optimization"
+    os.makedirs(base_repo_dir, exist_ok=True)
     
-    all_final_results = []
+    completed_set = load_completed_combos(base_repo_dir)
+    print(f"✅ Smart Resume: Found {len(completed_set)} previous results.")
     
+    today_id = datetime.now().strftime('%Y%m%d')
+    session_dir = f"{base_repo_dir}/run_{today_id}"
+    os.makedirs(session_dir, exist_ok=True)
+    
+    full_log_file = f"{session_dir}/full_details.csv"
+    summary_file = f"{session_dir}/summary.csv"
+    
+    print(f"📂 Saving results to: {session_dir}")
+    
+    all_best_results = []
     for sym in SYMBOLS:
         print(f"\n{'='*20} STARTING SYMBOL: {sym} {'='*20}")
         data_path = f"data/{sym}_1m.csv"
         if not os.path.exists(data_path):
-            print(f"❌ Data missing for {sym}, skipping...")
+            print(f"❌ Data file not found: {data_path}")
             continue
             
         df_1m = pd.read_csv(data_path, parse_dates=['timestamp'])
@@ -123,30 +184,13 @@ def main():
             end_date = latest_date - timedelta(days=(q-1)*90)
             start_date = end_date - timedelta(days=90)
             
-            best = optimize_symbol_quarter(sym, q, df_1m, start_date, end_date)
-            
+            best = optimize_symbol_quarter(sym, q, df_1m, start_date, end_date, full_log_file, completed_set)
             if best:
-                summary = {
-                    "Symbol": sym,
-                    "Quarter": f"Q{q}",
-                    "Period": f"{start_date.date()}~{end_date.date()}",
-                    "Return%": round(best['Return'], 2),
-                    "MDD%": round(best['MDD'], 2),
-                    "Eff": round(best['Efficiency'], 2),
-                    "Trades": best['Trades'],
-                    **best['Config']
-                }
-                all_final_results.append(summary)
-                # Intermediate save
-                pd.DataFrame(all_final_results).to_csv(results_file, index=False)
-                print(f"✅ Best for {sym} Q{q}: Return {summary['Return%']}% | MDD {summary['MDD%']}% | Mode: {summary['Mode']}")
-            else:
-                print(f"⚠️ No valid results for {sym} Q{q}")
+                all_best_results.append(best)
+                pd.DataFrame(all_best_results).to_csv(summary_file, index=False)
+                print(f"✅ Best for {sym} Q{q}: Return {best['Return']}% | MDD {best['MDD']}%")
 
-    print(f"\n{'='*60}")
-    print(f"OVERNIGHT OPTIMIZATION COMPLETE!")
-    print(f"Full results saved to: {results_file}")
-    print(f"{'='*60}")
+    print(f"\nOVERNIGHT OPTIMIZATION COMPLETE!")
 
 if __name__ == "__main__":
     main()
