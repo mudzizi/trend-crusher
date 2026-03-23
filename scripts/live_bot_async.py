@@ -194,6 +194,9 @@ class SymbolBotAsync:
 
     async def on_mark_price_update(self, price):
         self.last_price = price
+        # Record status for dashboard first
+        await self._record_live_status()
+        
         if self.position != 0:
             await self.check_exit()
         else:
@@ -213,6 +216,57 @@ class SymbolBotAsync:
             elif self.active_sniper_order_id:
                 await self.check_sniper_fill()
             await self.check_entry()
+
+    async def _record_live_status(self):
+        if self.df_indicators is None or self.df_indicators.empty: return
+        try:
+            row = self.df_indicators.iloc[-1]
+            last_price = self.last_price
+            
+            # 1. Volume Proximity (Current 1m sum vs Target)
+            # Find the starting index of the current 1h candle in the 1m data buffer if available, 
+            # but for simplicity in Live, we use the pre-calculated 'volume' in row which includes intra-bar updates.
+            vol_target = row['avg_vol'] * self.settings.get('VOL_MULTIPLIER', 2.0)
+            vol_ratio = min(1.0, row['volume'] / vol_target) if vol_target > 0 else 0
+            
+            # 2. ADX Proximity
+            adx_target = self.settings.get('ADX_FILTER_LEVEL', 25.0)
+            adx_ratio = min(1.0, row['adx'] / adx_target) if adx_target > 0 else 0
+            
+            # 3. Price Proximity to Breakout
+            upper, lower = row['upper'], row['lower']
+            ema = row['ema_h']
+            prox_pct = self.settings.get('SNIPER_PROXIMITY_PCT', 0.005)
+            
+            trend_ok = False
+            prox_ratio = 0
+            
+            if last_price > ema: # Long Bias
+                trend_ok = True
+                dist = abs(upper - last_price)
+                prox_limit = upper * prox_pct
+                prox_ratio = max(0, 1.0 - (dist / prox_limit)) if prox_limit > 0 else 0
+            elif last_price < ema: # Short Bias
+                trend_ok = True
+                dist = abs(lower - last_price)
+                prox_limit = lower * prox_pct
+                prox_ratio = max(0, 1.0 - (dist / prox_limit)) if prox_limit > 0 else 0
+            
+            # Cap prox_ratio at 1.0 if already breakout
+            if (last_price >= upper and trend_ok) or (last_price <= lower and trend_ok):
+                prox_ratio = 1.0
+
+            # 4. Total Signal Score (0-100)
+            # Weighted: Price Prox (40%), Vol (30%), ADX (30%)
+            score = (prox_ratio * 40) + (vol_ratio * 30) + (adx_ratio * 30)
+            if not trend_ok: score *= 0.5 # Penalty for wrong trend
+            
+            self.db.update_live_status(
+                self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, 
+                last_price, upper, lower
+            )
+        except Exception as e:
+            self.logger.error(f"Error recording live status: {e}")
 
     async def check_sniper_fill(self):
         if self.settings["DRY_RUN"]: return

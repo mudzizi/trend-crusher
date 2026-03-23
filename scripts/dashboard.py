@@ -58,7 +58,30 @@ def index():
                 "sl": sl_price
             })
 
-        # 2. Fetch Market Summary
+        # 2. Fetch Live Monitoring Data (New)
+        live_monitors = []
+        try:
+            live_status_df = db.get_all_live_status()
+            for _, row in live_status_df.iterrows():
+                sym = row['symbol']
+                sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, CONFIG)
+                live_monitors.append({
+                    "symbol": sym,
+                    "vol_ratio": round(row['vol_ratio'] * 100, 1),
+                    "adx_ratio": round(row['adx_ratio'] * 100, 1),
+                    "prox_ratio": round(row['prox_ratio'] * 100, 1),
+                    "trend_ok": bool(row['trend_ok']),
+                    "score": round(row['signal_score'], 1),
+                    "price": row['last_price'],
+                    "upper": row['upper_band'],
+                    "lower": row['lower_column'],
+                    "mode": "Sniper" if sym_settings.get("USE_SNIPER") else ("Retest" if sym_settings.get("USE_RETEST_MAKER") else "Market"),
+                    "vol_mult": sym_settings.get("VOL_MULTIPLIER"),
+                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL")
+                })
+        except: pass
+
+        # 3. Fetch Market Summary
         for sym in symbols:
             try:
                 ticker = exchange.fetch_ticker(sym)
@@ -127,7 +150,8 @@ def index():
                            total_return=total_pnl,
                            win_rate=round(win_rate, 1),
                            chart_data=chart_data,
-                           backtest_reports=backtest_reports)
+                           backtest_reports=backtest_reports,
+                           live_monitors=live_monitors)
 
 @app.route('/static/<filename>')
 def serve_static(filename):
