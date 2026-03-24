@@ -1,3 +1,23 @@
+# Trading Session Log (2026-03-25) - Milestone: Self-Healing & Startup Sync (v11.9.10)
+
+## ✅ 완료된 작업
+1.  **부팅 시 자동 데이터 동기화 (Startup Sync)**:
+    -   봇 시작 시 DB의 'OPEN' 포지션과 거래소의 실제 잔고를 전수 대조하는 `sync_db_with_exchange` 도입.
+    -   거래소에는 없으나 DB에만 남은 "유령 포지션"을 자동으로 탐지하여 `CLOSED` 처리하고 대시보드 정합성 확보.
+
+2.  **청산 무결성 강화 (Exit Verification)**:
+    -   시장가 청산 주문 직후 거래소 API로 실제 잔고가 0이 되었는지 실시간 확인하는 로직 강화 (v11.9.9).
+    -   청산 실패 시 남은 수량만큼 즉시 재시도하여 포지션 방치 원천 차단.
+
+3.  **API 안정성 패치 (NoneType Guard)**:
+    -   거래소 응답이 유효하지 않을 때(None) 발생하던 `'NoneType' object has no attribute 'get'` 에러에 대한 전역 방어 코드 적용 (v11.9.8).
+    -   비정상적 응답 시에도 `last_price` 기반의 안전한 상태 정리를 통해 무한 루프 크래시 방지.
+
+4.  **문서 및 형상 관리**:
+    -   `src/config.py`, `README.md`, `CHANGELOG.md` 버전을 **v11.9.10**으로 동기화 완료.
+
+---
+
 # Trading Session Log (2026-03-23) - Milestone: Turbo Optimization & Financial Parity (v11.9.7)
 
 ## ✅ 완료된 작업

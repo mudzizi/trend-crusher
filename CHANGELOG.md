@@ -2,7 +2,17 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [v11.9.7] - 2026-03-23
+## [v11.9.10] - 2026-03-25
+### Added
+- **Automatic DB-Exchange Sync**: The bot now performs a synchronization check at startup. Any 'OPEN' trades in the database that no longer exist as active positions on Binance are automatically closed to prevent "ghost positions" on the dashboard.
+- **State Alignment**: Bot internal state is now rigorously aligned with the actual exchange balance during the boot sequence.
+
+## [v11.9.9] - 2026-03-25
+### Fixed
+- **Exit Verification Logic**: Overhauled `execute_exit` to verify position closure via API before resetting internal state.
+- **Self-Healing Exit**: Implemented automatic retry with exact remaining contracts if a market exit partially fails or the exchange reports a residual balance.
+
+## [v11.9.8] - 2026-03-25
 ### Added
 - **Turbo-Charged NumPy Engine**: Refactored the core backtest loop in `src/strategy.py` using NumPy vectorization, achieving a ~5x speedup in simulation performance.
 - **Microsecond Precision Matching**: Fixed timestamp alignment issues between 1m ticks and 1h indicators using standardized NumPy `datetime64[m]` casting.

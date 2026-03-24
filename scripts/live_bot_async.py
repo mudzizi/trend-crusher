@@ -731,17 +731,17 @@ async def main():
         symbols = CONFIG.get("SYMBOLS_LIST", [])
         if not symbols:
             logger.error("❌ No symbols found in SYMBOLS_LIST. Check config.yaml."); return
-# Map 'btcusdt' (WS stream key) to Bot instance
-bots = {}
-for s in symbols:
-    bot_instance = SymbolBotAsync(s, exchange, pm, notifier, db)
-    await bot_instance.initialize()
-    ws_key = s.replace('/', '').lower()
-    bots[ws_key] = bot_instance
+        # Map 'btcusdt' (WS stream key) to Bot instance
+        bots = {}
+        for s in symbols:
+            bot_instance = SymbolBotAsync(s, exchange, pm, notifier, db)
+            await bot_instance.initialize()
+            ws_key = s.replace('/', '').lower()
+            bots[ws_key] = bot_instance
 
-# --- [DB Startup Sync] ---
-await sync_db_with_exchange(bots, exchange, db, pm)
-# -------------------------
+        # --- [DB Startup Sync] ---
+        await sync_db_with_exchange(bots, exchange, db, pm)
+        # -------------------------
 
 # Connect WebSocket
         ws_manager = BinanceWebSocketManager(symbols)

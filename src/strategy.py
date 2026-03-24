@@ -89,7 +89,7 @@ class TrendCrusherV2:
         
         # 2. Adaptive Trailing Stop (v11.8.0 Core)
         curr_atr_mult = config.get('TRAILING_ATR_MULT', 3.0)
-        if config.get('USE_ADAPTIVE_TRAIL', True):
+        if config.get('USE_ADAPTIVE_TRAIL', True) and self.entry_price > 0:
             pnl_pct = ((last_price / self.entry_price) - 1) * 100 * direction
             adaptive_steps = config.get('ADAPTIVE_TRAIL_STEPS', [])
             for step in sorted(adaptive_steps, key=lambda x: x['pnl_pct'], reverse=True):
