@@ -12,8 +12,8 @@ from src.indicators import calculate_donchian, calculate_ema, calculate_atr, cal
 from src.config import CONFIG
 
 # --- [USER CONFIGURATION] ---
-#SYMBOLS = ["ETH_USDT", "BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
-SYMBOLS = ["ETH_USDT"]
+SYMBOLS = ["BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
+#SYMBOLS = ["ETH_USDT"]
 QUARTERS = 4
 # ----------------------------
 

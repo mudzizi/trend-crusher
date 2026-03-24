@@ -272,10 +272,10 @@ class SymbolBotAsync:
         if self.settings["DRY_RUN"]: return
         try:
             order = await self.retry_api_call(self.exchange.fetch_order, self.active_sniper_order_id, self.symbol)
-            if order['status'] == 'closed':
+            if order and isinstance(order, dict) and order['status'] == 'closed':
                 self.logger.info(f"🎯 Sniper Order FILLED for {self.symbol}!")
-                self.quantity = float(order.get('filled', order.get('amount')))
-                self.entry_price = float(order['average'])
+                self.quantity = float(order.get('filled', order.get('amount', self.quantity)))
+                self.entry_price = float(order.get('average', order.get('price', self.entry_price)))
                 direction = 1 if order['side'] == 'buy' else -1
                 await self._on_fill_success(direction)
                 self.active_sniper_order_id = None
@@ -292,10 +292,10 @@ class SymbolBotAsync:
                 return
         try:
             order = await self.retry_api_call(self.exchange.fetch_order, self.active_retest_order_id, self.symbol)
-            if order['status'] == 'closed':
+            if order and isinstance(order, dict) and order['status'] == 'closed':
                 self.logger.info(f"✅ Retest Maker Order FILLED for {self.symbol}!")
-                self.quantity = float(order.get('filled', order.get('amount')))
-                self.entry_price = float(order['average'])
+                self.quantity = float(order.get('filled', order.get('amount', self.quantity)))
+                self.entry_price = float(order.get('average', order.get('price', self.entry_price)))
                 direction = 1 if order['side'] == 'buy' else -1
                 await self._on_fill_success(direction)
                 self.active_retest_order_id = None
@@ -386,8 +386,12 @@ class SymbolBotAsync:
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
                 
                 # IMPORTANT: Use actual exchange-reported fill price and quantity
-                self.entry_price = float(order.get('average', order.get('price', self.last_price)))
-                self.quantity = float(order.get('filled', self.quantity))
+                if order is None or not isinstance(order, dict):
+                    self.logger.error(f"⚠️ Exchange returned invalid order response for {self.symbol} during entry. Using fallback.")
+                    self.entry_price = self.last_price
+                else:
+                    self.entry_price = float(order.get('average', order.get('price', self.last_price)))
+                    self.quantity = float(order.get('filled', self.quantity))
                 
                 try: 
                     params = {'stopPrice': self.sl_price, 'reduceOnly': True}
@@ -420,15 +424,20 @@ class SymbolBotAsync:
                 # 1. Execute Market Order and get the REAL response
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
                 
-                # 2. Extract REAL filled price and total cost from exchange
-                exit_price = float(order.get('average', order.get('price', self.last_price)))
-                filled_qty = float(order.get('filled', self.quantity))
+                if order is None or not isinstance(order, dict):
+                    self.logger.error(f"⚠️ Exchange returned invalid order response for {self.symbol}. Using fallback values.")
+                    exit_price = self.last_price
+                    filled_qty = self.quantity
+                    fee = exit_price * filled_qty * 0.0005
+                else:
+                    # 2. Extract REAL filled price and total cost from exchange
+                    exit_price = float(order.get('average', order.get('price', self.last_price)))
+                    filled_qty = float(order.get('filled', self.quantity))
+                    # 4. Extract REAL fee if available, else estimate
+                    fee = order.get('fee', {}).get('cost', exit_price * filled_qty * 0.0005)
                 
-                # 3. Calculate REAL PnL using exchange-provided fill price
+                # 3. Calculate REAL PnL
                 pnl_usdt = (exit_price - self.entry_price) * filled_qty * self.position
-                
-                # 4. Extract REAL fee if available, else estimate
-                fee = order.get('fee', {}).get('cost', exit_price * filled_qty * 0.0005)
                 pnl_usdt -= float(fee)
                 
                 if self.sl_order_id:
@@ -476,19 +485,23 @@ class SymbolBotAsync:
                 self.logger.info(f"🆘 Force closing {qty} {self.symbol} ({side})")
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, qty)
                 
-                # Try to calculate PnL using the real response
-                if self.entry_price > 0:
+                if order is None or not isinstance(order, dict):
+                    self.logger.error(f"⚠️ Exchange returned invalid order response for {self.symbol} during force exit.")
+                    exit_price = self.last_price
+                    fee = exit_price * qty * 0.0005
+                else:
                     exit_price = float(order.get('average', order.get('price', self.last_price)))
-                    pnl_usdt = (exit_price - self.entry_price) * qty * self.position
                     fee = order.get('fee', {}).get('cost', exit_price * qty * 0.0005)
-                    pnl_usdt -= float(fee)
-                    
-                    pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
-                    self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
-                    await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
-                    
-                    new_total_equity = await self.pm.get_total_equity()
-                    self.db.log_equity(new_total_equity, 'TOTAL')
+                
+                pnl_usdt = (exit_price - self.entry_price) * qty * self.position
+                pnl_usdt -= float(fee)
+                
+                pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
+                self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
+                await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
+                
+                new_total_equity = await self.pm.get_total_equity()
+                self.db.log_equity(new_total_equity, 'TOTAL')
                 
             # 2. Cancel all open orders for this symbol
             await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
