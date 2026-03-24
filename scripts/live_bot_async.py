@@ -421,22 +421,30 @@ class SymbolBotAsync:
             
             if not self.settings["DRY_RUN"]:
                 side = 'sell' if self.position == 1 else 'buy'
-                # 1. Execute Market Order and get the REAL response
+                # 1. Execute Market Order
                 order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
                 
+                # 2. VERIFY: Did the position actually close on the exchange?
+                # We wait a brief moment for exchange synchronization
+                await asyncio.sleep(1)
+                positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
+                pos = next((p for p in positions if p['symbol'] == self.symbol), None)
+                
+                if pos and float(pos['contracts']) != 0:
+                    self.logger.error(f"🚨 EXIT FAILED: Position still exists on exchange for {self.symbol} ({pos['contracts']} left). Retrying...")
+                    # Try one more time with the EXACT remaining contracts
+                    side = 'sell' if float(pos['contracts']) > 0 else 'buy'
+                    await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, abs(float(pos['contracts'])))
+                
                 if order is None or not isinstance(order, dict):
-                    self.logger.error(f"⚠️ Exchange returned invalid order response for {self.symbol}. Using fallback values.")
                     exit_price = self.last_price
                     filled_qty = self.quantity
                     fee = exit_price * filled_qty * 0.0005
                 else:
-                    # 2. Extract REAL filled price and total cost from exchange
                     exit_price = float(order.get('average', order.get('price', self.last_price)))
                     filled_qty = float(order.get('filled', self.quantity))
-                    # 4. Extract REAL fee if available, else estimate
                     fee = order.get('fee', {}).get('cost', exit_price * filled_qty * 0.0005)
                 
-                # 3. Calculate REAL PnL
                 pnl_usdt = (exit_price - self.entry_price) * filled_qty * self.position
                 pnl_usdt -= float(fee)
                 
@@ -444,26 +452,23 @@ class SymbolBotAsync:
                     try: await self.retry_api_call(self.exchange.cancel_order, self.sl_order_id, self.symbol)
                     except: pass
             else:
-                # Dry Run fallback
                 pnl_usdt = (exit_price - self.entry_price) * self.quantity * self.position
             
             if self.entry_price > 0:
                 pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
             
-            # 5. Log to DB and Update Internal Equity (SEED + Accumulated PnL)
+            # 5. Final State Update
             self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
-            
-            # Update internal portfolio manager with the trade's PnL
             await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
-            
-            # Record total equity based on internal tracking (SEED + PnL)
             new_total_equity = await self.pm.get_total_equity()
             self.db.log_equity(new_total_equity, 'TOTAL')
             
             self.position, self.sl_order_id = 0, None
             self.persist_state()
             self.notifier.notify_exit(f"Async {self.symbol}", exit_price, pnl_pct, pnl_usdt)
-        except Exception as e: self.logger.error(f"Exit error: {e}")
+        except Exception as e: 
+            self.logger.error(f"Exit error: {e}")
+            # If exit fails, we DON'T set self.position = 0, so it will try again next tick
 
     async def force_exit(self):
         """
