@@ -683,6 +683,41 @@ async def shutdown(sig, loop, notifier, exchange):
     await exchange.close(); loop.stop()
     logger.info("👋 Cleanup complete. Bot stopped.")
 
+async def sync_db_with_exchange(bots, exchange, db, pm):
+    """
+    Startup synchronization: Closes 'OPEN' trades in DB if they don't exist on the exchange.
+    """
+    logger.info("🔍 Synchronizing DB with actual exchange positions...")
+    try:
+        # 1. Fetch active trades from DB
+        active_trades = db.get_active_trades()
+        if active_trades.empty:
+            logger.info("✅ No active trades in DB to sync.")
+            return
+
+        # 2. Fetch real positions from exchange
+        # Note: We fetch all symbols to be efficient
+        all_positions = await exchange.fetch_positions()
+        real_active_symbols = {p['symbol'] for p in all_positions if float(p['contracts']) != 0}
+
+        for _, trade in active_trades.iterrows():
+            sym = trade['symbol']
+            if sym not in real_active_symbols:
+                logger.warning(f"👻 Ghost position detected for {sym} in DB. Closing automatically.")
+                # Close in DB with fallback values since we don't have the real exit price
+                db.log_trade_close(sym, 0, 0, 0)
+                await pm.update_balance_after_trade(sym, 0)
+                
+                # If a bot object exists for this symbol, ensure its state is also reset
+                if sym.replace('/', '').lower() in bots:
+                    bot_obj = bots[sym.replace('/', '').lower()]
+                    bot_obj.position = 0
+                    bot_obj.persist_state()
+        
+        logger.info("✅ DB Synchronization complete.")
+    except Exception as e:
+        logger.error(f"❌ DB Sync failed: {e}")
+
 async def main():
     loop = asyncio.get_running_loop()
     exchange = ccxt.binance({'apiKey': CONFIG["BINANCE_API_KEY"], 'secret': CONFIG["BINANCE_SECRET"], 'options': {'defaultType': 'future'}, 'enableRateLimit': True})
@@ -696,15 +731,19 @@ async def main():
         symbols = CONFIG.get("SYMBOLS_LIST", [])
         if not symbols:
             logger.error("❌ No symbols found in SYMBOLS_LIST. Check config.yaml."); return
+# Map 'btcusdt' (WS stream key) to Bot instance
+bots = {}
+for s in symbols:
+    bot_instance = SymbolBotAsync(s, exchange, pm, notifier, db)
+    await bot_instance.initialize()
+    ws_key = s.replace('/', '').lower()
+    bots[ws_key] = bot_instance
 
-        # Map 'btcusdt' (WS stream key) to Bot instance
-        bots = {}
-        for s in symbols:
-            bot_instance = SymbolBotAsync(s, exchange, pm, notifier, db)
-            await bot_instance.initialize()
-            key = s.replace('/', '').lower()
-            bots[key] = bot_instance
-            
+# --- [DB Startup Sync] ---
+await sync_db_with_exchange(bots, exchange, db, pm)
+# -------------------------
+
+# Connect WebSocket
         ws_manager = BinanceWebSocketManager(symbols)
         asyncio.create_task(ws_manager.connect())
         asyncio.create_task(handle_commands(bots, notifier, pm))
