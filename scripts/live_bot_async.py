@@ -382,8 +382,19 @@ class SymbolBotAsync:
         self.quantity = float(qty)
         try:
             if not self.settings["DRY_RUN"]:
+                # 1. VERIFY: Ensure no position exists before entering (Anti-Double-Entry)
+                positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
+                pos = next((p for p in positions if p['symbol'] == self.symbol), None)
+                if pos and float(pos['contracts']) != 0:
+                    self.logger.warning(f"⚠️ Entry aborted: Position already exists for {self.symbol}. Aligning state.")
+                    self.position = 1 if float(pos['contracts']) > 0 else -1
+                    self.entry_price = float(pos['entryPrice'])
+                    self.quantity = abs(float(pos['contracts']))
+                    self.persist_state(); return
+
                 side = 'buy' if direction == 1 else 'sell'
-                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
+                # 2. Execute Entry (Without automatic retry to prevent double spending)
+                order = await self.exchange.create_market_order(self.symbol, side, self.quantity)
                 
                 # IMPORTANT: Use actual exchange-reported fill price and quantity
                 if order is None or not isinstance(order, dict):
@@ -408,7 +419,9 @@ class SymbolBotAsync:
             self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
             self.persist_state()
             self.notifier.notify_entry(f"Async {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
-        except Exception as e: self.logger.error(f"Entry error: {e}")
+        except Exception as e: 
+            self.logger.error(f"Entry error: {e}")
+            # On error, don't retry immediately, let the next tick handle it by checking position again
 
     async def execute_exit(self):
         # Guard against ZeroDivision or invalid state
@@ -421,43 +434,45 @@ class SymbolBotAsync:
             
             if not self.settings["DRY_RUN"]:
                 side = 'sell' if self.position == 1 else 'buy'
-                # 1. Execute Market Order
-                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, self.quantity)
+                # 1. Execute Market Order (No automatic retry here)
+                order = await self.exchange.create_market_order(self.symbol, side, self.quantity)
                 
                 # 2. VERIFY: Did the position actually close on the exchange?
-                # We wait a brief moment for exchange synchronization
                 await asyncio.sleep(1)
                 positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
                 pos = next((p for p in positions if p['symbol'] == self.symbol), None)
                 
                 if pos and float(pos['contracts']) != 0:
-                    self.logger.error(f"🚨 EXIT FAILED: Position still exists on exchange for {self.symbol} ({pos['contracts']} left). Retrying...")
-                    # Try one more time with the EXACT remaining contracts
-                    side = 'sell' if float(pos['contracts']) > 0 else 'buy'
-                    await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, abs(float(pos['contracts'])))
-                
-                if order is None or not isinstance(order, dict):
-                    exit_price = self.last_price
-                    filled_qty = self.quantity
-                    fee = exit_price * filled_qty * 0.0005
-                else:
+                    self.logger.error(f"🚨 EXIT FAILED: Position still exists for {self.symbol} ({pos['contracts']} left).")
+                    return # Don't clear state, try again next tick
+
+                if order and isinstance(order, dict):
                     exit_price = float(order.get('average', order.get('price', self.last_price)))
                     filled_qty = float(order.get('filled', self.quantity))
                     fee = order.get('fee', {}).get('cost', exit_price * filled_qty * 0.0005)
+                else:
+                    exit_price = self.last_price
+                    filled_qty = self.quantity
+                    fee = exit_price * filled_qty * 0.0005
                 
                 pnl_usdt = (exit_price - self.entry_price) * filled_qty * self.position
                 pnl_usdt -= float(fee)
                 
+                # 3. Safe SL Cancellation
                 if self.sl_order_id:
-                    try: await self.retry_api_call(self.exchange.cancel_order, self.sl_order_id, self.symbol)
-                    except: pass
+                    try: 
+                        # Check status before cancelling to avoid error if already filled
+                        sl_status = await self.exchange.fetch_order(self.sl_order_id, self.symbol)
+                        if sl_status['status'] == 'open':
+                            await self.exchange.cancel_order(self.sl_order_id, self.symbol)
+                    except Exception as e:
+                        self.logger.warning(f"Could not cancel SL {self.sl_order_id}: {e}")
             else:
                 pnl_usdt = (exit_price - self.entry_price) * self.quantity * self.position
             
             if self.entry_price > 0:
                 pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
             
-            # 5. Final State Update
             self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
             await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
             new_total_equity = await self.pm.get_total_equity()
@@ -468,7 +483,6 @@ class SymbolBotAsync:
             self.notifier.notify_exit(f"Async {self.symbol}", exit_price, pnl_pct, pnl_usdt)
         except Exception as e: 
             self.logger.error(f"Exit error: {e}")
-            # If exit fails, we DON'T set self.position = 0, so it will try again next tick
 
     async def force_exit(self):
         """
