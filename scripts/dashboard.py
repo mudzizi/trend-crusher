@@ -160,9 +160,24 @@ def index():
 def serve_static(filename):
     return send_from_directory(static_dir, filename)
 
-@app.route('/reports/<filename>')
+@app.route('/reports/<path:filename>')
 def serve_report(filename):
-    return send_from_directory(reports_dir, filename)
+    # Security: Normalize path and prevent Path Traversal
+    # 1. Get absolute paths
+    target_path = os.path.abspath(os.path.join(reports_dir, filename))
+    base_path = os.path.abspath(reports_dir)
+    
+    # 2. Strict validation: Ensure target is within reports directory
+    if not target_path.startswith(base_path):
+        return "Access Denied: Invalid Path", 403
+    
+    # 3. Verify file existence
+    if not os.path.isfile(target_path):
+        return "File Not Found", 404
+        
+    return send_from_directory(os.path.dirname(target_path), os.path.basename(target_path))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Security: Disable debug mode and restrict to localhost in production
+    # Use SSH Tunneling (L 5000:localhost:5000) to access remotely
+    app.run(host='127.0.0.1', port=5000, debug=False)

@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.8.0] - 2026-03-25
+### Security
+- **Dashboard Hardening**: Restrained Flask host to `127.0.0.1` and disabled `debug` mode to prevent unauthorized remote access and potential RCE via interactive debugger.
+- **Path Traversal Protection**: Implemented strict path normalization and validation for report file serving. Access is now limited exclusively to the `reports/` directory using absolute path checks.
+### Fixed
+- **Portfolio Value Sync**: Corrected the dashboard's "PORTFOLIO VALUE" display to reflect real-time cumulative PnL combined with the initial seed. 
+- **Equity History Isolation**: Fixed chart data to correctly filter by `symbol='TOTAL'`, preventing data mixing with individual asset performance logs.
+
 ## [v12.7.0] - 2026-03-25
 ### Optimized
 - **Mega-Turbo Parallel Optimizer**: Re-architected the `mega_optimizer_v2.py` to use a task-level parallelization strategy. By breaking down the optimization grid into individual (Symbol + Params) tasks, the bot now achieves near-perfect CPU utilization across all cores.

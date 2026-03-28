@@ -1,3 +1,22 @@
+# Trading Session Log (2026-03-25) - Milestone: Security Hardening & Dashboard Fixes (v12.8.0)
+
+## ✅ 완료된 작업
+1.  **대시보드 보안 강화 (Security Hardening)**:
+    -   `scripts/dashboard.py`의 Flask 호스트를 `127.0.0.1`로 제한하여 외부 접근 차단.
+    -   RCE 위험이 있는 `debug=True` 모드를 비활성화하여 안정성 및 보안성 확보.
+    -   **Path Traversal 방어**: 리포트 파일 접근 시 절대 경로 정규화(`abspath`) 및 상위 디렉토리 접근 차단 로직 적용.
+
+2.  **포트폴리오 자산 표시 수정 (UI/UX Fix)**:
+    -   대시보드 상단의 'PORTFOLIO VALUE'가 초기 SEED와 누적 PnL을 합산한 실제 총 자산을 정확히 반영하도록 수정.
+    -   자산 차트 데이터가 개별 심볼 데이터와 섞이지 않도록 `symbol='TOTAL'` 필터링 적용.
+    -   `PortfolioManagerAsync` 및 `DBManager` 연동을 통해 실시간 자산 정합성 확보.
+
+## 🧪 검증 결과
+-   **보안 테스트**: `../` 등을 이용한 경로 탐색 시도 시 `403 Access Denied` 정상 반환 확인.
+-   **정합성 테스트**: 전체 테스트(71개) 통과 및 대시보드 데이터 일치 확인.
+
+---
+
 # Trading Session Log (2026-03-25) - Milestone: Mega-Turbo Parallel Optimizer (v12.7.0)
 
 ## ✅ 완료된 작업
