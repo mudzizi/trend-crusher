@@ -103,7 +103,8 @@ def index():
     trades_df = db.get_trade_history()
     trades_list = trades_df.sort_values(by='id', ascending=False).to_dict(orient='records') if not trades_df.empty else []
     
-    equity_df = db.get_equity_history()
+    # Use symbol='TOTAL' for main dashboard balance and chart
+    equity_df = db.get_equity_history(symbol='TOTAL')
     chart_data = {
         "labels": equity_df['timestamp'].tolist() if not equity_df.empty else [],
         "equity_values": equity_df['balance'].tolist() if not equity_df.empty else []

@@ -135,3 +135,8 @@ class DBManager:
                 query += " WHERE symbol = ?"
                 params = (symbol,)
             return pd.read_sql_query(query, conn, params=params)
+
+    def get_total_pnl(self):
+        with self._get_connection() as conn:
+            df = pd.read_sql_query("SELECT SUM(pnl_usdt) as total_pnl FROM trades WHERE status='CLOSED'", conn)
+            return float(df.iloc[0]['total_pnl']) if not df.empty and df.iloc[0]['total_pnl'] is not None else 0.0

@@ -986,6 +986,12 @@ async def main():
         # 2. DB Startup Sync
         await sync_db_with_exchange(bots, exchange, db, pm)
         
+        # Log initial total equity if no history exists to provide a starting point for the dashboard
+        if db.get_equity_history(symbol='TOTAL').empty:
+            initial_total = await pm.get_total_equity()
+            db.log_equity(initial_total, 'TOTAL')
+            logger.info(f"📈 Initial TOTAL equity logged: {initial_total:.2f}")
+        
         # 3. Connect Public WebSocket
         ws_manager = BinanceWebSocketManager(symbols=symbols)
         asyncio.create_task(ws_manager.connect())

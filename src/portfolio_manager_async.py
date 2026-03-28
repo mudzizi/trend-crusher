@@ -15,10 +15,11 @@ class PortfolioManagerAsync:
         self.lock = asyncio.Lock() # Ensures safe concurrent access to sub-balances
 
     async def get_total_equity(self, symbol=None):
-        """Returns total equity for a symbol (Allocated Seed + PnL)."""
+        """Returns total equity for a symbol (Allocated Seed + PnL) or global total."""
         async with self.lock:
             if not symbol:
-                return self.config.get("SEED", 10000.0)
+                total_pnl = self.db.get_total_pnl()
+                return float(self.config.get("SEED", 10000.0)) + total_pnl
 
             symbol_settings = self.config.get("SYMBOL_SETTINGS", {}).get(symbol, {})
             allocated_seed = symbol_settings.get("ALLOCATED_SEED", 1000.0)
