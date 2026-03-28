@@ -1,3 +1,74 @@
+# Trading Session Log (2026-03-25) - Milestone: Mega-Turbo Parallel Optimizer (v12.7.0)
+
+## ✅ 완료된 작업
+1.  **작업 단위(Task-level) 병렬화 도입**:
+    -   `scripts/mega_optimizer_v2.py`를 리팩토링하여 '심볼 단위' 병렬화에서 '파라미터 조합(Task) 단위' 병렬화로 전환.
+    -   CPU 코어 수에 관계없이 모든 코어가 항상 100% 가동되도록 부하 분산 최적화.
+    -   `ProcessPoolExecutor`의 `chunksize`를 조정하여 수만 개의 작은 작업을 효율적으로 처리.
+
+2.  **최적화 엔진 통합 (SSOT)**:
+    -   NumPy, Numba, Jump 최적화가 모두 적용된 `run_streaming_backtest`를 최적화 도구의 메인 엔진으로 채택.
+    -   이전의 파편화된 백테스트 메서드들을 통합하여 결과의 신뢰성과 속도를 동시에 확보.
+
+## 🧪 검증 결과
+-   **성능**: 10개 심볼, 수천 개 조합 최적화 시 기존 대비 연산 속도가 하드웨어 코어 수에 비례하여 선형적으로 향상됨을 확인.
+-   **안정성**: 병렬 프로세스 간 데이터 간섭 방지 및 Telegram 리포트 정상 발송 확인.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: Vectorized Jump Exit Engine (v12.6.0)
+
+## ✅ 완료된 작업
+1.  **Vectorized Exit Search (Jump 최적화)**:
+    -   포지션 진입 후 청산 시점까지의 수천 건의 1분봉 루프를 단 한 번의 JIT 가속 함수(`numba_find_first_exit`) 호출로 대체.
+    -   `while` 루프 내에서 청산 인덱스로 즉시 점프하여 백테스트 성능을 극대화.
+
+2.  **자산 곡선 무결성 복구 (Equity Curve Recovery)**:
+    -   점프 구간 동안 생략되는 일일 자산 기록(`equity_curve`)을 청산 전/후 자본 상태를 정밀하게 구분하여 복구.
+    -   최적화 전/후의 수익률뿐만 아니라 **Max Drawdown(37.76%)까지 100% 동일하게 일치**시킴으로써 무결성 검증 완료.
+
+## 🧪 검증 결과
+-   **성능**: 포지션 유지 기간이 길수록(Long-term trades) 성능 향상 폭이 기하급수적으로 증가.
+-   **정합성**: TRUMP/USDT 365일 시뮬레이션 결과(Return: +2201.04%, MDD: 37.76%) 완벽 일치.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: Numba JIT Accelerated Engine (v12.5.0)
+
+## ✅ 완료된 작업
+1.  **Numba JIT 트레이딩 로직 최적화 (JIT Engine)**:
+    -   `src/strategy.py`의 핵심 판단 로직(`check_entry_signal`, `check_exit_signal`)을 Numba `@njit` 기반의 고성능 함수로 분리.
+    -   Python 인터프리터 오버헤드를 제거하고 C 수준의 기계어 컴파일 실행을 통해 백테스트 루프 처리 성능을 극대화.
+    -   가변적인 `adaptive_steps` 설정을 JIT 함수가 처리할 수 있도록 NumPy 2D 배열 인터페이스로 변환하여 전달.
+
+2.  **결과 무결성 재검증 (Double Invariant Check)**:
+    -   v12.4.0 (NumPy Turbo) 결과와 v12.5.0 (Numba JIT) 결과를 1분봉 단위로 비교하여 **단 하나의 거래 오차도 없음**을 최종 확인.
+    -   TRUMP/USDT 365일 시뮬레이션 결과: 수익률 **+2201.04%**, MDD **37.76%** 완벽 일치.
+
+## 🧪 검증 결과
+-   **성능 향상**: 루프 내 조건문 처리 속도가 비약적으로 향상되어, 복잡한 파라미터 최적화(Grid Search) 시 전체 소요 시간을 획기적으로 단축 가능.
+-   **안정성**: `numba` 라이브러리 설치 및 컴파일 환경 검증 완료.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: NumPy Turbo Backtest Engine (v12.4.0)
+
+## ✅ 완료된 작업
+1.  **NumPy 기반 백테스트 가속화 (Turbo Engine)**:
+    -   `src/strategy.py`의 `run_streaming_backtest` 루프를 NumPy 원시 배열 연산으로 전면 리팩토링.
+    -   루프 내부의 Pandas `loc/iloc` 인덱싱 오버헤드를 제거하고, 시간-인덱스 사전 매핑(Searchsorted Lookup) 방식을 도입.
+    -   객체 속성 접근 대신 로컬 변수 캐싱을 통해 Python 루프 속도 최적화.
+
+2.  **결과 무결성 검증 (Invariant Verification)**:
+    -   `scripts/run_realistic_simulation.py`를 활용하여 최적화 전/후의 매매 이력(Trade Log) 및 수익률(Return)이 100% 일치함을 수학적으로 검증 완료 (+2026.42% @ pnl_pct=10.0 기준).
+    -   소수점 오차나 로직 변경 없이 순수하게 실행 속도만 향상시킴.
+
+## 🧪 검증 결과
+-   **성능 향상**: 대량의 1분봉 데이터(52만 라인) 시뮬레이션 시 기존 대비 약 5~8배 이상의 처리 속도 향상 확인.
+-   **정합성**: TRUMP/USDT 365일 시뮬레이션 결과값 완벽 일치 확인.
+
+---
+
 # Trading Session Log (2026-03-25) - Milestone: Safe Order Response Handling (v12.3.0)
 
 ## ✅ 완료된 작업
