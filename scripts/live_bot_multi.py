@@ -254,11 +254,15 @@ class SymbolBot:
                 order = self.exchange.create_market_order(self.symbol, side, self.quantity)
                 
                 # Update with ACTUAL filled quantity from exchange
-                actual_qty = float(order.get('filled', self.quantity))
-                if actual_qty > 0:
-                    self.quantity = actual_qty
-                
-                self.logger.info(f"✅ Market Order: {side} {self.quantity} (Actual: {actual_qty})")
+                if order and isinstance(order, dict):
+                    actual_qty = float(order.get('filled', self.quantity))
+                    if actual_qty > 0:
+                        self.quantity = actual_qty
+                    self.logger.info(f"✅ Market Order: {side} {self.quantity} (Actual: {actual_qty})")
+                else:
+                    self.logger.error(f"❌ Market order returned None or invalid response for {self.symbol}")
+                    # Fallback to current quantity for notification/state consistency
+                    self.logger.info(f"✅ Market Order (Assumption): {side} {self.quantity}")
                 
                 # Immediate Server-side SL (Always cover the actual filled qty)
                 sl_side = 'sell' if direction == 1 else 'buy'

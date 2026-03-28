@@ -9,20 +9,27 @@ logger = logging.getLogger(__name__)
 class BinanceWebSocketManager:
     """
     Manages WebSocket connections to Binance Futures streams.
-    Supports multiple symbols and automatic reconnection.
+    Supports multiple symbols, public streams, and private User Data Stream.
     """
-    def __init__(self, symbols, base_url="wss://fstream.binance.com/ws"):
-        self.symbols = [s.replace('/', '').lower() for s in symbols]
+    def __init__(self, symbols=None, listen_key=None, base_url="wss://fstream.binance.com/ws"):
         self.base_url = base_url
-        self.streams = []
-        for s in self.symbols:
-            self.streams.append(f"{s}@kline_1h")
-            self.streams.append(f"{s}@kline_1m")
-            self.streams.append(f"{s}@markPrice")
-        
-        self.url = f"{self.base_url}/{'/'.join(self.streams)}"
         self.queue = asyncio.Queue()
         self._running = False
+        
+        if listen_key:
+            # User Data Stream URL
+            self.url = f"{self.base_url}/{listen_key}"
+        elif symbols:
+            # Public Streams URL
+            self.symbols = [s.replace('/', '').lower() for s in symbols]
+            streams = []
+            for s in self.symbols:
+                streams.append(f"{s}@kline_1h")
+                streams.append(f"{s}@kline_1m")
+                streams.append(f"{s}@markPrice")
+            self.url = f"{self.base_url}/{'/'.join(streams)}"
+        else:
+            raise ValueError("Either symbols or listen_key must be provided.")
 
     async def connect(self):
         self._running = True
@@ -31,18 +38,23 @@ class BinanceWebSocketManager:
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
+        reconnect_delay = 5
         while self._running:
             try:
-                logger.info(f"Connecting to Binance WebSocket: {self.url}")
-                async with websockets.connect(self.url, ssl=ssl_context) as ws:
+                # Log only first 10 chars of URL to protect listenKey
+                logger.info(f"Connecting to WebSocket: {self.url.split('/')[-1][:10]}...")
+                async with websockets.connect(self.url, ssl=ssl_context, ping_interval=20, ping_timeout=10) as ws:
                     logger.info("✅ WebSocket Connected Successfully")
+                    reconnect_delay = 5 # Reset delay on success
                     while self._running:
                         message = await ws.recv()
                         data = json.loads(message)
                         await self.queue.put(data)
             except Exception as e:
-                logger.error(f"❌ WebSocket Connection Error: {e}. Retrying in 5s...")
-                await asyncio.sleep(5)
+                if self._running:
+                    logger.error(f"❌ WebSocket Error: {e}. Retrying in {reconnect_delay}s...")
+                    await asyncio.sleep(reconnect_delay)
+                    reconnect_delay = min(reconnect_delay * 2, 60) # Exponential backoff
 
     async def get_next_message(self):
         """Retrieves the next message from the queue."""

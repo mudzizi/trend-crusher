@@ -19,7 +19,10 @@ def mock_config():
 def mock_bot(mock_config):
     mock_exchange = MagicMock()
     mock_exchange.create_limit_order = AsyncMock(return_value={'id': 'limit_123'})
+    mock_exchange.create_order = AsyncMock(return_value={'id': 'limit_456'})
     mock_exchange.cancel_order = AsyncMock()
+    mock_exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
+    mock_exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
     
     # CRITICAL: calculate_order_qty MUST BE AsyncMock
     mock_pm = MagicMock()

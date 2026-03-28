@@ -40,6 +40,10 @@ async def test_execute_entry_syncs_with_exchange(mock_bot):
     }
     mock_bot.exchange.create_order.return_value = {'id': 'sl_123'}
     mock_bot.pm.calculate_order_qty.return_value = 0.1
+    # Added mocks for Margin Safety Guard
+    mock_bot.exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
+    mock_bot.exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
+    mock_bot.exchange.fetch_positions = AsyncMock(return_value=[{'symbol': 'BTC/USDT', 'contracts': 0}])
 
     # Execute Entry
     await mock_bot.execute_entry(1, 100.0)

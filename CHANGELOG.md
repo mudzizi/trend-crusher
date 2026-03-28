@@ -2,6 +2,30 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.3.0] - 2026-03-25
+### Fixed
+- **Order Response Guard**: Implemented comprehensive defensive logic for `order.get()` calls in `live_bot_async.py` and `live_bot_multi.py`. This prevents crashes if the exchange returns `None` due to timeouts or API instability.
+- **Nested Fee Safety**: Added safety checks for nested `fee` dictionary objects, ensuring consistent fallback when fee data is missing.
+### Changed
+- **Indicator Engine Refinement**: Updated Donchian Channel calculation to remove redundant shifts, improving signal alignment for the Unified Strategy Engine.
+- **WebSocket Resilience**: Added support for Binance User Data Streams (private WS) and implemented exponential backoff for reconnection stability.
+
+## [v12.2.0] - 2026-03-25
+### Added
+- **Margin Safety Guard**: Real-time balance verification before any entry. The bot automatically downsizes quantities if required margin exceeds available balance (95% safety threshold).
+- **Multi-Currency Support**: Enhanced balance checking for both USDT and USDC settlement pairs based on symbol attributes.
+
+## [v12.1.0] - 2026-03-25
+### Added
+- **Anti-Drift Sync (V4)**: Bi-directional synchronization between local bot state (DB) and exchange positions.
+- **Telegram Manual Sync**: Added `/sync` command to force a state check across all symbols via Telegram.
+
+## [v12.0.0] - 2026-03-25
+### Added
+- **Private WebSocket Integration**: Real-time order update tracking via Binance `ORDER_TRADE_UPDATE` events, reducing API polling overhead and improving fill detection speed.
+- **Incremental Calculation Engine**: Optimized indicator calculation in live mode to only process tail-end data, drastically reducing CPU and memory footprint during high-volatility events.
+- **Performance Throttling**: Implemented controlled update intervals for DB persistence and Dashboard synchronization.
+
 ## [v11.9.10] - 2026-03-25
 ### Added
 - **Automatic DB-Exchange Sync**: The bot now performs a synchronization check at startup. Any 'OPEN' trades in the database that no longer exist as active positions on Binance are automatically closed to prevent "ghost positions" on the dashboard.

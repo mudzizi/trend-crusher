@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 
 def calculate_donchian(df, period=20):
-    # 전고점/전저점 돌파는 반드시 이전 봉의 결과(shift 1)를 기준으로 해야 함
-    upper = df['high'].rolling(window=period).max().shift(1)
-    lower = df['low'].rolling(window=period).min().shift(1)
+    # 상단/하단 채널 자체의 값만 계산 (Shift는 전략 레벨에서 결정)
+    upper = df['high'].rolling(window=period).max()
+    lower = df['low'].rolling(window=period).min()
     return upper, lower
 
 def calculate_ema(df, period=200):

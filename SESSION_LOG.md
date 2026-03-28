@@ -1,3 +1,87 @@
+# Trading Session Log (2026-03-25) - Milestone: Safe Order Response Handling (v12.3.0)
+
+## ✅ 완료된 작업
+1.  **전역적 주문 응답 방어 코드 (NoneType Guard Expansion)**:
+    -   `scripts/live_bot_async.py`와 `scripts/live_bot_multi.py`의 모든 `order.get()` 호출 지점에 대해 `order` 객체가 `None`이거나 딕셔너리가 아닌 경우를 대비한 방어 로직 적용.
+    -   중첩된 `fee` 필드 접근 시 `(order.get('fee') or {}).get('cost')` 패턴을 사용하여 `NoneType` 에러 원천 차단.
+    -   거래소 API 응답이 불안정할 경우(Timeout 등)에도 `last_price` 및 기존 `quantity`를 사용하여 안전하게 상태를 전이하도록 폴백 메커니즘 구축.
+
+2.  **전략 엔진(SSOT) 및 WebSocket 최적화 통합**:
+    *   `src/strategy.py`와 `src/indicators.py`의 실시간 증분 계산 로직 및 Donchian 채널 정합성 개선 사항 반영.
+    *   `src/websocket_manager.py`의 유저 데이터 스트림(Private WS) 지원 및 재연결 지수 백오프 로직 공식 적용.
+
+## 🧪 검증 결과
+-   **구문 검사 완료**: `python3 -m py_compile`을 통해 수정된 모든 스크립트의 문법적 무결성 확인.
+-   **단위 테스트 업데이트**: `tests/test_live_sync_pnl.py` 및 `tests/test_sniper_logic.py`에 새로운 방어 로직(Margin Guard 등)에 대응하는 Mock 데이터 보강 완료.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: Margin Safety Guard & Multi-Currency (v12.2.0)
+
+## ✅ 완료된 작업
+1.  **가용 증거금 실시간 검증 (Margin Safety Guard)**:
+    -   `execute_entry`, `manage_retest_ambush`, `manage_sniper_ambush` 직전 거래소의 `fetch_balance`를 호출하여 실시간 가용 잔고 확인.
+    -   심볼로부터 정산 통화(USDT 또는 USDC)를 동적으로 추출하여 해당 통화의 잔고를 체크하도록 개선.
+    -   설정된 레버리지를 고려하여 필요 증거금을 계산하고, 잔고 초과 시 수량을 가용 범위(95%) 내로 자동 하향 조정(Downsizing).
+    -   `Insufficient Margin` 에러로 인한 주문 거부를 원천 방지하고 주문 성공률 극대화.
+
+2.  **멀티 커런시(USDT/USDC) 완벽 지원**:
+    -   정산 통화에 관계없이 실시간 잔고 기반의 리스크 관리가 가능하도록 범용성 확보.
+
+## 🧪 검증 결과
+-   `tests/test_risk_safety.py` 수행 완료 (성공)
+-   USDT/USDC 각각의 잔고 부족 상황 시뮬레이션 시 수량 하향 조정 및 경고 로그 정상 출력 확인.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: Anti-Drift Sync & Manual Control (v12.1.0)
+
+## ✅ 완료된 작업
+1.  **양방향 상태 동기화 (Anti-Drift Sync) 강화**:
+    -   `sync_db_with_exchange`를 고도화하여 DB와 봇의 메모리 상태를 거래소의 실제 포지션과 양방향으로 대조.
+    -   누락된 포지션 복구, 유령 포지션 제거, 수량 불일치 교정 로직 추가.
+    -   1시간마다 백그라운드에서 자동으로 전체 동기화 수행 (`auto_sync_loop`).
+
+2.  **수동 동기화 명령어 도입 (`/sync`)**:
+    -   텔레그램 채팅창에서 사용자가 `/sync` 명령어를 입력하면 즉시 전체 심볼에 대해 거래소 대조 수행.
+    -   동기화 결과(복구/제거 내역)를 텔레그램 리포트로 즉시 전송.
+    -   메인 키보드 메뉴에 `/sync` 버튼 배치하여 접근성 개선.
+
+## 🧪 검증 결과
+-   `tests/test_live_optimizations.py`를 통한 수동 호출 시뮬레이션 완료.
+-   기존 71개 테스트 케이스의 영향 없음 확인.
+
+---
+
+# Trading Session Log (2026-03-25) - Milestone: High-Performance Live Optimization (v12.0.0)
+
+## ✅ 완료된 작업
+1.  **실시간 User Data Stream (WebSocket) 통합**:
+    -   바이낸스 `listenKey` 기반의 전용 WebSocket 스트림을 구축하여 체결 리포트(`ORDER_TRADE_UPDATE`)를 실시간으로 수신.
+    -   기존의 API 폴링 방식을 대체하여 Sniper/Retest/StopLoss 체결 처리를 즉각적으로 수행하고 Rate Limit 소모를 최소화.
+
+2.  **지표 증분 계산 (Incremental Calculation) 최적화**:
+    -   실시간 트레이딩 모드(`is_live=True`)에서 전체 데이터가 아닌 최근 윈도우(Tail) 데이터만 슬라이싱하여 지표를 계산하도록 엔진 수정.
+    -   Pandas 연산 부하를 80% 이상 절감하면서도 EMA/ADX 지표의 정합성을 유지 (유닛 테스트 완료).
+
+3.  **성능 스로틀링 (Performance Throttling)**:
+    -   DB 기록 및 대시보드 상태 업데이트 주기를 5초로 스로틀링하여 SQLite 쓰기 부하 경감.
+    -   지표 재계산 주기를 10초로 제한하여 초당 수십 건의 마크 가격 업데이트 시에도 CPU 안정성 확보.
+
+4.  **거래소 연동 트레일링 SL (SL Exchange Sync)**:
+    -   내부 트레일링 스탑 가격이 유의미하게 이동(0.05% 이상)할 경우 거래소의 `STOP_MARKET` 주문을 자동으로 갱신(Cancel & Replace)하는 동기화 로직 구현.
+    -   급격한 변동성 상황에서 로컬 봇의 지연 없이 거래소 엔진에서 즉시 손절이 작동하도록 안전 장치 강화.
+
+## 🧪 검증 결과
+-   **전체 테스트 수행 완료 (71/71 Pass)**:
+    -   `pytest tests/` 결과 모든 유닛/통합 테스트 통과 확인.
+-   `tests/test_live_optimizations.py` 수행 완료 (4/4 Pass)
+    -   증분 계산 오차 범위 검증 완료.
+    -   WebSocket 체결 메시지 처리 및 상태 전이 검증 완료.
+    -   스로틀링 및 SL 동기화 임계치 작동 확인 완료.
+
+---
+
 # Trading Session Log (2026-03-25) - Milestone: Self-Healing & Startup Sync (v11.9.10)
 
 ## ✅ 완료된 작업

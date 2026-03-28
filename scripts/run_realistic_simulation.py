@@ -34,16 +34,17 @@ async def run_realistic_simulation():
     
     # Injecting optimized TRUMP settings (v11.8.0 equivalent)
     kwargs = {
-        'use_sniper': True,
+        'use_sniper': False,
         'retest_maker': False,
         'vol_mult': 2.0,
-        'atr_trail_mult': 4.5,
+        'atr_trail_mult': 5.0,
         'ema_period': 100,
         'risk_pct': 0.05,
         'use_adaptive': True,
         'adaptive_steps': [
-            {"pnl_pct": 2.0, "tighten_ratio": 0.5},
-            {"pnl_pct": 5.0, "tighten_ratio": 0.3}
+            {"pnl_pct": 2.0, "tighten_ratio": 0.8},
+            {"pnl_pct": 5.0, "tighten_ratio": 0.5},
+            {"pnl_pct": 8.0, "tighten_ratio": 0.3}
         ]
     }
 
