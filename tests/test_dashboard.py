@@ -44,7 +44,7 @@ class TestDashboard(unittest.TestCase):
         mock_db.get_all_live_status.return_value = pd.DataFrame([{
             'symbol': 'BTC/USDT', 'vol_ratio': 0.5, 'adx_ratio': 0.8, 'prox_ratio': 0.9,
             'trend_ok': 1, 'signal_score': 85.0, 'last_price': 51000.0,
-            'upper_band': 52000.0, 'lower_column': 48000.0
+            'upper_band': 52000.0, 'lower_column': 48000.0, 'adx_value': 22.5
         }])
 
         # 2. Mock Exchange Ticker

@@ -325,7 +325,7 @@ class SymbolBotAsync:
             
             self.db.update_live_status(
                 self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, 
-                last_price, upper, lower
+                last_price, upper, lower, float(row['adx'])
             )
         except Exception as e:
             self.logger.error(f"Error recording live status: {e}")

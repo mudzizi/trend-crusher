@@ -1,3 +1,25 @@
+# Trading Session Log (2026-03-28) - Milestone: ADX Transparency & Dashboard UI (v12.9.0)
+
+## ✅ 완료된 작업
+1.  **ADX 실시간 투명성 확보 (ADX Transparency)**:
+    -   대시보드에서 ADX 값이 항상 100%로 표시되던 문제 해결 (기존에는 목표치 대비 비율만 표시).
+    -   `live_indicators` 테이블에 `adx_value` 컬럼을 추가하여 실제 ADX 수치를 저장하고 대시보드에 전달.
+    -   UI 수정: `ADX Strength` 섹션에 실제 수치와 목표 대비 비율을 병기 (예: **32.5** / 100%).
+
+2.  **데이터베이스 스키마 마이그레이션**:
+    -   `src/db_manager.py`에 자동 컬럼 추가 로직(`ALTER TABLE`)을 반영하여 기존 데이터 유실 없이 `adx_value` 필드 확장.
+
+3.  **봇 및 대시보드 연동 최적화**:
+    -   `scripts/live_bot_async.py`에서 계산된 실제 ADX 값을 DB에 실시간 기록하도록 수정.
+    -   `scripts/dashboard.py`에서 신규 필드를 읽어 프론트엔드로 전달하는 데이터 파이프라인 연결.
+
+## 🧪 검증 결과
+-   **DB 마이그레이션 테스트**: `test_db_migration.py`를 통해 신규 컬럼 생성 및 데이터 입출력 정상 작동 확인.
+-   **대시보드 통합 테스트**: `tests/test_dashboard.py`를 수정된 UI 스펙에 맞춰 업데이트하고 100% 통과 확인.
+-   **회귀 테스트**: 전체 테스트 슈트 실행을 통해 기존 기능 영향 없음 확인.
+
+---
+
 # Trading Session Log (2026-03-25) - Milestone: Security Hardening & Dashboard Fixes (v12.8.0)
 
 ## ✅ 완료된 작업

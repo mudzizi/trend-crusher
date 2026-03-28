@@ -71,6 +71,7 @@ def index():
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
                     "adx_ratio": round(row['adx_ratio'] * 100, 1),
+                    "adx_value": round(row['adx_value'], 1) if 'adx_value' in row else 0,
                     "prox_ratio": round(row['prox_ratio'] * 100, 1),
                     "trend_ok": bool(row['trend_ok']),
                     "score": round(row['signal_score'], 1),

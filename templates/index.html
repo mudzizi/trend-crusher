@@ -83,7 +83,7 @@
                         <div class="mb-2">
                             <div class="d-flex justify-content-between small mb-1">
                                 <span>ADX Strength (>{{ bot.adx_limit }})</span>
-                                <span>{{ bot.adx_ratio }}%</span>
+                                <span><b>{{ bot.adx_value }}</b> / {{ bot.adx_ratio }}%</span>
                             </div>
                             <div class="progress">
                                 <div class="progress-bar-fill {% if bot.adx_ratio >= 100 %}bg-success{% else %}bg-info{% endif %}" style="width: {{ bot.adx_ratio }}%"></div>

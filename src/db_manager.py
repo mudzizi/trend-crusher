@@ -72,17 +72,23 @@ class DBManager:
                     last_price REAL,
                     upper_band REAL,
                     lower_column REAL,
+                    adx_value REAL DEFAULT 0,
                     last_updated DATETIME DEFAULT (datetime('now','localtime'))
                 )
             """)
+            # Migration: Add adx_value if missing
+            try:
+                conn.execute("ALTER TABLE live_indicators ADD COLUMN adx_value REAL DEFAULT 0")
+            except:
+                pass
 
-    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower):
+    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0):
         with self._get_connection() as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO live_indicators 
-                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower))
+                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, adx_value, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, adx_value))
 
     def get_all_live_status(self):
         with self._get_connection() as conn:
