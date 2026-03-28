@@ -66,7 +66,7 @@ def index():
             live_status_df = db.get_all_live_status()
             for _, row in live_status_df.iterrows():
                 sym = row['symbol']
-                sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, CONFIG)
+                sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, {})
                 live_monitors.append({
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
@@ -78,9 +78,9 @@ def index():
                     "price": row['last_price'],
                     "upper": row['upper_band'],
                     "lower": row['lower_column'],
-                    "mode": "Sniper" if sym_settings.get("USE_SNIPER") else ("Retest" if sym_settings.get("USE_RETEST_MAKER") else "Market"),
-                    "vol_mult": sym_settings.get("VOL_MULTIPLIER"),
-                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL")
+                    "mode": "Sniper" if sym_settings.get("USE_SNIPER", CONFIG.get("USE_SNIPER")) else ("Retest" if sym_settings.get("USE_RETEST_MAKER", CONFIG.get("USE_RETEST_MAKER")) else "Market"),
+                    "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.0)),
+                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 25.0))
                 })
         except: pass
 
