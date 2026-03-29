@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.8.1] - 2026-03-29
+### Optimized
+- **Sniper Entry Engine**: Replaced `LIMIT` orders with `STOP_MARKET` for Sniper mode. This prevents premature Taker fills when placing orders above/below current market price and ensures entry only occurs at the exact breakout level.
+- **Price Precision**: Integrated Binance WebSocket `ap` (Average Price) field for real-time order updates, providing bit-perfect entry prices for the dashboard and PnL tracking.
+### Fixed
+- **Dashboard Synchronization**: Fixed a state persistence gap where Sniper fills via WebSocket weren't immediately reflected on the dashboard. Forced DB sync now occurs immediately upon `FILLED` status.
+- **Test Integrity**: Updated the 71-test suite to validate `STOP_MARKET` parameters and positional arguments through the API retry wrapper.
+
 ## [v12.8.0] - 2026-03-25
 ### Security
 - **Dashboard Hardening**: Restrained Flask host to `127.0.0.1` and disabled `debug` mode to prevent unauthorized remote access and potential RCE via interactive debugger.

@@ -1,3 +1,28 @@
+# Trading Session Log (2026-03-29) - Milestone: Precision Sniper & Dashboard Sync (v12.8.1)
+
+## ✅ 완료된 작업
+1.  **Sniper 모드 `STOP_MARKET` 고도화**:
+    -   기존 `LIMIT` 주문 방식의 맹점(현재가보다 높은 Buy Limit 시 즉시 Taker 체결)을 해결하기 위해 `STOP_MARKET` 주문으로 전면 교체.
+    -   이로써 돌파 지점(`target_price`)을 실제로 터치할 때만 주문이 실행되어 불필요한 슬리피지 및 조기 체결 방지.
+
+2.  **체결 평단가(`ap`) 정밀 반영**:
+    -   웹소켓 `on_order_update`에서 마지막 체결가(`L`) 대신 전체 평균 체결가(`ap`)를 우선 참조하도록 수정.
+    -   `STOP_MARKET` 및 `MARKET` 체결 시 발생하는 다중 체결 상황에서도 대시보드 평단가를 정확히 일치시킴.
+
+3.  **대시보드 실시간 동기화 보완**:
+    -   웹소켓으로 `FILLED` 이벤트 수신 시 즉시 `_on_fill_success`를 통해 `persist_state`를 호출하여 DB 상태를 강제 갱신.
+    -   봇이 체결되었음에도 대시보드에 표시되지 않던 데이터 싱크 문제를 원천적으로 해결.
+
+4.  **시스템 검증 (Zero Regression)**:
+    -   `STOP_MARKET` 파라미터(stopPrice 등) 검증 로직을 `tests/test_sniper_logic.py`에 반영.
+    -   **71개 전체 테스트 케이스 100% Pass** 확인.
+
+## 🧪 검증 결과
+-   **유닛 테스트**: `pytest tests/` 결과 모든 항목 통과.
+-   **동작 검증**: Mock Exchange 호출 인자 분석을 통해 `STOP_MARKET` 파라미터의 정확한 전달 확인.
+
+---
+
 # Trading Session Log (2026-03-28) - Milestone: ADX Transparency & Dashboard UI (v12.9.0)
 
 ## ✅ 완료된 작업

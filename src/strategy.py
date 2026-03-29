@@ -220,7 +220,9 @@ class TrendCrusherV2:
         return False
 
     def run_streaming_backtest(self, df_1m, **kwargs):
+        sentinel = kwargs.get('sentinel', None)
         config = self.c.copy()
+        # ... (기존 mapping 로직 생략되지 않도록 주의)
         mapping = {
             'use_sniper': 'USE_SNIPER', 'use_retest_maker': 'USE_RETEST_MAKER',
             'vol_mult': 'VOL_MULTIPLIER', 'atr_trail_mult': 'TRAILING_ATR_MULT',
@@ -230,9 +232,12 @@ class TrendCrusherV2:
         }
         for k, v in kwargs.items(): config[mapping.get(k, k)] = v
         
-        df_1h_base = get_all_base_bars(df_1m, config["SIGNAL_TIMEFRAME"], include_incomplete=True)
-        df_4h_base = get_all_base_bars(df_1m, config["TREND_TIMEFRAME"], include_incomplete=True)
-        df_1h_ind = self.calculate_indicators(df_1h_base, df_4h_base, config)
+        if 'pre_calculated_ind' in kwargs:
+            df_1h_ind = kwargs['pre_calculated_ind']
+        else:
+            df_1h_base = get_all_base_bars(df_1m, config["SIGNAL_TIMEFRAME"], include_incomplete=True)
+            df_4h_base = get_all_base_bars(df_1m, config["TREND_TIMEFRAME"], include_incomplete=True)
+            df_1h_ind = self.calculate_indicators(df_1h_base, df_4h_base, config)
         
         # --- NumPy Optimization: Extract arrays before loop ---
         m_times = pd.to_datetime(df_1m['timestamp']).values.astype('datetime64[s]')
@@ -244,7 +249,11 @@ class TrendCrusherV2:
 
         # Index mapping for indicators (1h to 1m alignment)
         # Create a lookup array for indicator indices
-        ind_timestamps = df_1h_ind.index.values.astype('datetime64[s]')
+        if 'timestamp' in df_1h_ind.columns:
+            ind_timestamps = df_1h_ind['timestamp'].values.astype('datetime64[s]')
+        else:
+            ind_timestamps = df_1h_ind.index.values.astype('datetime64[s]')
+        
         ind_data = {col: df_1h_ind[col].values for col in df_1h_ind.columns}
         
         # Pre-map 1m timestamps to indicator indices to avoid hash lookups in loop
@@ -253,10 +262,11 @@ class TrendCrusherV2:
         prev_hour_ts = (m_hour_ts - np.timedelta64(1, 'h')).astype('datetime64[s]')
         
         # Use searchsorted for fast index mapping
-        lookup_idx = np.searchsorted(ind_timestamps, prev_hour_ts)
-        # Validate indices (handle cases where prev_hour doesn't exist in indicators)
-        mask = (lookup_idx < len(ind_timestamps)) & (ind_timestamps[lookup_idx] == prev_hour_ts)
-        valid_lookup_idx = np.where(mask, lookup_idx, -1)
+        # We want the MOST RECENT indicator bar that is <= prev_hour_ts
+        lookup_idx = np.searchsorted(ind_timestamps, prev_hour_ts, side='right') - 1
+        
+        # Validate indices
+        valid_lookup_idx = np.where(lookup_idx >= 0, lookup_idx, -1)
 
         # Pre-convert adaptive steps for Numba
         use_adaptive = config.get("USE_ADAPTIVE_TRAIL", False)
@@ -281,7 +291,8 @@ class TrendCrusherV2:
         prox_threshold = config.get("SNIPER_PROXIMITY_PCT", 0.005)
 
         print(f"🚀 [Jump Engine] Starting Numba-Vectorized Simulation...")
-        warmup = 200 * 60
+        # If indicators are pre-calculated, we don't need warmup within the loop
+        warmup = 0 if 'pre_calculated_ind' in kwargs else (120 * 60)
         
         # Cache indicator columns as separate arrays for faster access
         i_upper = ind_data['upper']
@@ -290,6 +301,7 @@ class TrendCrusherV2:
         i_adx = ind_data['adx']
         i_avg_vol = ind_data['avg_vol']
         i_ema_h = ind_data['ema_h']
+        i_chop = ind_data['chop'] if 'chop' in ind_data else np.full(len(i_upper), 50.0)
 
         i = warmup
         while i < len(df_1m):
@@ -361,6 +373,15 @@ class TrendCrusherV2:
                 sig_type, target_p, sl_p = numba_check_entry(last_p, r_ema_h, r_upper, r_lower, r_atr, r_adx, r_avg_vol, current_cum_vol,
                                                             vol_mult, adx_threshold, initial_sl_atr, 
                                                             use_sniper, retest_maker, prox_threshold)
+                
+                # --- Sentinel Check (If exists) ---
+                if sentinel and sig_type > 0:
+                    # Create a temporary row-like dict for sentinel
+                    row_data = {'chop': i_chop[idx] if 'chop' in ind_data else 50.0}
+                    is_safe, reason = sentinel.is_market_safe(row_data)
+                    if not is_safe:
+                        sig_type = 0 # Reject entry
+                # ----------------------------------
                 
                 if sig_type == 3: # RETEST
                     pending_maker_order = {'side': (1 if target_p > r_ema_h else -1), 'price': target_p, 'sl': sl_p, 'timestamp': pd.Timestamp(m_times[i]), 'ts_raw': m_times[i]}

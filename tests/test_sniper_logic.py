@@ -18,8 +18,8 @@ def mock_config():
 @pytest.fixture
 def mock_bot(mock_config):
     mock_exchange = MagicMock()
-    mock_exchange.create_limit_order = AsyncMock(return_value={'id': 'limit_123'})
-    mock_exchange.create_order = AsyncMock(return_value={'id': 'limit_456'})
+    # Updated: mock create_order to return a specific ID for STOP_MARKET
+    mock_exchange.create_order = AsyncMock(return_value={'id': 'stop_market_123'})
     mock_exchange.cancel_order = AsyncMock()
     mock_exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
     mock_exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
@@ -36,23 +36,38 @@ def mock_bot(mock_config):
     bot.use_sniper = True
     
     # Setup dummy indicators to bypass basic checks
-    bot.df_indicators = pd.DataFrame([{'atr': 100, 'ema_h': 9500, 'upper': 10000, 'lower': 9000, 'volume': 2500, 'avg_vol': 1000, 'adx': 20}])
+    bot.df_indicators = pd.DataFrame([{
+        'timestamp': pd.Timestamp.now(),
+        'atr': 100, 
+        'ema_h': 9500, 
+        'upper': 10000, 
+        'lower': 9000, 
+        'volume': 2500, 
+        'avg_vol': 1000, 
+        'adx': 20
+    }])
     return bot
 
 @pytest.mark.asyncio
 async def test_sniper_ambush_placed_when_conditions_met(mock_bot):
-    # 신호 엔진이 SNIPER 신호를 준다고 가정
+    # Scenario: Engine signals SNIPER breakout at 10000.0
     with patch.object(mock_bot.engine, 'check_entry_signal', return_value=('SNIPER', 10000.0, 9800.0)):
         await mock_bot.check_entry()
     
-    # Assertions
-    assert mock_bot.active_sniper_order_id == 'limit_123'
-    mock_bot.exchange.create_limit_order.assert_called_once()
+    # Assertions: Verify STOP_MARKET was placed instead of LIMIT
+    assert mock_bot.active_sniper_order_id == 'stop_market_123'
+    
+    # Verify create_order was called with correct parameters for STOP_MARKET
+    mock_bot.exchange.create_order.assert_called_once()
+    args, kwargs = mock_bot.exchange.create_order.call_args
+    # create_order signature: symbol, type, side, amount, price, params
+    assert args[1] == 'STOP_MARKET'
+    assert args[5]['stopPrice'] == 10000.0
 
 @pytest.mark.asyncio
 async def test_sniper_ambush_aborted_when_condition_fails(mock_bot):
     # Scenario: Sniper is active but conditions die (engine returns None)
-    mock_bot.active_sniper_order_id = 'limit_123'
+    mock_bot.active_sniper_order_id = 'stop_market_123'
     
     with patch.object(mock_bot.engine, 'check_entry_signal', return_value=(None, None, None)):
         await mock_bot.check_entry()
@@ -71,4 +86,4 @@ async def test_sniper_kill_switch_forces_market_order(mock_bot):
     
     # Assertions
     mock_bot.execute_entry.assert_called_once()
-    assert mock_bot.active_sniper_order_id is None
+    assert mock_bot.active_sniper_order_id is None 

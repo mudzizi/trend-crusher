@@ -145,8 +145,9 @@ class SymbolBotAsync:
                     self.logger.warning(f"⚠️ Margin Guard (Sniper): Reduced Qty {old_qty} -> {self.quantity}")
                     if self.quantity <= 0: return
 
-                self.logger.info(f"🏹 Sniper: {side.upper()} LIMIT at {target_price:,.2f}")
-                order = await self.retry_api_call(self.exchange.create_limit_order, self.symbol, side, self.quantity, target_price)
+                self.logger.info(f"🏹 Sniper STOP_MARKET: {side.upper()} at {target_price:,.2f}")
+                params = {'stopPrice': target_price, 'reduceOnly': False}
+                order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', side, self.quantity, None, params)
                 self.active_sniper_order_id = order['id']
         except Exception as e: self.logger.error(f"Sniper error: {e}")
 
@@ -243,12 +244,13 @@ class SymbolBotAsync:
             status = order_data['X']
             side = order_data['S'].lower()
             qty = float(order_data['z']) # Cumulative filled quantity
-            avg_price = float(order_data['L']) # Last filled price (or use 'ap' for average)
+            # Binance WS 'ap' field is the average price, more accurate for STOP_MARKET/MARKET fills
+            avg_price = float(order_data.get('ap', order_data['L'])) 
             
             if status == 'FILLED':
                 # 1. Sniper/Retest Entry Fill
                 if order_id in [self.active_sniper_order_id, self.active_retest_order_id]:
-                    self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price}")
+                    self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
                     self.quantity = qty
                     self.entry_price = avg_price
                     direction = 1 if side == 'buy' else -1

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- System Version ---
-VERSION = "12.8.0"
+VERSION = "12.8.1"
 
 def load_config():
     """
