@@ -1,11 +1,12 @@
-# TrendCrusher Configuration Example (v12.8.2)
+# TrendCrusher Configuration Example (v12.8.3)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "12.8.2"
+VERSION: "12.8.3"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.
+EXCHANGE: "binance"
 BINANCE_API_KEY: "YOUR_BINANCE_API_KEY"
 BINANCE_SECRET: "YOUR_BINANCE_SECRET"
 TELEGRAM_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN"

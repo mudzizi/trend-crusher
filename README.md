@@ -1,4 +1,4 @@
-# 🚀 TrendCrusher V12.8.1: The Unified Strategy Engine
+# 🚀 TrendCrusher V12.8.3: The Unified Strategy Engine
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
 > TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V12.8.0 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.

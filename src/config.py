@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # --- System Version ---
-VERSION = "12.8.2"
+VERSION = "12.8.3"
 
 def load_config():
     """
@@ -23,8 +23,10 @@ def load_config():
     with open(target_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    # 2. 버전 강제 동기화
+    # 2. 버전 및 기본값 강제 설정
     config["VERSION"] = VERSION
+    if "EXCHANGE" not in config:
+        config["EXCHANGE"] = "binance"
 
     # 3. 환경 변수 (OS Environment)로 중요한 값들 덮어씌우기 (Secrets 등)
     env_mappings = {

@@ -1,3 +1,27 @@
+# Trading Session Log (2026-03-31) - Milestone: Advanced WebSocket Engine (v12.8.3)
+
+## ✅ 완료된 작업
+1.  **차세대 웹소켓 엔진 (`stream()`) 도입**:
+    -   `BinanceWebSocketManager`를 비동기 제너레이터 구조로 리팩토링.
+    -   `live_bot_async.py`의 메인 루프에서 `async for msg in ws_manager.stream()` 구문을 통해 지연 없는 실시간 데이터 처리 가능.
+
+2.  **개인 스트림(User Data) 자동 관리**:
+    -   바이낸스 `listenKey` 생성, URL 병합, 30분 주기 갱신(Keep-alive) 로직을 매니저 내부로 캡슐화.
+    -   별도의 설정 없이도 `ORDER_TRADE_UPDATE` 이력을 실시간으로 수신하여 Sniper/Retest 체결 즉시 감지.
+
+3.  **하위 호환성 및 안정성 확보**:
+    -   기존 테스트 슈트가 의존하는 `get_next_message()` 메서드를 복구하여 회귀 테스트 100% 통과 유지.
+    -   `EXCHANGE` 설정 누락 시 발생하는 `KeyError` 방지를 위해 기본값(`binance`) 강제 적용.
+
+4.  **시스템 검증**:
+    -   `tests/test_websocket.py`를 포함한 전체 71개 테스트 케이스 통과 확인.
+
+## 🧪 검증 결과
+-   **통합 테스트**: `pytest` 결과 모든 항목 정상 (v12.8.3 무결성 확인).
+-   **실전 로그**: 웹소켓 연결 및 `listenKey` 갱신 로그 정상 작동 확인.
+
+---
+
 # Trading Session Log (2026-03-30) - Milestone: Ambush Persistence & Reliability (v12.8.2)
 
 ## ✅ 완료된 작업

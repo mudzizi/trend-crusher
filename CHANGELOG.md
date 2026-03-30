@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.8.3] - 2026-03-31
+### Added
+- **Stream-based WebSocket Engine**: Upgraded `BinanceWebSocketManager` with an `async generator` (`stream()`) for modern `async for` loop compatibility, reducing message processing latency.
+- **Automated ListenKey Management**: Integrated private User Data Stream support. The bot now automatically fetches, manages, and keeps alive the Binance `listenKey` for real-time `ORDER_TRADE_UPDATE` events.
+- **Enhanced Configuration Fallbacks**: Added hardcoded default for `EXCHANGE: "binance"` in `config.py` to prevent crashes when the key is missing from `config.yaml`.
+### Fixed
+- **WebSocket Compatibility**: Restored `get_next_message()` and immediate URL construction to maintain full compatibility with the existing 71-test suite.
+
 ## [v12.8.2] - 2026-03-30
 ### Added
 - **Persistent Ambush Tracking**: Expanded the DB schema to store `active_sniper_order_id` and `active_retest_order_id`. The bot now recovers pending ambush orders upon restart, ensuring no fill is ever missed.

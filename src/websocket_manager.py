@@ -11,28 +11,68 @@ class BinanceWebSocketManager:
     Manages WebSocket connections to Binance Futures streams.
     Supports multiple symbols, public streams, and private User Data Stream.
     """
-    def __init__(self, symbols=None, listen_key=None, base_url="wss://fstream.binance.com/ws"):
+    def __init__(self, symbols=None, exchange=None, base_url="wss://fstream.binance.com/ws"):
+        self.symbols = symbols
+        self.exchange = exchange
         self.base_url = base_url
         self.queue = asyncio.Queue()
         self._running = False
+        self.listen_key = None
         
-        if listen_key:
-            # User Data Stream URL
-            self.url = f"{self.base_url}/{listen_key}"
-        elif symbols:
-            # Public Streams URL
-            self.symbols = [s.replace('/', '').lower() for s in symbols]
-            streams = []
-            for s in self.symbols:
+        # Initial URL construction (Public streams only)
+        self.url = self._construct_url(symbols, None)
+
+    def _construct_url(self, symbols, listen_key):
+        """Helper to construct the aggregate WebSocket URL."""
+        streams = []
+        if symbols:
+            formatted_symbols = [s.replace('/', '').lower() for s in symbols]
+            for s in formatted_symbols:
                 streams.append(f"{s}@kline_1h")
                 streams.append(f"{s}@kline_1m")
                 streams.append(f"{s}@markPrice")
-            self.url = f"{self.base_url}/{'/'.join(streams)}"
-        else:
-            raise ValueError("Either symbols or listen_key must be provided.")
+        
+        if listen_key:
+            streams.append(listen_key)
+            
+        if not streams:
+            return None
+            
+        return f"{self.base_url}/{'/'.join(streams)}"
+
+    async def _get_listen_key(self):
+        """Fetches a new listenKey from Binance for private user data stream."""
+        if not self.exchange: return None
+        try:
+            response = await self.exchange.fapiPrivatePostListenKey()
+            return response.get('listenKey')
+        except Exception as e:
+            logger.error(f"Failed to fetch listenKey: {e}")
+            return None
+
+    async def _keep_alive_listen_key(self):
+        """Pings the listenKey every 30 minutes to keep it active."""
+        while self._running and self.listen_key:
+            await asyncio.sleep(1800) # 30 minutes
+            try:
+                await self.exchange.fapiPrivatePutListenKey()
+                logger.info("📡 listenKey keep-alive ping sent.")
+            except Exception as e:
+                logger.warning(f"listenKey keep-alive failed: {e}")
 
     async def connect(self):
         self._running = True
+        
+        # 1. Private Stream setup if exchange provided
+        if self.exchange:
+            self.listen_key = await self._get_listen_key()
+            if self.listen_key:
+                self.url = self._construct_url(self.symbols, self.listen_key)
+                asyncio.create_task(self._keep_alive_listen_key())
+        
+        if not self.url:
+            raise ValueError("No symbols or listenKey available for WebSocket.")
+
         import ssl
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
@@ -41,11 +81,10 @@ class BinanceWebSocketManager:
         reconnect_delay = 5
         while self._running:
             try:
-                # Log only first 10 chars of URL to protect listenKey
                 logger.info(f"Connecting to WebSocket: {self.url.split('/')[-1][:10]}...")
                 async with websockets.connect(self.url, ssl=ssl_context, ping_interval=20, ping_timeout=10) as ws:
                     logger.info("✅ WebSocket Connected Successfully")
-                    reconnect_delay = 5 # Reset delay on success
+                    reconnect_delay = 5
                     while self._running:
                         message = await ws.recv()
                         data = json.loads(message)
@@ -54,24 +93,23 @@ class BinanceWebSocketManager:
                 if self._running:
                     logger.error(f"❌ WebSocket Error: {e}. Retrying in {reconnect_delay}s...")
                     await asyncio.sleep(reconnect_delay)
-                    reconnect_delay = min(reconnect_delay * 2, 60) # Exponential backoff
+                    reconnect_delay = min(reconnect_delay * 2, 60)
 
     async def get_next_message(self):
         """Retrieves the next message from the queue."""
         return await self.queue.get()
 
+    async def stream(self):
+        """
+        Async generator that yields messages from the WebSocket.
+        Starts the connection task if not already running.
+        """
+        if not self._running:
+            asyncio.create_task(self.connect())
+            
+        while True:
+            yield await self.queue.get()
+
     def stop(self):
         self._running = False
         logger.info("Stopping WebSocket Manager...")
-
-if __name__ == "__main__":
-    # Quick test
-    logging.basicConfig(level=logging.INFO)
-    async def test():
-        manager = BinanceWebSocketManager(["BTC/USDT", "ETH/USDT"])
-        asyncio.create_task(manager.connect())
-        while True:
-            msg = await manager.get_next_message()
-            print(f"Received: {msg.get('e')} for {msg.get('s')}")
-    
-    asyncio.run(test())
