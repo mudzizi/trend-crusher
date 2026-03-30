@@ -230,7 +230,7 @@ class SymbolBotAsync:
             # Throttled Re-calculation (Every 10s or on candle close)
             now = time.time()
             if kline['x'] or (now - self.last_indicator_calc_ts > 10):
-                self._update_indicators(is_live=is_live)
+                self._update_indicators(is_live=True)
                 self.last_indicator_calc_ts = now
 
             if not kline['x']:
@@ -627,14 +627,27 @@ class SymbolBotAsync:
             positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
             pos = next((p for p in positions if p['symbol'] == self.symbol), None)
             
+            exit_price = self.last_price
             if pos and float(pos['contracts']) != 0:
                 side = 'sell' if float(pos['contracts']) > 0 else 'buy'
-                await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, abs(float(pos['contracts'])))
+                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, side, abs(float(pos['contracts'])))
+                if order and isinstance(order, dict):
+                    exit_price = float(order.get('average') or order.get('price') or exit_price)
                 self.logger.info(f"✅ Market liquidation order sent for {self.symbol}")
 
             await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
 
+            # Record trade close if we had an active position in memory or exchange
+            if self.position != 0:
+                pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
+                pnl_usdt = (exit_price - self.entry_price) * self.quantity * self.position
+                self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
+                await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
+
             self.position = 0
+            self.entry_price = 0
+            self.quantity = 0
+            self.sl_order_id = None
             self.persist_state()
         except Exception as e:
             self.logger.error(f"❌ Force exit failed for {self.symbol}: {e}")

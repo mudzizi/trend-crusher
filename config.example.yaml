@@ -1,8 +1,8 @@
-# TrendCrusher Configuration Example (v12.8.1)
+# TrendCrusher Configuration Example (v12.8.2)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "12.8.1"
+VERSION: "12.8.2"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.

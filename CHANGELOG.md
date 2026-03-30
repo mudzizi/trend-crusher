@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.8.2] - 2026-03-30
+### Added
+- **Persistent Ambush Tracking**: Expanded the DB schema to store `active_sniper_order_id` and `active_retest_order_id`. The bot now recovers pending ambush orders upon restart, ensuring no fill is ever missed.
+- **Diagnostic Logging**: Implemented comprehensive logging for every order update received via WebSocket to provide full transparency into the exchange communication.
+- **Redundant Fill Polling**: Added a 30-second fallback polling mechanism that checks exchange order status to safeguard against potential WebSocket message loss.
+### Fixed
+- **Force Exit Precision**: Updated `force_exit()` to record trade closure in the database and calculate PnL even during emergency liquidations.
+- **Runtime Stability**: Fixed an `is_live` name error in the indicator update loop and cleaned up duplicated entry points.
+
 ## [v12.8.1] - 2026-03-29
 ### Optimized
 - **Sniper Entry Engine**: Replaced `LIMIT` orders with `STOP_MARKET` for Sniper mode. This prevents premature Taker fills when placing orders above/below current market price and ensures entry only occurs at the exact breakout level.

@@ -1,7 +1,7 @@
-# TrendCrusher V11.9.7: Strategy Whitepaper
+# TrendCrusher V12.8.2: Strategy Whitepaper
 
 ## 1. 개요 (Overview)
-TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V11.9.7 버전은 **'NumPy 기반 초고속 엔진'**과 **'실전형 차등 수수료 로직'**을 도입하여 시뮬레이션의 속도와 경제적 정확성을 동시에 달성했습니다.
+TrendCrusher는 변동성 돌파(Volatility Breakout)와 적응형 트레일링 스탑(Adaptive Trailing Stop)을 결합한 추세 추종 전략입니다. V12.8.2 버전은 **'NumPy 기반 초고속 엔진'**과 **'실전형 차등 수수료 로직'**을 도입하여 시뮬레이션의 속도와 경제적 정확성을 동시에 달성했습니다.
 
 ## 2. 핵심 로직 (Core Logic)
 

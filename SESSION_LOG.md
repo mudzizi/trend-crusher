@@ -1,3 +1,28 @@
+# Trading Session Log (2026-03-30) - Milestone: Ambush Persistence & Reliability (v12.8.2)
+
+## ✅ 완료된 작업
+1.  **매복 주문 영구 추적 (Ambush Persistence)**:
+    -   `bot_state` DB 테이블에 `sniper_order_id`, `retest_order_id` 컬럼 추가.
+    -   봇 재시작 시 대기 중인 매복 주문을 자동 복구하여 체결 누락 원천 차단.
+
+2.  **30초 주기 상태 폴링 (Redundant Polling)**:
+    -   웹소켓 누락에 대비하여 30초마다 거래소 API를 통해 주문 상태를 확인하는 백업 로직 가동.
+    -   네트워크 불안정 시에도 최대 30초 이내에 포지션 진입 자동 감지.
+
+3.  **전역 주문 진단 로깅 (Diagnostic Logging)**:
+    -   웹소켓으로 들어오는 모든 주문 업데이트(ID, 상태, 수량, 가격)를 상세 로그에 기록.
+    -   매칭되지 않는 주문이나 무시된 이벤트까지 투명하게 추적 가능.
+
+4.  **긴급 청산 로직 보완 (Force Exit PnL)**:
+    -   `/close_all` 등 긴급 청산 시에도 실제 체결가를 반영하여 DB에 매매 기록(`log_trade_close`)을 남기도록 개선.
+    -   긴급 상황에서도 수익률 통계의 연속성 유지.
+
+## 🧪 검증 결과
+-   **통합 테스트**: 71개 테스트 케이스 전원 통과 (v12.8.2 안정성 검증 완료).
+-   **실전 파리티**: `is_live` 변수 참조 오류 해결 및 코드 클린업 완료.
+
+---
+
 # Trading Session Log (2026-03-29) - Milestone: Precision Sniper & Dashboard Sync (v12.8.1)
 
 ## ✅ 완료된 작업
