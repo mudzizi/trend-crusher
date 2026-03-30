@@ -9,8 +9,8 @@ class MarketSentinel:
     def __init__(self, config=None):
         self.config = config or {}
         self.daily_loss_limit = self.config.get("SENTINEL_DAILY_LOSS_LIMIT", -5.0) # -5% 손실 시 차단
-        self.chop_threshold = self.config.get("SENTINEL_CHOP_THRESHOLD", 61.8)    # 61.8 이상이면 횡보
-        self.bb_width_threshold = self.config.get("SENTINEL_BB_WIDTH_MIN", 0.01) # 너무 좁으면 변동성 부족
+        self.chop_threshold = self.config.get("SENTINEL_CHOP_THRESHOLD", 70.0)    # 70.0 이상만 횡보로 간주 (완화)
+        self.bb_width_threshold = self.config.get("SENTINEL_BB_WIDTH_MIN", 0.01)
         
         # 상태 저장 (Kill Switch용)
         self.is_killed = False

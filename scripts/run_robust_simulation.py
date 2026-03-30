@@ -77,7 +77,7 @@ async def run_robust_simulation(symbol, risk_pct):
     return {"Symbol": symbol, "Risk": f"{risk_pct*100}%", "Return": final_return, "MDD": mdd}
 
 async def main():
-    symbols = ["ETH/USDT", "XRP/USDT", "XAU/USDT"]
+    symbols = ["TRUMP/USDT"]
     risks = [0.05, 0.08]
     results = []
     

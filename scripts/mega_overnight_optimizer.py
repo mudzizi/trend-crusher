@@ -73,13 +73,16 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     print(f"🚀 [{q_name}] Optimizing {sym} | {start_date.date()} ~ {end_date.date()}")
 
     # Grids
-    vol_multipliers = [1.5, 2.0, 2.5]
+    vol_multipliers = [1.5, 2.2, 2.8]
     trailing_mults = [3.5, 4.5]
-    adx_thresholds = [15, 20]
+    adx_thresholds = [20, 30]
     donchian_periods = [10, 20]
-    risk_pcts = [0.02, 0.05, 0.10]
+    risk_pcts = [0.03, 0.05, 0.08, 0.10]
     modes = [('Market', False, False), ('Sniper', True, False), ('Retest', False, True)]
-    adaptive_options = [[], [{"pnl_pct": 2.0, "tighten_ratio": 0.5}], [{"pnl_pct": 5.0, "tighten_ratio": 0.7}]]
+    adaptive_options = [[], 
+                        [{"pnl_pct": 2.0, "tighten_ratio": 0.5},{"pnl_pct": 2.0, "tighten_ratio":0.3}],
+                        [{"pnl_pct": 5.0, "tighten_ratio": 0.5},{"pnl_pct": 8.0, "tighten_ratio":0.3}]
+                        ]
     
     # 1. Pre-calculation (Robust to short data)
     df_1h_base = get_all_base_bars(data_1m_filtered, "1h")

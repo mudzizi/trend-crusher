@@ -57,8 +57,13 @@ class DBManager:
             # Migration: Add sl_price if missing
             try:
                 conn.execute("ALTER TABLE bot_state ADD COLUMN sl_price REAL DEFAULT 0")
-            except:
-                pass
+            except: pass
+            
+            # Migration: Add sniper/retest order IDs
+            try:
+                conn.execute("ALTER TABLE bot_state ADD COLUMN sniper_order_id TEXT")
+                conn.execute("ALTER TABLE bot_state ADD COLUMN retest_order_id TEXT")
+            except: pass
 
             # New table for Real-time Monitoring
             conn.execute("""
