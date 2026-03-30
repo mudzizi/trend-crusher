@@ -736,7 +736,6 @@ async def handle_commands(bots, notifier, pm):
 async def main():
     db = DBManager()
     notifier = TelegramNotifier()
-    pm = PortfolioManagerAsync(db)
     
     exchange_class = getattr(ccxt, CONFIG["EXCHANGE"])
     exchange = exchange_class({
@@ -744,6 +743,8 @@ async def main():
         'secret': CONFIG["BINANCE_SECRET"],
         'options': {'defaultType': 'future'}
     })
+    
+    pm = PortfolioManagerAsync(exchange, CONFIG)
 
     try:
         await exchange.load_markets()
