@@ -1,3 +1,18 @@
+# Trading Session Log (2026-03-31) - Milestone: Flexible Symbol Matching & AWS Readiness (v12.9.2)
+
+## ✅ 완료된 작업
+1.  **심볼 매칭 유연성 확보**:
+    -   `ws_loop`에서 `ETHUSDT` 및 `ETH/USDT` 등 다양한 심볼 표기 방식을 동시에 지원하도록 수정.
+    -   특정 코인(ETH)이 대시보드에 나타나지 않던 매칭 오류 해결.
+
+2.  **초기 상태 기록 강제**:
+    -   봇 초기화 즉시 DB에 현재 상태를 기록하여 대시보드 로딩 시 모든 심볼이 즉시 나타나도록 개선.
+
+3.  **패치 버전 업데이트**:
+    -   버전을 `12.9.2`로 상향하고 전체 코드 업로드 준비 완료.
+
+---
+
 # Trading Session Log (2026-03-31) - Milestone: Dashboard Indicator Fix (v12.9.1)
 
 ## ✅ 완료된 작업

@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [12.9.2] - 2026-03-31
+### **🔧 Critical Dashboard & Event Handling Fix**
+- **Flexible Symbol Matching**: Optimized `ws_loop` to match symbols both with and without slashes (e.g., `ETH/USDT` vs `ETHUSDT`), fixing the issue where some symbols' indicators were missing on the dashboard.
+- **Instant Monitoring**: Forced an initial `live_status` record to the DB immediately after bot initialization, ensuring all coins appear on the dashboard upon startup.
+- **Version Maintenance**: Upgraded to **12.9.2**.
+
 ## [12.9.1] - 2026-03-31
 ### **🔧 Dashboard Fix & Minor Refinements**
 - **Fixed Live Indicators**: Restored dashboard indicator status by handling `markPriceUpdate` events in the `ws_loop`.

@@ -196,6 +196,8 @@ class SymbolBotAsync:
             self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=500)
             self._update_indicators()
             self.logger.info(f"📊 Indicators Initialized (500 bars)")
+            # [CRITICAL] Record initial status to DB for dashboard visibility
+            asyncio.create_task(self._record_live_status())
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
             raise e
@@ -596,7 +598,6 @@ async def main():
         async def ws_loop():
             async for msg in ws_manager.stream():
                 try:
-                    # Special event: Gap-filling sync after reconnection
                     if isinstance(msg, dict) and msg.get('e') == 'WS_RECONNECTED':
                         logger.info("🔄 WS Reconnected. Triggering full order sync for all bots...")
                         for bot in bots.values(): asyncio.create_task(bot.sync_all_orders())
@@ -605,8 +606,15 @@ async def main():
                     payload = msg.get('data', msg) if isinstance(msg, dict) else msg
                     if 'e' in payload:
                         e_type = payload['e']
-                        symbol = payload['s'].replace("USDT", "/USDT") if 's' in payload else (payload['o']['s'].replace("USDT", "/USDT") if 'o' in payload else None)
-                        if symbol in bots:
+                        raw_symbol = payload['s'] if 's' in payload else (payload['o']['s'] if 'o' in payload else None)
+                        if not raw_symbol: continue
+                        
+                        # Flexible symbol matching: "ETHUSDT" -> "ETH/USDT" or "ETHUSDT"
+                        symbol = None
+                        if raw_symbol in bots: symbol = raw_symbol
+                        elif raw_symbol.replace("USDT", "/USDT") in bots: symbol = raw_symbol.replace("USDT", "/USDT")
+                        
+                        if symbol:
                             if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
                             elif e_type == 'markPriceUpdate': await bots[symbol].on_mark_price_update(float(payload['p']))
                             elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
