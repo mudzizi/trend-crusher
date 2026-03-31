@@ -308,44 +308,47 @@
                     ]
                 },
                 options: {
+                    animation: false,
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
                     plugins: { 
                         legend: { display: false },
-                        tooltip: { 
-                            enabled: true,
-                            backgroundColor: '#1e293b',
-                            titleColor: '#94a3b8',
-                            bodyColor: '#f8fafc',
-                            borderColor: '#334155',
-                            borderWidth: 1
-                        }
+                        tooltip: { enabled: true }
                     },
                     scales: {
                         x: { 
                             display: true, 
                             grid: { display: false },
-                            ticks: { color: '#475569', font: { size: 8 }, maxTicksLimit: 6 }
+                            ticks: { 
+                                color: '#64748b', 
+                                font: { size: 8 }, 
+                                maxTicksLimit: 8,
+                                callback: function(val, index) {
+                                    return this.getLabelForValue(val).split(' ')[1]; // Show only HH:MM
+                                }
+                            }
                         },
                         y: { 
                             display: true, 
                             position: 'left',
-                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
-                            ticks: { color: '#94a3b8', font: { size: 9 }, maxTicksLimit: 5 }
+                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                            ticks: { 
+                                color: '#94a3b8', 
+                                font: { size: 9 },
+                                callback: function(value) { return '$' + value.toLocaleString(); }
+                            }
                         },
                         y_adx: {
-                            display: true,
-                            position: 'right',
+                            display: false,
                             min: 0,
                             max: 100,
-                            grid: { display: false },
-                            ticks: { color: '#38bdf8', font: { size: 8 }, maxTicksLimit: 3 }
+                            position: 'right'
                         },
                         y_vol: {
                             display: false,
-                            position: 'right',
-                            min: 0
+                            min: 0,
+                            position: 'right'
                         }
                     }
                 }

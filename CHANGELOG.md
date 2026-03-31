@@ -2,15 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [13.1.0] - 2026-03-31
-### **📊 Advanced Strategy Visualization (Macro Charting)**
-- **Hourly Technical Snapshot**: Implemented `history_1h` table to store macro snapshots (Price, EMA, Donchian, Vol, ADX) every hour.
-- **Multi-Axis Rich Charts**: Replaced tick charts with 48h macro charts featuring:
-    - **Y-Axis 1**: Price, EMA 200, Donchian High/Low.
-    - **Y-Axis 2**: ADX Strength (0-100).
-    - **Background**: Trading Volume (Bars).
-- **Improved Chart UX**: Added chronological X-axis labels and multi-indicator tooltips.
-- **Maintenance**: Upgraded system version to **13.1.0**.
+## [13.1.1] - 2026-03-31
+### **🚀 Macro Visualization & UX Finalization**
+- **Advanced Macro Charting**: Replaced tick charts with 48h macro charts featuring Price, EMA 200, Donchian High/Low, ADX Strength, and Volume.
+- **Alphabetical Sorting**: Fixed dashboard issue where coin cards kept switching positions; now strictly sorted by symbol name.
+- **Robust Backfilling**: Implemented 48h indicator backfilling with correct strategy engine column mapping and index-based timestamping.
+- **System Stability**: Fixed critical SyntaxError in `db_manager.py` and optimized WebSocket event handling for high-frequency updates.
 
 ## [12.9.2] - 2026-03-31
 ### **🔧 Critical Dashboard & Event Handling Fix**

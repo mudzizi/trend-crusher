@@ -8,6 +8,11 @@ import pandas as pd
 import ccxt
 import traceback
 import time
+import logging
+
+# --- Logger Setup ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # --- Flask Setup ---
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -92,11 +97,14 @@ def index():
                         "lower": hist_df['donchian_lower'].tolist(),
                         "volume": hist_df['volume'].tolist(),
                         "adx": hist_df['adx'].tolist(),
-                        "labels": hist_df['timestamp'].apply(lambda x: x.split(' ')[0][5:] + " " + x.split(' ')[1][:5]).tolist()
+                        "labels": [str(t).split(' ')[1][:5] if ' ' in str(t) else str(t) for t in hist_df['timestamp'].tolist()]
                     }
                 })
         except Exception as e:
             logger.error(f"Error fetching live status history: {e}")
+
+        # --- [NEW] Sort monitors by symbol to keep consistent order ---
+        live_monitors = sorted(live_monitors, key=lambda x: x['symbol'])
 
         # 3. Fetch Market Summary
         for sym in symbols:

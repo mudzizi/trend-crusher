@@ -1,16 +1,16 @@
-# Trading Session Log (2026-03-31) - Milestone: Macro Strategy Visualization (v13.1.0)
+# Trading Session Log (2026-03-31) - Milestone: Macro Strategy Visualization & UX Fix (v13.1.1)
 
 ## ✅ 완료된 작업
 1.  **거시적 지표 시각화 (Hourly Charting)**:
-    -   `history_1h` 테이블을 신설하여 1시간 봉 마감 시 가격, EMA, Donchian, Volume, ADX를 자동 기록하도록 구현.
-    -   대시보드 차트의 시간 범위를 기존 '최근 몇 분'에서 **'최근 48시간'**으로 대폭 확장.
+    -   `history_1h` 테이블 및 48시간 자동 백필(Backfill) 로직 구현.
+    -   Y축 멀티 축 및 인디케이터 통합형 고성능 차트 엔진 도입.
 
-2.  **멀티 인디케이터 통합 차트**:
-    -   Y축 1(가격/EMA/밴드), Y축 2(ADX), 하단 바(Volume)가 통합된 고성능 차트 엔진 구현.
-    -   트레이더가 전략의 흐름을 거시적으로 한눈에 판단할 수 있도록 시각화 개선.
+2.  **대시보드 UX 개선**:
+    -   심볼 알파벳 순서 정렬을 통해 대시보드 리스트 위치 고정.
+    -   정확한 컬럼 매핑(`ema_h`, `upper`, `lower`)으로 데이터 출력 무결성 확보.
 
-3.  **버전 대규모 업데이트**:
-    -   시스템 버전을 **`13.1.0`**으로 상향하고 깃 푸시 완료.
+3.  **최종 시스템 안정화**:
+    -   `db_manager.py` 문법 오류 수정 및 전체 테스트 71개 통과 완료.
 
 ---
 

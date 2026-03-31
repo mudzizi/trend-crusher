@@ -5,7 +5,7 @@ import os
 import logging
 import signal
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
 from src.strategy import TrendCrusherV2
@@ -194,8 +194,38 @@ class SymbolBotAsync:
 
             self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=500)
             self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=500)
+            
             self._update_indicators()
-            self.logger.info(f"📊 Indicators Initialized (500 bars)")
+            
+            # --- [BACKFILL] Populate history_1h with last 48h of already computed data ---
+            if self.df_indicators is not None and not self.df_indicators.empty:
+                self.logger.info(f"💾 Backfilling 48h history for {self.symbol}...")
+                # Get the last 48 rows (hourly bars) from the computed indicators
+                history_slice = self.df_indicators.tail(48)
+                saved_count = 0
+                for idx, row in history_slice.iterrows():
+                    try:
+                        # Extract timestamp from index (Pandas DatetimeIndex expected)
+                        ts_str = idx.strftime("%Y-%m-%d %H:%M:%S")
+
+                        # Using correct engine columns: ema_h, upper, lower
+                        self.db.log_history_1h(
+                            self.symbol,
+                            ts_str,
+                            float(row['close']),
+                            float(row['ema_h']),
+                            float(row['upper']),
+                            float(row['lower']),
+                            float(row['volume']),
+                            float(row['adx'])
+                        )
+                        saved_count += 1
+                    except Exception as e:
+                        self.logger.debug(f"Skip row: {e}")
+                self.logger.info(f"📊 {saved_count} hourly rows backfilled for {self.symbol}")
+            else:
+                self.logger.warning(f"⚠️ Indicators initialized but df is empty for {self.symbol}")
+            
             # [CRITICAL] Record initial status to DB for dashboard visibility
             asyncio.create_task(self._record_live_status())
         except Exception as e:
@@ -240,10 +270,11 @@ class SymbolBotAsync:
                     try:
                         self.db.log_history_1h(
                             self.symbol,
+                            self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
                             float(last_row['close']),
-                            float(last_row['ema_trend']),
-                            float(last_row['upper_band']),
-                            float(last_row['lower_column']),
+                            float(last_row['ema_h']),
+                            float(last_row['upper']),
+                            float(last_row['lower']),
                             float(last_row['volume']),
                             float(last_row['adx'])
                         )

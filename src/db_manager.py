@@ -94,7 +94,8 @@ class DBManager:
                     donchian_upper REAL,
                     donchian_lower REAL,
                     volume REAL,
-                    adx REAL
+                    adx REAL,
+                    UNIQUE(symbol, timestamp)
                 )
             """)
             
@@ -102,12 +103,14 @@ class DBManager:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_live_indicators_symbol ON live_indicators(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_history_1h_symbol ON history_1h(symbol)")
 
-    def log_history_1h(self, symbol, close, ema, d_upper, d_lower, vol, adx):
+    def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx):
+        """Logs 1h technical snapshot. timestamp can be explicit or None for 'now'."""
+        ts = timestamp if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT INTO history_1h (symbol, timestamp, close, ema, donchian_upper, donchian_lower, volume, adx)
-                VALUES (?, datetime('now','localtime'), ?, ?, ?, ?, ?, ?)
-            """, (symbol, close, ema, d_upper, d_lower, vol, adx))
+                INSERT OR IGNORE INTO history_1h (symbol, timestamp, close, ema, donchian_upper, donchian_lower, volume, adx)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (symbol, ts, close, ema, d_upper, d_lower, vol, adx))
             
             # Cleanup old records (keep last 120 hours = 5 days)
             conn.execute("""
@@ -119,13 +122,18 @@ class DBManager:
             """, (symbol, symbol))
 
     def get_history_1h(self, symbol, limit=48):
+        """Returns recent history for a specific symbol for charting (Chronological order)."""
         with self._get_connection() as conn:
-            return pd.read_sql_query("""
-                SELECT * FROM history_1h 
-                WHERE symbol = ? 
-                ORDER BY timestamp ASC LIMIT ?
-            """, (pd.read_sql_query(f"SELECT COUNT(*) as cnt FROM (SELECT id FROM history_1h WHERE symbol='{symbol}' ORDER BY timestamp DESC LIMIT {limit})", conn).iloc[0]['cnt']), # Subquery to get ascending order of the latest X rows
-            conn, params=(symbol, limit))
+            # Get latest N records first, then sort them ASC for the chart
+            query = f"""
+                SELECT * FROM (
+                    SELECT * FROM history_1h 
+                    WHERE symbol = ? 
+                    ORDER BY timestamp DESC LIMIT ?
+                ) AS sub 
+                ORDER BY timestamp ASC
+            """
+            return pd.read_sql_query(query, conn, params=(symbol, limit))
 
     def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0):
         with self._get_connection() as conn:
@@ -153,15 +161,6 @@ class DBManager:
                 SELECT * FROM live_indicators 
                 WHERE id IN (SELECT MAX(id) FROM live_indicators GROUP BY symbol)
             """, conn)
-
-    def get_indicator_history(self, symbol, limit=50):
-        """Returns recent history for a specific symbol for charting."""
-        with self._get_connection() as conn:
-            return pd.read_sql_query("""
-                SELECT * FROM live_indicators 
-                WHERE symbol = ? 
-                ORDER BY last_updated DESC LIMIT ?
-            """, conn, params=(symbol, limit))
 
     def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id):
         with self._get_connection() as conn:
