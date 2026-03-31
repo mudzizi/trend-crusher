@@ -661,10 +661,18 @@ async def main():
                         raw_symbol = payload['s'] if 's' in payload else (payload['o']['s'] if 'o' in payload else None)
                         if not raw_symbol: continue
                         
-                        # Flexible symbol matching: "ETHUSDT" -> "ETH/USDT" or "ETHUSDT"
+                        # Flexible symbol matching: Supports USDT, USDC, etc.
                         symbol = None
-                        if raw_symbol in bots: symbol = raw_symbol
-                        elif raw_symbol.replace("USDT", "/USDT") in bots: symbol = raw_symbol.replace("USDT", "/USDT")
+                        if raw_symbol in bots: 
+                            symbol = raw_symbol
+                        else:
+                            # Try replacing common quote assets with slash format
+                            for quote in ["USDT", "USDC"]:
+                                if raw_symbol.endswith(quote):
+                                    test_sym = raw_symbol.replace(quote, f"/{quote}")
+                                    if test_sym in bots:
+                                        symbol = test_sym
+                                        break
                         
                         if symbol:
                             if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
