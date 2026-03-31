@@ -1,3 +1,15 @@
+# Trading Session Log (2026-03-31) - Milestone: Dashboard Indicator Fix (v12.9.1)
+
+## ✅ 완료된 작업
+1.  **대시보드 실시간 지표 복구**:
+    -   `scripts/live_bot_async.py`의 `ws_loop`에 `markPriceUpdate` 이벤트 핸들러를 추가하여 DB의 `live_status`가 주기적으로 갱신되도록 수정.
+    -   대시보드에서 각 심볼의 보조지표 상태가 정상적으로 시각화됨을 확인.
+
+2.  **패치 버전 업데이트**:
+    -   버전을 `12.9.1`로 상향하고 `CHANGELOG.md` 및 설정 파일 갱신.
+
+---
+
 # Trading Session Log (2026-03-31) - Milestone: WebSocket Resilience & Account Logging (v12.9.0)
 
 ## ✅ 완료된 작업

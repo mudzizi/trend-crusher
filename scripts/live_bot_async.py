@@ -608,6 +608,7 @@ async def main():
                         symbol = payload['s'].replace("USDT", "/USDT") if 's' in payload else (payload['o']['s'].replace("USDT", "/USDT") if 'o' in payload else None)
                         if symbol in bots:
                             if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
+                            elif e_type == 'markPriceUpdate': await bots[symbol].on_mark_price_update(float(payload['p']))
                             elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
                 except Exception as e: logger.error(f"Error in ws_loop: {e}")
         logger.info(f"🚀 TrendCrusher {CONFIG['VERSION']} Async Core Started.")

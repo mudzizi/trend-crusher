@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [12.9.1] - 2026-03-31
+### **🔧 Dashboard Fix & Minor Refinements**
+- **Fixed Live Indicators**: Restored dashboard indicator status by handling `markPriceUpdate` events in the `ws_loop`.
+- **Improved Data Pipeline**: Ensured that the real-time price updates trigger DB status recordings for each symbol.
+- **Maintenance**: Synced system version to **12.9.1**.
+
 ## [12.9.0] - 2026-03-31
 ### **🚀 Resilience & Reliability Overhaul**
 - **Official Binance Connector Integration**: Replaced raw WebSocket implementation with the official `binance-futures-connector` library for industrial-grade stability.

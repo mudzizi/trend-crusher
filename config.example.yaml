@@ -2,7 +2,7 @@
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "12.9.0"
+VERSION: "12.9.1"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.
