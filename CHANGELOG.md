@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v12.8.4] - 2026-03-31
+### Enhanced
+- **Detailed Status Reporting**: Upgraded the `/status` command to provide a full technical breakdown per symbol, including Current Price vs. EMA 200, Donchian Bands, Volume/ADX targets, and Breakout Proximity (%).
+- **Notification Reliability**: Restored missing Telegram alerts in the `force_exit` logic, ensuring users receive immediate confirmation during emergency liquidations.
+### Fixed
+- **Code Integrity**: Resolved critical `IndentationError` and removed corrupted code fragments at the end of `live_bot_async.py`.
+- **Runtime Stability**: Fixed an `is_live` name error in the real-time indicator update loop.
+
 ## [v12.8.3] - 2026-03-31
 ### Added
 - **Stream-based WebSocket Engine**: Upgraded `BinanceWebSocketManager` with an `async generator` (`stream()`) for modern `async for` loop compatibility, reducing message processing latency.
