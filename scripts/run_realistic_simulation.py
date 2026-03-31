@@ -39,7 +39,7 @@ async def run_realistic_simulation():
         'vol_mult': 2.2,
         'atr_trail_mult': 4.5,
         'ema_period': 100,
-        'risk_pct': 0.05,
+        'risk_pct': 0.08,
         'use_adaptive': True,
         'adaptive_steps': [
             {"pnl_pct": 5.0, "tighten_ratio": 0.5},

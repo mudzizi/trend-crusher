@@ -1,3 +1,21 @@
+# Trading Session Log (2026-04-01) - Milestone: Dashboard Timezone & Logging Fix (v13.1.3)
+
+## ✅ 완료된 작업
+1.  **대시보드 한국 시간(KST) 전환**:
+    -   `scripts/dashboard.py`를 수정하여 DB에서 가져온 UTC 타임스탬프에 +9시간을 더해 KST로 표시하도록 변경.
+    -   개별 심볼 차트 및 하단 포트폴리오 자산 차트 모두에 적용 완료.
+2.  **실시간 차트 데이터 로깅 주기 수정**:
+    -   `scripts/live_bot_async.py`에서 기존 4시간(`trend_tf`)마다 저장되던 로직을 1시간(`signal_tf`)마다 저장되도록 변경.
+    -   이제 매 정시(KST 기준)마다 차트 데이터가 정상적으로 쌓이게 됨.
+3.  **포트폴리오 가치 표시 로직 확인**:
+    -   `equity` 테이블이 비어있을 경우 `config.yaml`의 `SEED` 값을 읽어오는 구조 확인 및 `.env` 파일의 우선순위 재확인.
+
+## 🧪 검증 결과
+-   `scripts/dashboard.py` 실행 시 기존 UTC 15:00 데이터가 KST 00:00으로 정상 표시됨을 확인.
+-   `live_bot_async.py`의 `kline['x']` 조건이 `signal_tf`와 일치할 때 로깅 로직이 실행되도록 수정됨.
+
+---
+
 # Trading Session Log (2026-03-31) - Milestone: Macro Strategy Visualization & UX Fix (v13.1.1)
 
 ## ✅ 완료된 작업

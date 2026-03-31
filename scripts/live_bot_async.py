@@ -264,8 +264,8 @@ class SymbolBotAsync:
                 self._update_indicators(is_live=True)
                 self.last_indicator_calc_ts = now
                 
-                # [CRITICAL] Log 1h snapshot when trend candle closes
-                if kline['x'] and tf == trend_tf:
+                # [CRITICAL] Log 1h snapshot when signal candle closes
+                if kline['x'] and tf == signal_tf:
                     last_row = self.df_indicators.iloc[-1]
                     try:
                         self.db.log_history_1h(

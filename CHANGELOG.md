@@ -2,7 +2,13 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
-## [13.1.1] - 2026-03-31
+## [v13.1.3] - 2026-04-01
+### Fixed
+- **Dashboard Timezone**: All charts (individual symbols and portfolio equity) now display timestamps in KST (UTC+9) for easier monitoring.
+- **Hourly Logging Logic**: Fixed a bug where charts only updated every 4 hours. Data is now logged correctly at the close of every 1-hour signal candle.
+- **Portfolio Value Display**: Confirmed fallback logic for SEED value when equity history is empty.
+
+## [v13.1.2] - 2026-03-31
 ### **🚀 Macro Visualization & UX Finalization**
 - **Advanced Macro Charting**: Replaced tick charts with 48h macro charts featuring Price, EMA 200, Donchian High/Low, ADX Strength, and Volume.
 - **Alphabetical Sorting**: Fixed dashboard issue where coin cards kept switching positions; now strictly sorted by symbol name.

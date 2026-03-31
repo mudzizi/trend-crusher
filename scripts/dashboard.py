@@ -75,6 +75,9 @@ def index():
                 
                 # Fetch hourly history for charting (last 48h)
                 hist_df = db.get_history_1h(sym, limit=48)
+                if not hist_df.empty:
+                    # Convert UTC to KST
+                    hist_df['timestamp'] = pd.to_datetime(hist_df['timestamp']) + pd.Timedelta(hours=9)
                 
                 live_monitors.append({
                     "symbol": sym,
@@ -97,7 +100,7 @@ def index():
                         "lower": hist_df['donchian_lower'].tolist(),
                         "volume": hist_df['volume'].tolist(),
                         "adx": hist_df['adx'].tolist(),
-                        "labels": [str(t).split(' ')[1][:5] if ' ' in str(t) else str(t) for t in hist_df['timestamp'].tolist()]
+                        "labels": [t.strftime('%H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
                     }
                 })
         except Exception as e:
@@ -128,8 +131,11 @@ def index():
     
     # Use symbol='TOTAL' for main dashboard balance and chart
     equity_df = db.get_equity_history(symbol='TOTAL')
+    if not equity_df.empty:
+        equity_df['timestamp'] = pd.to_datetime(equity_df['timestamp']) + pd.Timedelta(hours=9)
+        
     chart_data = {
-        "labels": equity_df['timestamp'].tolist() if not equity_df.empty else [],
+        "labels": [t.strftime('%m-%d %H:%M') for t in equity_df['timestamp']] if not equity_df.empty else [],
         "equity_values": equity_df['balance'].tolist() if not equity_df.empty else []
     }
 
