@@ -36,8 +36,8 @@ async def run_realistic_simulation():
     kwargs = {
         'use_sniper': True,
         'retest_maker': False,
-        'vol_mult': 2.0,
-        'atr_trail_mult': 5.0,
+        'vol_mult': 2.2,
+        'atr_trail_mult': 4.5,
         'ema_period': 100,
         'risk_pct': 0.05,
         'use_adaptive': True,

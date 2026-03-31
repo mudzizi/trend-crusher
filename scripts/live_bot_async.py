@@ -240,7 +240,7 @@ class SymbolBotAsync:
 
     async def on_order_update(self, order_data):
         try:
-            order_id = order_data['i']
+            order_id = str(order_data['i'])
             symbol = order_data['s']
             status = order_data['X']
             side = order_data['S'].lower()
@@ -250,7 +250,7 @@ class SymbolBotAsync:
             self.logger.info(f"📝 WS Order Update: {symbol} {side} {status} (ID: {order_id}, Qty: {qty}, Price: {avg_price:,.2f})")
             
             if status == 'FILLED':
-                if order_id in [self.active_sniper_order_id, self.active_retest_order_id]:
+                if order_id in [str(self.active_sniper_order_id), str(self.active_retest_order_id)]:
                     self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
                     self.quantity = qty
                     self.entry_price = avg_price
@@ -260,7 +260,7 @@ class SymbolBotAsync:
                     self.active_retest_order_id = None
                     self.retest_order_ts = None
                 
-                elif order_id == self.sl_order_id:
+                elif order_id == str(self.sl_order_id):
                     self.logger.info(f"🛡️ StopLoss FILLED via WS: {symbol} {side} at {avg_price}")
                     pnl_pct = ((avg_price / self.entry_price) - 1) * 100 * self.position
                     pnl_usdt = (avg_price - self.entry_price) * qty * self.position
@@ -271,13 +271,13 @@ class SymbolBotAsync:
                     self.notifier.notify_exit(f"SL {self.symbol}", avg_price, pnl_pct, pnl_usdt)
             
             elif status == 'CANCELED':
-                if order_id == self.sl_order_id:
+                if order_id == str(self.sl_order_id):
                     self.logger.warning(f"⚠️ SL Order {order_id} was CANCELED externally!")
                     self.sl_order_id = None
-                elif order_id == self.active_sniper_order_id:
+                elif order_id == str(self.active_sniper_order_id):
                     self.active_sniper_order_id = None
                     self.persist_state()
-                elif order_id == self.active_retest_order_id:
+                elif order_id == str(self.active_retest_order_id):
                     self.active_retest_order_id = None
                     self.persist_state()
         except Exception as e:
@@ -361,6 +361,34 @@ class SymbolBotAsync:
                 self.retest_order_ts = None
                 self.persist_state()
         except Exception as e: self.logger.error(f"Error checking retest fill: {e}")
+
+    async def sync_all_orders(self):
+        """Gap-filling sync: Check all pending orders via REST API to ensure no missed fills."""
+        if self.settings["DRY_RUN"]: return
+        self.logger.info(f"🔍 Syncing all orders for {self.symbol}...")
+        try:
+            # 1. Check Sniper & Retest fills
+            if self.active_sniper_order_id: await self.check_sniper_fill()
+            if self.active_retest_order_id: await self.check_retest_fill()
+            
+            # 2. Check StopLoss status
+            if self.sl_order_id and self.position != 0:
+                order = await self.retry_api_call(self.exchange.fetch_order, self.sl_order_id, self.symbol)
+                if order and order['status'] == 'closed':
+                    avg_p = float(order.get('average', order.get('price', 0)))
+                    qty = float(order.get('filled', order.get('amount', 0)))
+                    self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
+                    # Reuse on_order_update logic format
+                    await self.on_order_update({
+                        'i': self.sl_order_id, 
+                        's': self.symbol.replace('/', ''), 
+                        'X': 'FILLED', 
+                        'S': order['side'].upper(), 
+                        'z': qty, 
+                        'ap': avg_p
+                    })
+        except Exception as e:
+            self.logger.error(f"Error during order sync for {self.symbol}: {e}")
 
     async def check_entry(self):
         if self.is_halted or self.df_indicators is None: return
@@ -564,13 +592,24 @@ async def main():
         await exchange.load_markets()
         bots = {symbol: SymbolBotAsync(symbol, exchange, pm, notifier, db) for symbol in CONFIG["SYMBOLS_LIST"]}
         for bot in bots.values(): await bot.initialize()
-        ws_manager = BinanceWebSocketManager(CONFIG["SYMBOLS_LIST"], exchange)
+        ws_manager = BinanceWebSocketManager(CONFIG["SYMBOLS_LIST"], api_key=CONFIG["BINANCE_API_KEY"], api_secret=CONFIG["BINANCE_SECRET"])
         async def ws_loop():
             async for msg in ws_manager.stream():
-                symbol = msg['s'].replace("USDT", "/USDT") if 's' in msg else (msg['o']['s'].replace("USDT", "/USDT") if 'o' in msg else None)
-                if symbol in bots:
-                    if msg.get('e') == 'kline': await bots[symbol].on_kline_update(msg['k']['i'], msg['k'])
-                    elif msg.get('e') == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(msg['o'])
+                try:
+                    # Special event: Gap-filling sync after reconnection
+                    if isinstance(msg, dict) and msg.get('e') == 'WS_RECONNECTED':
+                        logger.info("🔄 WS Reconnected. Triggering full order sync for all bots...")
+                        for bot in bots.values(): asyncio.create_task(bot.sync_all_orders())
+                        continue
+
+                    payload = msg.get('data', msg) if isinstance(msg, dict) else msg
+                    if 'e' in payload:
+                        e_type = payload['e']
+                        symbol = payload['s'].replace("USDT", "/USDT") if 's' in payload else (payload['o']['s'].replace("USDT", "/USDT") if 'o' in payload else None)
+                        if symbol in bots:
+                            if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
+                            elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
+                except Exception as e: logger.error(f"Error in ws_loop: {e}")
         logger.info(f"🚀 TrendCrusher {CONFIG['VERSION']} Async Core Started.")
         await asyncio.gather(ws_loop(), handle_commands(bots, notifier, pm))
     except Exception as e: logger.error(f"Fatal crash: {e}"); notifier.send_message(f"🚨 **CRITICAL BOT CRASH**: {e}")

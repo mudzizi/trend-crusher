@@ -1,3 +1,24 @@
+# Trading Session Log (2026-03-31) - Milestone: WebSocket Resilience & Account Logging (v12.9.0)
+
+## ✅ 완료된 작업
+1.  **공식 Binance Connector 도입**:
+    -   `binance-futures-connector` 라이브러리를 활용하여 WebSocket 연결의 신뢰성을 기업 수준으로 격상.
+    -   서버 Ping/Pong 자동 대응 및 24시간 세션 유지 로직 표준화.
+
+2.  **ListenKey 회복 탄력성(Resilience) 강화**:
+    -   `listenKey` 연장 실패 시 즉시 새 키를 재발급받고 유저 데이터 스트림을 갱신하는 자동 복구 로직 구현.
+
+3.  **Gap-Filling 주문 동기화**:
+    -   WS 재연결(`WS_RECONNECTED`) 발생 시 REST API를 통해 모든 활성 주문의 상태를 강제로 동기화하여 체결 누락을 원천 차단.
+
+4.  **계정 통합 주문 로깅**:
+    -   `log/account_orders.log`를 신설하여 봇이 감시하지 않는 심볼을 포함한 계정 내 모든 주문 이벤트를 실시간 기록.
+
+5.  **버전 업그레이드**:
+    -   시스템 버전을 `12.9.0`으로 상향하고 `CHANGELOG.md` 및 설정 파일 업데이트 완료.
+
+---
+
 # Trading Session Log (2026-03-31) - Milestone: Enhanced Transparency & Reliability (v12.8.4)
 
 ## ✅ 완료된 작업

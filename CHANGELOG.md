@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [12.9.0] - 2026-03-31
+### **🚀 Resilience & Reliability Overhaul**
+- **Official Binance Connector Integration**: Replaced raw WebSocket implementation with the official `binance-futures-connector` library for industrial-grade stability.
+- **Resilient ListenKey Lifecycle**: Implemented automatic `listenKey` renewal and immediate re-issuance on failure, ensuring Private Streams never expire.
+- **Gap-Filling Order Sync**: Added `WS_RECONNECTED` event handling that triggers a full REST API order status synchronization (`fetch_order`) after any connection drop.
+- **Account-wide Order Logging**: Introduced `log/account_orders.log` to record EVERY order update across the entire Binance account, enhancing auditability and manual trade tracking.
+- **Type-Safe ID Management**: Fixed `order_id` type mismatch between CCXT (string) and Binance WebSocket (integer) to prevent missed fill detections.
+- **Heartbeat & Reconnection**: Standardized Ping/Pong handling and 24h session renewal logic.
+
 ## [v12.8.4] - 2026-03-31
 ### Enhanced
 - **Detailed Status Reporting**: Upgraded the `/status` command to provide a full technical breakdown per symbol, including Current Price vs. EMA 200, Donchian Bands, Volume/ADX targets, and Breakout Proximity (%).
