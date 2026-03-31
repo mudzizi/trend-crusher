@@ -233,7 +233,28 @@ class SymbolBotAsync:
             if kline['x'] or (now - self.last_indicator_calc_ts > 10):
                 self._update_indicators(is_live=True)
                 self.last_indicator_calc_ts = now
+                
+                # [CRITICAL] Log 1h snapshot when trend candle closes
+                if kline['x'] and tf == trend_tf:
+                    last_row = self.df_indicators.iloc[-1]
+                    try:
+                        self.db.log_history_1h(
+                            self.symbol,
+                            float(last_row['close']),
+                            float(last_row['ema_trend']),
+                            float(last_row['upper_band']),
+                            float(last_row['lower_column']),
+                            float(last_row['volume']),
+                            float(last_row['adx'])
+                        )
+                        self.logger.info(f"💾 Hourly snapshot logged for {self.symbol}")
+                    except Exception as e:
+                        self.logger.error(f"Error logging hourly snapshot: {e}")
+                
+                # Also record live status for dashboard
+                asyncio.create_task(self._record_live_status())
 
+            # [REAL-TIME] Continuous check even on unclosed candles
             if not kline['x']:
                 if self.position != 0: await self.check_exit()
                 else: await self.check_entry()

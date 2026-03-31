@@ -100,6 +100,11 @@
                             </div>
                         </div>
 
+                        <!-- Technical Indicator Chart (Hourly Snapshot) -->
+                        <div class="mb-3" style="height: 180px;">
+                            <canvas id="chart-{{ bot.symbol.replace('/', '-') }}"></canvas>
+                        </div>
+
                         <div class="d-flex justify-content-between small pt-2 border-top border-secondary">
                             <span>Trend Filter</span>
                             <span class="{% if bot.trend_ok %}text-up fw-bold{% else %}text-secondary{% endif %}">
@@ -231,7 +236,124 @@
         // Auto-refresh page every 30 seconds
         setTimeout(() => { location.reload(); }, 30000);
 
-        // Chart.js Equity Curve
+        // --- Per-Symbol Indicator Charts (v13.1.0 Rich Charts) ---
+        {% for bot in live_monitors %}
+        (function() {
+            const ctx = document.getElementById('chart-{{ bot.symbol.replace('/', '-') }}').getContext('2d');
+            const data = {{ bot.history|tojson if bot.history else '{"labels":[], "prices":[], "ema":[], "upper":[], "lower":[], "volume":[], "adx":[]}' }};
+            
+            if (data.labels.length === 0) return;
+
+            new Chart(ctx, {
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        {
+                            type: 'line',
+                            label: 'Price',
+                            data: data.prices,
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'EMA',
+                            data: data.ema,
+                            borderColor: '#f59e0b', // Orange
+                            borderWidth: 1.5,
+                            borderDash: [2, 2],
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Donchian Upper',
+                            data: data.upper,
+                            borderColor: 'rgba(239, 68, 68, 0.4)', // Red
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Donchian Lower',
+                            data: data.lower,
+                            borderColor: 'rgba(16, 185, 129, 0.4)', // Green
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                            yAxisID: 'y'
+                        },
+                        {
+                            type: 'line',
+                            label: 'ADX',
+                            data: data.adx,
+                            borderColor: '#38bdf8', // Blue
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            yAxisID: 'y_adx'
+                        },
+                        {
+                            type: 'bar',
+                            label: 'Volume',
+                            data: data.volume,
+                            backgroundColor: 'rgba(148, 163, 184, 0.15)',
+                            yAxisID: 'y_vol'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: { 
+                            enabled: true,
+                            backgroundColor: '#1e293b',
+                            titleColor: '#94a3b8',
+                            bodyColor: '#f8fafc',
+                            borderColor: '#334155',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            display: true, 
+                            grid: { display: false },
+                            ticks: { color: '#475569', font: { size: 8 }, maxTicksLimit: 6 }
+                        },
+                        y: { 
+                            display: true, 
+                            position: 'left',
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
+                            ticks: { color: '#94a3b8', font: { size: 9 }, maxTicksLimit: 5 }
+                        },
+                        y_adx: {
+                            display: true,
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            grid: { display: false },
+                            ticks: { color: '#38bdf8', font: { size: 8 }, maxTicksLimit: 3 }
+                        },
+                        y_vol: {
+                            display: false,
+                            position: 'right',
+                            min: 0
+                        }
+                    }
+                }
+            });
+        })();
+        {% endfor %}
+
+        // --- Chart.js Equity Curve ---
         const ctx = document.getElementById('equityChart').getContext('2d');
         new Chart(ctx, {
             type: 'line',

@@ -1,3 +1,19 @@
+# Trading Session Log (2026-03-31) - Milestone: Macro Strategy Visualization (v13.1.0)
+
+## ✅ 완료된 작업
+1.  **거시적 지표 시각화 (Hourly Charting)**:
+    -   `history_1h` 테이블을 신설하여 1시간 봉 마감 시 가격, EMA, Donchian, Volume, ADX를 자동 기록하도록 구현.
+    -   대시보드 차트의 시간 범위를 기존 '최근 몇 분'에서 **'최근 48시간'**으로 대폭 확장.
+
+2.  **멀티 인디케이터 통합 차트**:
+    -   Y축 1(가격/EMA/밴드), Y축 2(ADX), 하단 바(Volume)가 통합된 고성능 차트 엔진 구현.
+    -   트레이더가 전략의 흐름을 거시적으로 한눈에 판단할 수 있도록 시각화 개선.
+
+3.  **버전 대규모 업데이트**:
+    -   시스템 버전을 **`13.1.0`**으로 상향하고 깃 푸시 완료.
+
+---
+
 # Trading Session Log (2026-03-31) - Milestone: Flexible Symbol Matching & AWS Readiness (v12.9.2)
 
 ## ✅ 완료된 작업

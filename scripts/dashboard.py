@@ -67,6 +67,10 @@ def index():
             for _, row in live_status_df.iterrows():
                 sym = row['symbol']
                 sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, {})
+                
+                # Fetch hourly history for charting (last 48h)
+                hist_df = db.get_history_1h(sym, limit=48)
+                
                 live_monitors.append({
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
@@ -80,9 +84,19 @@ def index():
                     "lower": row['lower_column'],
                     "mode": "Sniper" if sym_settings.get("USE_SNIPER", CONFIG.get("USE_SNIPER")) else ("Retest" if sym_settings.get("USE_RETEST_MAKER", CONFIG.get("USE_RETEST_MAKER")) else "Market"),
                     "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.0)),
-                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 25.0))
+                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 25.0)),
+                    "history": {
+                        "prices": hist_df['close'].tolist(),
+                        "ema": hist_df['ema'].tolist(),
+                        "upper": hist_df['donchian_upper'].tolist(),
+                        "lower": hist_df['donchian_lower'].tolist(),
+                        "volume": hist_df['volume'].tolist(),
+                        "adx": hist_df['adx'].tolist(),
+                        "labels": hist_df['timestamp'].apply(lambda x: x.split(' ')[0][5:] + " " + x.split(' ')[1][:5]).tolist()
+                    }
                 })
-        except: pass
+        except Exception as e:
+            logger.error(f"Error fetching live status history: {e}")
 
         # 3. Fetch Market Summary
         for sym in symbols:

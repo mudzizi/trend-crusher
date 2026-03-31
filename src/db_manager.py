@@ -65,10 +65,11 @@ class DBManager:
                 conn.execute("ALTER TABLE bot_state ADD COLUMN retest_order_id TEXT")
             except: pass
 
-            # New table for Real-time Monitoring
+            # New table for Real-time Monitoring (History supported)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS live_indicators (
-                    symbol TEXT PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT,
                     vol_ratio REAL,
                     adx_ratio REAL,
                     prox_ratio REAL,
@@ -81,23 +82,86 @@ class DBManager:
                     last_updated DATETIME DEFAULT (datetime('now','localtime'))
                 )
             """)
-            # Migration: Add adx_value if missing
-            try:
-                conn.execute("ALTER TABLE live_indicators ADD COLUMN adx_value REAL DEFAULT 0")
-            except:
-                pass
+            
+            # [NEW] Table for 1h Historical Data for Charting
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS history_1h (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT,
+                    timestamp DATETIME,
+                    close REAL,
+                    ema REAL,
+                    donchian_upper REAL,
+                    donchian_lower REAL,
+                    volume REAL,
+                    adx REAL
+                )
+            """)
+            
+            # Indexes for performance
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_live_indicators_symbol ON live_indicators(symbol)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_history_1h_symbol ON history_1h(symbol)")
+
+    def log_history_1h(self, symbol, close, ema, d_upper, d_lower, vol, adx):
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO history_1h (symbol, timestamp, close, ema, donchian_upper, donchian_lower, volume, adx)
+                VALUES (?, datetime('now','localtime'), ?, ?, ?, ?, ?, ?)
+            """, (symbol, close, ema, d_upper, d_lower, vol, adx))
+            
+            # Cleanup old records (keep last 120 hours = 5 days)
+            conn.execute("""
+                DELETE FROM history_1h 
+                WHERE id NOT IN (
+                    SELECT id FROM history_1h WHERE symbol = ? 
+                    ORDER BY timestamp DESC LIMIT 120
+                ) AND symbol = ?
+            """, (symbol, symbol))
+
+    def get_history_1h(self, symbol, limit=48):
+        with self._get_connection() as conn:
+            return pd.read_sql_query("""
+                SELECT * FROM history_1h 
+                WHERE symbol = ? 
+                ORDER BY timestamp ASC LIMIT ?
+            """, (pd.read_sql_query(f"SELECT COUNT(*) as cnt FROM (SELECT id FROM history_1h WHERE symbol='{symbol}' ORDER BY timestamp DESC LIMIT {limit})", conn).iloc[0]['cnt']), # Subquery to get ascending order of the latest X rows
+            conn, params=(symbol, limit))
 
     def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0):
         with self._get_connection() as conn:
+            # Insert a new record for history instead of replacing
             conn.execute("""
-                INSERT OR REPLACE INTO live_indicators 
+                INSERT INTO live_indicators 
                 (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, adx_value, last_updated)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
             """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, adx_value))
+            
+            # Optional: Cleanup old records (keep last 200 per symbol to prevent DB bloat)
+            conn.execute("""
+                DELETE FROM live_indicators 
+                WHERE id NOT IN (
+                    SELECT id FROM live_indicators 
+                    WHERE symbol = ? 
+                    ORDER BY last_updated DESC LIMIT 200
+                ) AND symbol = ?
+            """, (symbol, symbol))
 
     def get_all_live_status(self):
+        """Returns the latest status for each symbol."""
         with self._get_connection() as conn:
-            return pd.read_sql_query("SELECT * FROM live_indicators", conn)
+            return pd.read_sql_query("""
+                SELECT * FROM live_indicators 
+                WHERE id IN (SELECT MAX(id) FROM live_indicators GROUP BY symbol)
+            """, conn)
+
+    def get_indicator_history(self, symbol, limit=50):
+        """Returns recent history for a specific symbol for charting."""
+        with self._get_connection() as conn:
+            return pd.read_sql_query("""
+                SELECT * FROM live_indicators 
+                WHERE symbol = ? 
+                ORDER BY last_updated DESC LIMIT ?
+            """, conn, params=(symbol, limit))
 
     def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id):
         with self._get_connection() as conn:

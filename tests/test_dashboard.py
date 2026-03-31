@@ -47,6 +47,17 @@ class TestDashboard(unittest.TestCase):
             'upper_band': 52000.0, 'lower_column': 48000.0, 'adx_value': 22.5
         }])
 
+        # Hourly History Mock
+        mock_db.get_history_1h.return_value = pd.DataFrame({
+            'timestamp': ['2026-03-20 08:00:00', '2026-03-20 09:00:00'],
+            'close': [50000.0, 51000.0],
+            'ema': [49000.0, 49500.0],
+            'donchian_upper': [52000.0, 52000.0],
+            'donchian_lower': [48000.0, 48000.0],
+            'volume': [100.0, 150.0],
+            'adx': [20.0, 25.0]
+        })
+
         # 2. Mock Exchange Ticker
         mock_exchange.fetch_ticker.return_value = {'last': 51000.0}
 
