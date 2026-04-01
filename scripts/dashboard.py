@@ -9,6 +9,7 @@ import ccxt
 import traceback
 import time
 import logging
+from datetime import datetime
 
 # --- Logger Setup ---
 logging.basicConfig(level=logging.INFO)
@@ -79,6 +80,28 @@ def index():
                     # Convert UTC to KST
                     hist_df['timestamp'] = pd.to_datetime(hist_df['timestamp']) + pd.Timedelta(hours=9)
                 
+                # --- [IMPROVEMENT] Append real-time point to the chart ---
+                prices = hist_df['close'].tolist()
+                ema_values = hist_df['ema'].tolist()
+                upper_bands = hist_df['donchian_upper'].tolist()
+                lower_bands = hist_df['donchian_lower'].tolist()
+                volumes = hist_df['volume'].tolist()
+                adx_values = hist_df['adx'].tolist()
+                labels = [t.strftime('%H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
+
+                # Add the very latest live data as the last point
+                # row is from live_status_df which contains the latest live_indicators
+                prices.append(row['last_price'])
+                ema_values.append(row['upper_band'] - (row['upper_band'] - row['lower_column'])/2) # Approximation if EMA not in live_indicators
+                upper_bands.append(row['upper_band'])
+                lower_bands.append(row['lower_column'])
+                volumes.append(row['vol_ratio'] * (sum(volumes)/len(volumes) if volumes else 1.0)) # Scaled volume
+                adx_values.append(row['adx_value'] if 'adx_value' in row else 0)
+                
+                # Current KST time label (HH:mm)
+                current_kst = datetime.now() # Server is already in KST based on user's 'date' output
+                labels.append(current_kst.strftime('%H:%M') + " (Now)")
+
                 live_monitors.append({
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
@@ -94,13 +117,13 @@ def index():
                     "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.0)),
                     "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 25.0)),
                     "history": {
-                        "prices": hist_df['close'].tolist(),
-                        "ema": hist_df['ema'].tolist(),
-                        "upper": hist_df['donchian_upper'].tolist(),
-                        "lower": hist_df['donchian_lower'].tolist(),
-                        "volume": hist_df['volume'].tolist(),
-                        "adx": hist_df['adx'].tolist(),
-                        "labels": [t.strftime('%H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
+                        "prices": prices,
+                        "ema": ema_values,
+                        "upper": upper_bands,
+                        "lower": lower_bands,
+                        "volume": volumes,
+                        "adx": adx_values,
+                        "labels": labels
                     }
                 })
         except Exception as e:

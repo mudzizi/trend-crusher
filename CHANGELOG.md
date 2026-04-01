@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [v13.1.4] - 2026-04-01
+### Added
+- **Real-time Chart Extension**: The dashboard chart now appends the current in-progress candle data from `live_indicators` to the historical data from `history_1h`.
+- **Live Labeling**: Added a "Now" timestamp label for the latest data point to differentiate it from closed candles.
+- **Indicator Sync**: Real-time Price, Donchian Channels, ADX, and scaled Volume are now visible on the chart without waiting for the hour to close.
+
 ## [v13.1.3] - 2026-04-01
 ### Fixed
 - **Dashboard Timezone**: All charts (individual symbols and portfolio equity) now display timestamps in KST (UTC+9) for easier monitoring.

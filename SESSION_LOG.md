@@ -1,3 +1,20 @@
+# Trading Session Log (2026-04-01) - Milestone: Real-time Interactive Dashboard (v13.1.4)
+
+## ✅ 완료된 작업
+1.  **실시간 차트 데이터 병합 (Live Data Injection)**:
+    -   `scripts/dashboard.py`를 개선하여 `history_1h`(과거 마감봉) 데이터 끝에 `live_indicators`(현재 진행 중인 봉) 데이터를 즉시 추가하도록 수정.
+    -   사용자가 1시간이 지날 때까지 기다리지 않고도 현재 가격과 지표 추세를 차트에서 바로 확인할 수 있도록 개선.
+2.  **시간 라벨링 최적화**:
+    -   실시간 데이터 포인트에 "HH:MM (Now)" 라벨을 부여하여 마감된 데이터와 시각적으로 구분.
+3.  **지표 연동 무결성 확보**:
+    -   Price, Donchian Channels, ADX, Volume 비율 등을 실시간 데이터 포인트에 정확히 매핑.
+
+## 🧪 검증 결과
+-   대시보드 접속 시 08:00 마감봉 이후에 현재 시각(09:50 등)의 가격이 차트에 실시간으로 이어져 출력됨을 확인.
+-   지표(Upper/Lower) 또한 현재 봇이 감시 중인 돌파 기준선에 맞게 동적으로 표시됨.
+
+---
+
 # Trading Session Log (2026-04-01) - Milestone: Dashboard Timezone & Logging Fix (v13.1.3)
 
 ## ✅ 완료된 작업
