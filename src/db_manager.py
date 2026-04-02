@@ -79,9 +79,15 @@ class DBManager:
                     upper_band REAL,
                     lower_column REAL,
                     adx_value REAL DEFAULT 0,
+                    ema_value REAL DEFAULT 0,
                     last_updated DATETIME DEFAULT (datetime('now','localtime'))
                 )
             """)
+            
+            # Migration: Add ema_value if missing
+            try:
+                conn.execute("ALTER TABLE live_indicators ADD COLUMN ema_value REAL DEFAULT 0")
+            except: pass
             
             # [NEW] Table for 1h Historical Data for Charting
             conn.execute("""
@@ -135,14 +141,14 @@ class DBManager:
             """
             return pd.read_sql_query(query, conn, params=(symbol, limit))
 
-    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0):
+    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0, ema_value=0):
         with self._get_connection() as conn:
             # Insert a new record for history instead of replacing
             conn.execute("""
                 INSERT INTO live_indicators 
-                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, adx_value, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, adx_value))
+                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, adx_value, ema_value, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, adx_value, ema_value))
             
             # Optional: Cleanup old records (keep last 200 per symbol to prevent DB bloat)
             conn.execute("""

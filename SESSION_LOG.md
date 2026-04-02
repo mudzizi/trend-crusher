@@ -1,3 +1,19 @@
+# Trading Session Log (2026-04-02) - Milestone: EMA Visualization Fix (v13.1.7)
+
+## ✅ 완료된 작업
+1.  **실시간 EMA 데이터 저장 및 연동**:
+    -   `live_indicators` 테이블에 `ema_value` 컬럼 추가 (자동 마이그레이션 포함).
+    -   `scripts/live_bot_async.py`가 실시간 지표를 기록할 때 실제 EMA 100/200 값을 함께 저장하도록 수정.
+    -   `scripts/dashboard.py`에서 실시간 차트의 마지막 점을 그릴 때 근사치 대신 DB의 실제 EMA 값을 사용하도록 수정.
+2.  **버전 업데이트**:
+    -   시각적 오류 수정 및 DB 스키마 변경 사항을 포함하여 `v13.1.7`로 업데이트.
+
+## 🧪 검증 결과
+-   대시보드 차트에서 EMA(황색 점선)가 마지막 "Now" 지점에서 급격히 꺾이지 않고, 이전 흐름을 유지하며 매끄럽게 연결됨을 확인.
+-   `trades.db`의 `live_indicators` 테이블에 `ema_value` 데이터가 정상적으로 쌓이는 것 확인.
+
+---
+
 # Trading Session Log (2026-04-02) - Milestone: Static Donchian Breakout Optimization (v13.1.6)
 
 ## ✅ 완료된 작업

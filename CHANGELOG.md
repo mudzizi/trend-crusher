@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.7] - 2026-04-02
+### Fixed
+- **Dashboard EMA Visualization**: Fixed the issue where the EMA line would unnaturally drop at the "Now" data point. The bot now stores the actual calculated EMA value in the `live_indicators` table, and the dashboard uses this value instead of a midpoint approximation.
+- **Database Schema**: Added `ema_value` column to the `live_indicators` table with automatic migration support.
+
 ## [13.1.6] - 2026-04-02
 ### Optimized
 - **Static Donchian Breakout**: Updated `calculate_donchian` to use `shift(1)`. This ensures that breakout levels are based strictly on previous candles, preventing the "vanishing breakout" effect where bands move alongside current price. This provides more reliable entry points for Sniper (Maker) orders.

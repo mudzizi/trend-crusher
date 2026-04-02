@@ -363,7 +363,7 @@ class SymbolBotAsync:
             if (last_price >= upper and trend_ok) or (last_price <= lower and trend_ok): prox_ratio = 1.0
             score = (prox_ratio * 40) + (vol_ratio * 30) + (adx_ratio * 30)
             if not trend_ok: score *= 0.5
-            self.db.update_live_status(self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, float(row['adx']))
+            self.db.update_live_status(self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, float(row['adx']), float(ema))
         except Exception as e: self.logger.error(f"Error recording live status: {e}")
 
     async def _on_fill_success(self, direction):
