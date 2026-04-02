@@ -2,6 +2,10 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.6] - 2026-04-02
+### Optimized
+- **Static Donchian Breakout**: Updated `calculate_donchian` to use `shift(1)`. This ensures that breakout levels are based strictly on previous candles, preventing the "vanishing breakout" effect where bands move alongside current price. This provides more reliable entry points for Sniper (Maker) orders.
+
 ## [13.1.5] - 2026-04-02
 ### Fixed
 - **Persistence Logic**: Fixed `TypeError` in `DBManager.save_bot_state` by updating the method signature to accept `sniper_order_id` and `retest_order_id`.

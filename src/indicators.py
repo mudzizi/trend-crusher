@@ -2,9 +2,10 @@ import pandas as pd
 import numpy as np
 
 def calculate_donchian(df, period=20):
-    # 상단/하단 채널 자체의 값만 계산 (Shift는 전략 레벨에서 결정)
-    upper = df['high'].rolling(window=period).max()
-    lower = df['low'].rolling(window=period).min()
+    # 상단/하단 채널 자체의 값만 계산 (Shift(1)을 통해 전봉 기준 채널을 잡아야 실시간 돌파가 가능)
+    # 현재 봉을 포함하지 않아야 '돌파(Breakout)' 지점이 정적인 수평선으로 고정됨.
+    upper = df['high'].shift(1).rolling(window=period).max()
+    lower = df['low'].shift(1).rolling(window=period).min()
     return upper, lower
 
 def calculate_ema(df, period=200):

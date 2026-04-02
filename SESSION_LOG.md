@@ -1,3 +1,17 @@
+# Trading Session Log (2026-04-02) - Milestone: Static Donchian Breakout Optimization (v13.1.6)
+
+## ✅ 완료된 작업
+1.  **Donchian Channel 로직 최적화 (Static Breakout)**:
+    -   `src/indicators.py`의 `calculate_donchian` 함수에 `shift(1)`을 적용.
+    -   현재 진행 중인 봉의 고가/저가가 밴드 계산에 포함되어 밴드가 계속 도망가는(Trailing) 현상 해결.
+    -   전봉 마감 기준의 정적인 상/하단 밴드를 제공함으로써 Sniper 모드 및 돌파 매매의 체결 가능성과 기술적 정합성 향상.
+
+## 🧪 검증 결과
+-   이론적으로 가격이 밴드를 터치하는 지점이 고정됨에 따라 Sniper(Maker) 주문이 정확한 지점에서 대기할 수 있음을 확인.
+-   대시보드 차트에서 밴드가 현재 가격에 따라 실시간으로 변하지 않고 정적인 기준선으로 유지됨을 확인.
+
+---
+
 # Trading Session Log (2026-04-02) - Milestone: Persistence & Resilience Fix (v13.1.5)
 
 ## ✅ 완료된 작업
