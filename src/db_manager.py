@@ -162,12 +162,12 @@ class DBManager:
                 WHERE id IN (SELECT MAX(id) FROM live_indicators GROUP BY symbol)
             """, conn)
 
-    def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id):
+    def save_bot_state(self, symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id, sniper_id=None, retest_id=None):
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT OR REPLACE INTO bot_state (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id))
+                INSERT OR REPLACE INTO bot_state (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id, sniper_order_id, retest_order_id, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, position, entry_price, quantity, max_price, min_price, sl_price, sl_order_id, sniper_id, retest_id))
 
     def get_bot_state(self, symbol):
         with self._get_connection() as conn:

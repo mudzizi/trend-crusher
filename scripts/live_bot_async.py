@@ -396,6 +396,10 @@ class SymbolBotAsync:
                 await self._on_fill_success(direction)
                 self.active_sniper_order_id = None
                 self.persist_state()
+        except ccxt.OrderNotFound:
+            self.logger.warning(f"⚠️ Sniper Order {self.active_sniper_order_id} not found on exchange. Clearing state.")
+            self.active_sniper_order_id = None
+            self.persist_state()
         except Exception as e: self.logger.error(f"Error checking sniper fill: {e}")
 
     async def check_retest_fill(self):
@@ -414,6 +418,11 @@ class SymbolBotAsync:
                 self.active_retest_order_id = None
                 self.retest_order_ts = None
                 self.persist_state()
+        except ccxt.OrderNotFound:
+            self.logger.warning(f"⚠️ Retest Order {self.active_retest_order_id} not found on exchange. Clearing state.")
+            self.active_retest_order_id = None
+            self.retest_order_ts = None
+            self.persist_state()
         except Exception as e: self.logger.error(f"Error checking retest fill: {e}")
 
     async def sync_all_orders(self):

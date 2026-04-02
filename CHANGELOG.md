@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.5] - 2026-04-02
+### Fixed
+- **Persistence Logic**: Fixed `TypeError` in `DBManager.save_bot_state` by updating the method signature to accept `sniper_order_id` and `retest_order_id`.
+- **Order Sync Resilience**: Improved `check_sniper_fill` and `check_retest_fill` to gracefully handle `ccxt.OrderNotFound` (Binance error -2013). The bot now clears stale order IDs from its state and database instead of retrying indefinitely.
+
 ## [v13.1.4] - 2026-04-01
 ### Added
 - **Real-time Chart Extension**: The dashboard chart now appends the current in-progress candle data from `live_indicators` to the historical data from `history_1h`.

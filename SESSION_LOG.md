@@ -1,3 +1,19 @@
+# Trading Session Log (2026-04-02) - Milestone: Persistence & Resilience Fix (v13.1.5)
+
+## ✅ 완료된 작업
+1.  **상태 저장 로직 수정 (Persistence Fix)**:
+    -   `DBManager.save_bot_state`가 `sniper_order_id`와 `retest_order_id`를 받도록 메서드 시그니처 수정.
+    -   기존에 9개 인자를 받던 메서드에 2개를 추가하여 `persist_state()` 호출 시 발생하던 `TypeError` 해결.
+2.  **주문 동기화 안정성 강화 (Resilience)**:
+    -   `check_sniper_fill` 및 `check_retest_fill`에서 `ccxt.OrderNotFound` (Binance -2013) 예외 처리 추가.
+    -   거래소에 존재하지 않는 주문 ID를 계속 폴링하며 에러를 뿜는 대신, 상태를 즉시 클리어하고 DB를 업데이트하도록 개선.
+
+## 🧪 검증 결과
+-   로그에서 발생하던 `takes 9 positional arguments but 11 were given` 에러 제거 확인.
+-   바이낸스 `-2013 (Order does not exist)` 발생 시 무한 재시도가 아닌 상태 클리어 및 로깅 정상 작동 확인.
+
+---
+
 # Trading Session Log (2026-04-01) - Milestone: Real-time Interactive Dashboard (v13.1.4)
 
 ## ✅ 완료된 작업
