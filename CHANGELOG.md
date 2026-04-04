@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.8] - 2026-04-02
+### Fixed
+- **Binance Trigger Orders**: Implemented dedicated handlers for Binance Futures conditional orders (`STOP_MARKET`). Added `fetch_trigger_order` and `cancel_trigger_order` with `trigger: True` parameters, as these orders are not accessible via standard endpoints.
+- **Order Safety**: Introduced `create_reduce_only_market_order` to strictly enforce `reduceOnly: True` when closing positions, preventing accidental position flips.
+- **Logic Consistency**: Updated all entry/exit methods to use the new trigger-aware and reduce-only wrappers.
+
 ## [13.1.7] - 2026-04-02
 ### Fixed
 - **Dashboard EMA Visualization**: Fixed the issue where the EMA line would unnaturally drop at the "Now" data point. The bot now stores the actual calculated EMA value in the `live_indicators` table, and the dashboard uses this value instead of a midpoint approximation.

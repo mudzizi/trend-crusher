@@ -1,3 +1,22 @@
+# Trading Session Log (2026-04-02) - Milestone: Binance Trigger Order Bug Fix (v13.1.8)
+
+## ✅ 완료된 작업
+1.  **바이낸스 조건부 주문(Trigger Orders) 연동 버그 수정**:
+    -   바이낸스 선물 거래소에서 `STOP_MARKET` 주문이 일반 조회 API로는 확인되지 않던 문제 해결.
+    -   `fetch_trigger_order`, `cancel_trigger_order` 메서드를 신설하여 `params={'trigger': True}` 옵션 적용.
+    -   스나이퍼 주문 체결 확인 및 손절 주문 취소 시의 안정성 확보.
+2.  **포지션 종료 안전 장치 강화**:
+    -   `create_reduce_only_market_order`를 통해 모든 종료 시장가 주문에 `reduceOnly: True` 옵션 강제 적용.
+    -   의도치 않은 신규 포지션 오픈(Flip) 방지.
+3.  **검증 자동화 업데이트**:
+    -   변경된 주문 인터페이스에 맞춰 `tests/test_live_sync_pnl.py`의 `force_exit` 로직 검증 코드 수정.
+
+## 🧪 검증 결과
+-   전체 테스트(72개) 100% 통과 확인.
+-   바이낸스 테스트넷/라이브 환경에서 `STOP_MARKET` 주문의 동기화 무결성 확보 예상.
+
+---
+
 # Trading Session Log (2026-04-02) - Milestone: EMA Visualization Fix (v13.1.7)
 
 ## ✅ 완료된 작업

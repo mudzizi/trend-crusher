@@ -96,6 +96,6 @@ async def test_force_exit_logic(mock_bot):
     await mock_bot.force_exit()
 
     # Verify closure
-    mock_bot.exchange.create_market_order.assert_called_with("BTC/USDT", "sell", 0.05)
+    mock_bot.exchange.create_order.assert_any_call("BTC/USDT", "market", "sell", 0.05, None, params={'reduceOnly': True})
     assert mock_bot.position == 0
     mock_bot.db.log_trade_close.assert_called()
