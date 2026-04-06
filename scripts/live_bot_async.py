@@ -334,6 +334,10 @@ class SymbolBotAsync:
             
             if status == 'FILLED':
                 if order_id in [str(self.active_sniper_order_id), str(self.active_retest_order_id)]:
+                    if avg_price == 0:
+                        self.logger.warning(f"⚠️ Ambush filled via WS but avg_price is 0! Using last_price {self.last_price}")
+                        avg_price = self.last_price
+                        
                     self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
                     self.quantity = qty
                     self.entry_price = avg_price
@@ -345,11 +349,23 @@ class SymbolBotAsync:
                 
                 elif order_id == str(self.sl_order_id):
                     self.logger.info(f"🛡️ StopLoss FILLED via WS: {symbol} {side} at {avg_price}")
+                    
+                    # Guard against zero entry price
+                    if self.entry_price == 0:
+                        self.logger.warning(f"⚠️ SL filled but entry_price is 0! Using last_price {self.last_price}")
+                        self.entry_price = self.last_price or avg_price
+                        
                     pnl_pct = ((avg_price / self.entry_price) - 1) * 100 * self.position
                     pnl_usdt = (avg_price - self.entry_price) * qty * self.position
                     self.db.log_trade_close(self.symbol, avg_price, pnl_pct, pnl_usdt)
                     await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
-                    self.position, self.sl_order_id = 0, None
+                    self.position = 0
+                    self.entry_price = 0
+                    self.quantity = 0
+                    self.sl_price = 0
+                    self.sl_order_id = None
+                    self.max_price_seen = 0
+                    self.min_price_seen = float('inf')
                     self.persist_state()
                     self.notifier.notify_exit(f"SL {self.symbol}", avg_price, pnl_pct, pnl_usdt)
             
@@ -421,7 +437,14 @@ class SymbolBotAsync:
             if order and isinstance(order, dict) and order.get('status') == 'closed':
                 self.logger.info(f"🎯 Sniper Order FILLED for {self.symbol} (Polled)!")
                 self.quantity = float(order.get('filled') or order.get('amount') or self.quantity)
-                self.entry_price = float(order.get('average') or order.get('price') or self.entry_price)
+                
+                # [CRITICAL] Ensure entry_price is not zero
+                avg_p = float(order.get('average') or order.get('price') or 0)
+                if avg_p == 0:
+                    self.logger.warning(f"⚠️ Sniper filled but API returned 0 price. Using last_price {self.last_price}")
+                    avg_p = self.last_price
+                
+                self.entry_price = avg_p
                 direction = 1 if order.get('side') == 'buy' else -1
                 await self._on_fill_success(direction)
                 self.active_sniper_order_id = None
@@ -519,6 +542,13 @@ class SymbolBotAsync:
 
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
+        if self.entry_price <= 0 or self.quantity <= 0:
+            self.logger.warning(
+                f"⚠️ Invalid position state for {self.symbol}: "
+                f"position={self.position}, entry={self.entry_price}, qty={self.quantity}. "
+                "Skipping exit evaluation until state is repaired."
+            )
+            return
         row = self.df_indicators.iloc[-1]
         state = {'position': self.position, 'entry_price': self.entry_price, 'max_price_seen': self.max_price_seen, 'min_price_seen': self.min_price_seen, 'sl_price': self.sl_price}
         if self.engine.check_exit_signal(row, self.last_price, state, self.settings):
@@ -601,7 +631,7 @@ class SymbolBotAsync:
             await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
             self.logger.info(f"✅ Trade Closed: {self.symbol} at {exit_price:,.2f} ({pnl_pct:+.2f}%)")
             self.notifier.notify_exit(f"Async {self.symbol}", exit_price, pnl_pct, pnl_usdt)
-            self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None; self.persist_state()
+            self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_price = 0; self.sl_order_id = None; self.max_price_seen = 0; self.min_price_seen = float('inf'); self.persist_state()
         except Exception as e: self.logger.error(f"Exit error: {e}")
 
     async def force_exit(self):
@@ -621,7 +651,7 @@ class SymbolBotAsync:
                 self.db.log_trade_close(self.symbol, exit_price, pnl_pct, pnl_usdt)
                 await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
                 self.notifier.notify_exit(f"🚨 FORCE {self.symbol}", exit_price, pnl_pct, pnl_usdt)
-            self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None; self.persist_state()
+            self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_price = 0; self.sl_order_id = None; self.max_price_seen = 0; self.min_price_seen = float('inf'); self.persist_state()
         except Exception as e: self.logger.error(f"❌ Force exit failed for {self.symbol}: {e}")
 
     def get_detailed_status(self):
@@ -630,7 +660,12 @@ class SymbolBotAsync:
         pos_str = "IDLE"
         if self.position == 1: pos_str = "🟢 LONG"
         elif self.position == -1: pos_str = "🔴 SHORT"
-        pnl_str = f" ({(((self.last_price / self.entry_price) - 1) * 100 * self.position):+.2f}%)" if self.position != 0 else ""
+
+        # Guard against zero entry price to prevent float division by zero
+        pnl_str = ""
+        if self.position != 0 and self.entry_price != 0:
+            pnl_str = f" ({(((self.last_price / self.entry_price) - 1) * 100 * self.position):+.2f}%)"
+
         ambush = "🎯 Sniper" if self.active_sniper_order_id else ("🎣 Retest" if self.active_retest_order_id else "None")
         upper, lower, ema, adx = row['upper'], row['lower'], row['ema_h'], row['adx']
         vol_target = row['avg_vol'] * self.settings.get('VOL_MULTIPLIER', 2.0)
