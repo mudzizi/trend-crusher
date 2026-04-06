@@ -2,6 +2,16 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.9] - 2026-04-06
+### Fixed
+- **ZeroDivisionError Protection**: Implemented comprehensive guards against `float division by zero` in PnL calculations. Added safety backups using `last_price` when Binance API returns 0 as the execution price for `STOP_MARKET` orders.
+- **State Cleanup**: Enhanced position state reset logic to ensure `entry_price`, `sl_price`, and `max_price_seen` are correctly zeroed out upon trade closure, preventing stale data from affecting subsequent calculations.
+- **Ambush Fill Resilience**: Added specific handling for WebSocket and Polling fill updates to ensure `entry_price` is never set to 0 even during high volatility API lags.
+
+### Added
+- **Dashboard Symbol Filtering**: The dashboard now strictly filters `live_monitors` to only display symbols currently active in `CONFIG['SYMBOLS_LIST']`.
+- **Emergency Recovery Utility**: Created `scripts/emergency_recovery.py` to allow manual database state reset for specific symbols in case of persistent out-of-sync conditions.
+
 ## [13.1.8] - 2026-04-02
 ### Fixed
 - **Binance Trigger Orders**: Implemented dedicated handlers for Binance Futures conditional orders (`STOP_MARKET`). Added `fetch_trigger_order` and `cancel_trigger_order` with `trigger: True` parameters, as these orders are not accessible via standard endpoints.
