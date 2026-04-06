@@ -72,6 +72,11 @@ def index():
             live_status_df = db.get_all_live_status()
             for _, row in live_status_df.iterrows():
                 sym = row['symbol']
+                
+                # Filter: Only show symbols present in current CONFIG
+                if sym not in symbols:
+                    continue
+                    
                 sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, {})
                 
                 # Fetch hourly history for charting (last 48h)
