@@ -475,22 +475,42 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Error checking retest fill: {e}")
 
     async def sync_all_orders(self):
-        """Gap-filling sync: Check all pending orders via REST API to ensure no missed fills."""
+        """Gap-filling sync: Check all pending orders and actual position via REST API."""
         if self.settings["DRY_RUN"]: return
-        self.logger.info(f"🔍 Syncing all orders for {self.symbol}...")
+        self.logger.info(f"🔍 Syncing all orders & position for {self.symbol}...")
         try:
-            # 1. Check Sniper & Retest fills
+            # 1. Sync Actual Position from Exchange
+            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
+            pos = next((p for p in positions if p['symbol'] == self.symbol), None)
+            
+            if pos and float(pos['contracts']) != 0:
+                actual_qty = abs(float(pos['contracts']))
+                actual_entry = float(pos['entryPrice'])
+                actual_side = 1 if float(pos['contracts']) > 0 else -1
+                
+                if self.position != actual_side or abs(self.entry_price - actual_entry) > 0.1 or abs(self.quantity - actual_qty) > 0.0001:
+                    self.logger.info(f"🔄 State Repaired for {self.symbol}: Pos {self.position}->{actual_side}, Entry {self.entry_price:.2f}->{actual_entry:.2f}, Qty {self.quantity}->{actual_qty}")
+                    self.position, self.entry_price, self.quantity = actual_side, actual_entry, actual_qty
+                    self.max_price_seen = max(self.max_price_seen, self.entry_price) if self.position == 1 else self.max_price_seen
+                    self.min_price_seen = min(self.min_price_seen, self.entry_price) if self.position == -1 else self.min_price_seen
+                    self.persist_state()
+            elif self.position != 0:
+                # Exchange says no position, but bot thinks we have one
+                self.logger.warning(f"⚠️ Exchange has NO position for {self.symbol}, but bot state is {self.position}. Resetting bot state.")
+                self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None
+                self.persist_state()
+
+            # 2. Check Sniper & Retest fills
             if self.active_sniper_order_id: await self.check_sniper_fill()
             if self.active_retest_order_id: await self.check_retest_fill()
             
-            # 2. Check StopLoss status
+            # 3. Check StopLoss status
             if self.sl_order_id and self.position != 0:
                 order = await self.fetch_trigger_order(self.sl_order_id)
                 if order and order['status'] == 'closed':
                     avg_p = float(order.get('average', order.get('price', 0)))
                     qty = float(order.get('filled', order.get('amount', 0)))
                     self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
-                    # Reuse on_order_update logic format
                     await self.on_order_update({
                         'i': self.sl_order_id, 
                         's': self.symbol.replace('/', ''), 
@@ -500,7 +520,7 @@ class SymbolBotAsync:
                         'ap': avg_p
                     })
         except Exception as e:
-            self.logger.error(f"Error during order sync for {self.symbol}: {e}")
+            self.logger.error(f"Error during order/pos sync for {self.symbol}: {e}")
 
     async def check_entry(self):
         if self.is_halted or self.df_indicators is None: return
