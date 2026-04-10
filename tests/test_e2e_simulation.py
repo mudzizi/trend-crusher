@@ -58,8 +58,23 @@ async def test_e2e_trading_cycle_simulation(mock_dependencies):
     assert bot.max_price_seen == 55000.0
     
     # 4. Simulate Exit Signal
+    # In new logic, check_exit only flags the hit and waits for exchange fill.
     with patch.object(bot.engine, 'check_exit_signal', return_value=True):
         await bot.check_exit()
+    
+    # Position should still be 1 until FILL event arrives
+    assert bot.position == 1
+    
+    # 5. Simulate Exchange FILL Event
+    await bot.on_order_update({
+        'i': bot.sl_order_id or 'SL_123',
+        's': symbol.replace('/', ''),
+        'X': 'FILLED',
+        'S': 'SELL',
+        'z': str(bot.quantity),
+        'ap': str(bot.last_price),
+        'L': str(bot.last_price)
+    })
     
     assert bot.position == 0
     mock_db.log_trade_close.assert_called()

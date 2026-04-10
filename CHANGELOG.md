@@ -2,6 +2,17 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.10] - 2026-04-06
+### Refactored
+- **Event-Driven Exit Architecture**: Removed redundant market exit orders from `check_exit`. The bot now solely relies on the exchange's SL (StopLoss) trigger and processes the resulting `FILLED` event via WebSocket, effectively eliminating race conditions and double-ordering bugs.
+- **Fail-safe Syncing**: Integrated automatic `sync_all_orders` and emergency `execute_exit` as a fallback mechanism if a position exists but no corresponding SL order is found on the exchange.
+
+### Fixed
+- **Order-ID Agnostic Exit**: Enhanced `on_order_update` to recognize any position-reducing fills (opposite side) as a valid exit, even if the `order_id` doesn't match the bot's stored ID (e.g., due to manual edits or exchange re-assignment).
+
+### Verified
+- **Full Test Suite Success**: All 75 unit, integration, and E2E simulation tests are passing, confirming the integrity of the new event-driven core and robustness against ZeroDivisionErrors.
+
 ## [13.1.9] - 2026-04-06
 ### Fixed
 - **ZeroDivisionError Protection**: Implemented comprehensive guards against `float division by zero` in PnL calculations. Added safety backups using `last_price` when Binance API returns 0 as the execution price for `STOP_MARKET` orders.

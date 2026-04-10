@@ -333,41 +333,37 @@ class SymbolBotAsync:
             self.logger.info(f"📝 WS Order Update: {symbol} {side} {status} (ID: {order_id}, Qty: {qty}, Price: {avg_price:,.2f})")
             
             if status == 'FILLED':
+                # 1. Ambush Fill (Entry)
                 if order_id in [str(self.active_sniper_order_id), str(self.active_retest_order_id)]:
                     if avg_price == 0:
                         self.logger.warning(f"⚠️ Ambush filled via WS but avg_price is 0! Using last_price {self.last_price}")
                         avg_price = self.last_price
-                        
                     self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
-                    self.quantity = qty
-                    self.entry_price = avg_price
+                    self.quantity, self.entry_price = qty, avg_price
                     direction = 1 if side == 'buy' else -1
                     await self._on_fill_success(direction)
-                    self.active_sniper_order_id = None
-                    self.active_retest_order_id = None
-                    self.retest_order_ts = None
+                    self.active_sniper_order_id = self.active_retest_order_id = None
                 
-                elif order_id == str(self.sl_order_id):
-                    self.logger.info(f"🛡️ StopLoss FILLED via WS: {symbol} {side} at {avg_price}")
+                # 2. StopLoss or Any Exit Fill
+                elif order_id == str(self.sl_order_id) or (self.position != 0 and side != ('buy' if self.position == 1 else 'sell')):
+                    self.logger.info(f"🛡️ Exit/SL FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
                     
-                    # Guard against zero entry price
-                    if self.entry_price == 0:
-                        self.logger.warning(f"⚠️ SL filled but entry_price is 0! Using last_price {self.last_price}")
-                        self.entry_price = self.last_price or avg_price
-                        
+                    if self.entry_price == 0: self.entry_price = self.last_price or avg_price
                     pnl_pct = ((avg_price / self.entry_price) - 1) * 100 * self.position
                     pnl_usdt = (avg_price - self.entry_price) * qty * self.position
+                    
                     self.db.log_trade_close(self.symbol, avg_price, pnl_pct, pnl_usdt)
                     await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
-                    self.position = 0
-                    self.entry_price = 0
-                    self.quantity = 0
-                    self.sl_price = 0
-                    self.sl_order_id = None
-                    self.max_price_seen = 0
-                    self.min_price_seen = float('inf')
+                    
+                    # Reset state
+                    self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_price = 0
+                    self.sl_order_id = self.active_sniper_order_id = self.active_retest_order_id = None
+                    self.max_price_seen = 0; self.min_price_seen = float('inf')
                     self.persist_state()
-                    self.notifier.notify_exit(f"SL {self.symbol}", avg_price, pnl_pct, pnl_usdt)
+                    self.notifier.notify_exit(f"SL/Exit {self.symbol}", avg_price, pnl_pct, pnl_usdt)
+                    
+                    # Double Check: Ensure exchange position is really 0
+                    asyncio.create_task(self.sync_all_orders())
             
             elif status == 'CANCELED':
                 if order_id == str(self.sl_order_id):
@@ -542,22 +538,48 @@ class SymbolBotAsync:
 
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
-        if self.entry_price <= 0 or self.quantity <= 0:
-            self.logger.warning(
-                f"⚠️ Invalid position state for {self.symbol}: "
-                f"position={self.position}, entry={self.entry_price}, qty={self.quantity}. "
-                "Skipping exit evaluation until state is repaired."
-            )
-            return
+        
+        # 1. State Validation: If position exists but no SL order is active (and not Dry Run),
+        # it's a dangerous state. We should either re-sync or perform emergency exit.
+        if not self.sl_order_id and not self.settings["DRY_RUN"]:
+            self.logger.warning(f"⚠️ {self.symbol} in position but NO SL order ID found. Syncing orders...")
+            await self.sync_all_orders()
+            if not self.sl_order_id:
+                self.logger.error(f"🚨 CRITICAL: Still no SL order for {self.symbol}. Emergency Exit triggered.")
+                await self.execute_exit()
+                return
+
         row = self.df_indicators.iloc[-1]
-        state = {'position': self.position, 'entry_price': self.entry_price, 'max_price_seen': self.max_price_seen, 'min_price_seen': self.min_price_seen, 'sl_price': self.sl_price}
-        if self.engine.check_exit_signal(row, self.last_price, state, self.settings):
-            self.logger.info(f"📉 Exit Signal Triggered for {self.symbol} at {self.last_price}"); await self.execute_exit()
-        else:
-            self.sl_price = state['sl_price']
-            if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
-            else: self.min_price_seen = min(self.min_price_seen, self.last_price)
-            if abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1) > 0.0005: await self.sync_sl_to_exchange()
+        state = {
+            'position': self.position, 
+            'entry_price': self.entry_price, 
+            'max_price_seen': self.max_price_seen, 
+            'min_price_seen': self.min_price_seen, 
+            'sl_price': self.sl_price
+        }
+
+        # 2. Update trailing SL logic via strategy engine
+        # check_exit_signal will update state['sl_price'] if trailing conditions are met
+        is_exit_triggered = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
+        
+        # Update local values from engine result
+        self.sl_price = state['sl_price']
+        if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
+        else: self.min_price_seen = min(self.min_price_seen, self.last_price)
+
+        # 3. Handle Exit Condition
+        if is_exit_triggered:
+            # We TRUST the exchange-side StopLoss order to fill at the sl_price.
+            # We DO NOT send a market order here to avoid double-ordering and race conditions.
+            # The state will be cleared in on_order_update() when the WS FILL event arrives.
+            if (self.position == 1 and self.last_price <= self.sl_price) or \
+               (self.position == -1 and self.last_price >= self.sl_price):
+                self.logger.info(f"⏳ {self.symbol} price {self.last_price:,.2f} hit SL {self.sl_price:,.2f}. Waiting for exchange FILL event...")
+                return
+
+        # 4. Sync Trailing SL to exchange if it moved significantly
+        if abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1) > 0.0005: 
+            await self.sync_sl_to_exchange()
 
     async def sync_sl_to_exchange(self):
         if self.settings["DRY_RUN"] or not self.sl_order_id: return
