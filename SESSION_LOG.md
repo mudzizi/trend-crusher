@@ -1,3 +1,28 @@
+# Trading Session Log (2026-04-06) - Milestone: Event-Driven Exit & Precision Sync (v13.1.10)
+
+## ✅ 완료된 작업
+1.  **ZeroDivisionError 완벽 차단**:
+    -   Sniper 주문 체결 시 바이낸스 API가 가격을 `0`으로 반환하는 지연 현상에 대비하여 `last_price`를 백업으로 사용하는 가드 로직 도입.
+    -   `get_detailed_status` 및 PnL 계산 시 `entry_price`가 0인 경우를 방어하는 안전 장치 전면 적용.
+
+2.  **이벤트 기반 탈출(Event-Driven Exit) 아키텍처 개편**:
+    -   봇이 직접 시장가 탈출 주문을 내지 않고, 거래소의 SL(StopLoss) 주문 체결 이벤트(`FILLED`)를 WebSocket으로 수신하여 처리하도록 개선.
+    -   중복 주문 및 경쟁 상태(Race Condition)에 의한 에러를 원천 차단하고 거래소 엔진의 처리를 우선 신뢰하도록 변경.
+
+3.  **거래소 기반 정밀 동기화 (Precision Position Sync)**:
+    -   `sync_all_orders` 메서드를 강화하여 `fetch_positions` API를 통해 실제 거래소의 평단가(`entryPrice`)와 계약 수(`contracts`)를 직접 조회.
+    -   봇의 로컬 상태와 거래소 장부 데이터가 100% 일치하도록 강제 보정(Repair)하는 로직 구현.
+
+4.  **심볼 필터링 및 복구 도구 추가**:
+    -   대시보드에서 현재 `SYMBOLS_LIST`에 포함된 활성 심볼만 표시하도록 필터링 로직 개선.
+    -   상태 불일치 시 수동으로 DB를 초기화할 수 있는 `scripts/emergency_recovery.py` 유틸리티 제작.
+
+## 🧪 검증 결과
+-   **75/75 테스트 통과**: E2E 시뮬레이션 및 신규 `test_sl_robustness.py`를 포함한 전체 테스트 세트가 100% 성공.
+-   바이낸스 실제 체결 지연 상황을 가정한 Mock 테스트 환경에서 무결성 입증.
+
+---
+
 # Trading Session Log (2026-04-02) - Milestone: Binance Trigger Order Bug Fix (v13.1.8)
 
 ## ✅ 완료된 작업
