@@ -480,8 +480,18 @@ class SymbolBotAsync:
         self.logger.info(f"🔍 Syncing all orders & position for {self.symbol}...")
         try:
             # 1. Sync Actual Position from Exchange
-            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
-            pos = next((p for p in positions if p['symbol'] == self.symbol), None)
+            # Fetch all positions to ensure we catch symbols with settlement suffixes like :USDT
+            positions = await self.retry_api_call(self.exchange.fetch_positions)
+            
+            # Flexible matching: ETH/USDT should match ETH/USDT:USDT or ETHUSDT
+            pos = None
+            for p in positions:
+                p_sym = p['symbol']
+                if p_sym == self.symbol or \
+                   p_sym.replace(':USDT', '') == self.symbol or \
+                   p_sym.replace('/', '') == self.symbol.replace('/', ''):
+                    pos = p
+                    break
             
             if pos and float(pos['contracts']) != 0:
                 actual_qty = abs(float(pos['contracts']))
@@ -496,9 +506,13 @@ class SymbolBotAsync:
                     self.persist_state()
             elif self.position != 0:
                 # Exchange says no position, but bot thinks we have one
-                self.logger.warning(f"⚠️ Exchange has NO position for {self.symbol}, but bot state is {self.position}. Resetting bot state.")
-                self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None
-                self.persist_state()
+                # ONLY reset if we actually got a valid response from the exchange containing other data
+                if positions is not None and len(positions) > 0:
+                    self.logger.warning(f"⚠️ Exchange confirmed NO position for {self.symbol}, but bot state is {self.position}. Resetting bot state.")
+                    self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None
+                    self.persist_state()
+                else:
+                    self.logger.warning(f"⚠️ Could not verify position for {self.symbol} (empty exchange response). Skipping state reset.")
 
             # 2. Check Sniper & Retest fills
             if self.active_sniper_order_id: await self.check_sniper_fill()
@@ -506,19 +520,23 @@ class SymbolBotAsync:
             
             # 3. Check StopLoss status
             if self.sl_order_id and self.position != 0:
-                order = await self.fetch_trigger_order(self.sl_order_id)
-                if order and order['status'] == 'closed':
-                    avg_p = float(order.get('average', order.get('price', 0)))
-                    qty = float(order.get('filled', order.get('amount', 0)))
-                    self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
-                    await self.on_order_update({
-                        'i': self.sl_order_id, 
-                        's': self.symbol.replace('/', ''), 
-                        'X': 'FILLED', 
-                        'S': order['side'].upper(), 
-                        'z': qty, 
-                        'ap': avg_p
-                    })
+                try:
+                    order = await self.fetch_trigger_order(self.sl_order_id)
+                    if order and order['status'] == 'closed':
+                        avg_p = float(order.get('average', order.get('price', 0)))
+                        qty = float(order.get('filled', order.get('amount', 0)))
+                        self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
+                        await self.on_order_update({
+                            'i': self.sl_order_id, 
+                            's': self.symbol.replace('/', ''), 
+                            'X': 'FILLED', 
+                            'S': order['side'].upper(), 
+                            'z': qty, 
+                            'ap': avg_p
+                        })
+                except:
+                    self.logger.warning(f"Could not fetch SL order {self.sl_order_id}. It might have been deleted.")
+                    self.sl_order_id = None
         except Exception as e:
             self.logger.error(f"Error during order/pos sync for {self.symbol}: {e}")
 
@@ -559,15 +577,17 @@ class SymbolBotAsync:
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
         
-        # 1. State Validation: If position exists but no SL order is active (and not Dry Run),
-        # it's a dangerous state. We should either re-sync or perform emergency exit.
+        # 1. State Validation: If position exists but no SL order is active
         if not self.sl_order_id and not self.settings["DRY_RUN"]:
-            self.logger.warning(f"⚠️ {self.symbol} in position but NO SL order ID found. Syncing orders...")
+            self.logger.warning(f"⚠️ {self.symbol} in position but NO SL order ID found. Attempting to recover...")
             await self.sync_all_orders()
-            if not self.sl_order_id:
-                self.logger.error(f"🚨 CRITICAL: Still no SL order for {self.symbol}. Emergency Exit triggered.")
-                await self.execute_exit()
-                return
+            if not self.sl_order_id and self.position != 0:
+                self.logger.info(f"🛡️ Creating missing SL order for {self.symbol}...")
+                await self.sync_sl_to_exchange(force_create=True)
+                if not self.sl_order_id:
+                    self.logger.warning(f"⚠️ Failed to create SL order for {self.symbol}. Will retry in next loop. Monitor manually!")
+                    self.notifier.send_message(f"⚠️ **SL Creation Failed: {self.symbol}**\n봇이 다음 루프에서 재시도를 진행합니다. 확인이 필요합니다.")
+                    return
 
         row = self.df_indicators.iloc[-1]
         state = {
@@ -607,21 +627,34 @@ class SymbolBotAsync:
         if abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1) > 0.0005: 
             await self.sync_sl_to_exchange()
 
-    async def sync_sl_to_exchange(self):
-        if self.settings["DRY_RUN"] or not self.sl_order_id: return
+    async def sync_sl_to_exchange(self, force_create=False):
+        if self.settings["DRY_RUN"] or self.position == 0 or self.quantity <= 0:
+            return
+            
+        if not self.sl_order_id and not force_create:
+            return
+
+        # Capture current state into local variables to prevent race conditions 
+        target_sl = self.sl_price
+        target_qty = self.quantity
+        target_side = 'sell' if self.position == 1 else 'buy'
+        
         try:
-            self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {self.sl_price:,.2f}")
-            try: await self.cancel_trigger_order(self.sl_order_id)
-            except: pass
-            params = {'stopPrice': self.sl_price, 'reduceOnly': True}
-            sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
-            self.sl_order_id, self.last_sl_sync_price = sl_order['id'], self.sl_price
+            self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
+            if self.sl_order_id:
+                try: await self.cancel_trigger_order(self.sl_order_id)
+                except: pass
+            
+            # Use captured local variables for the actual API call
+            params = {'stopPrice': target_sl, 'reduceOnly': True}
+            sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', target_side, target_qty, None, params)
+            self.sl_order_id, self.last_sl_sync_price = sl_order['id'], target_sl
             self.persist_state()
             
             # 성공 시 텔레그램 알림 발송
             self.notifier.send_message(
                 f"🛡️ **SL Updated: {self.symbol}**\n"
-                f"- New SL: `{self.sl_price:,.2f}`\n"
+                f"- New SL: `{target_sl:,.2f}`\n"
                 f"- Mark Price: `{self.last_price:,.2f}`"
             )
         except Exception as e: self.logger.error(f"❌ SL Sync Failed for {self.symbol}: {e}")

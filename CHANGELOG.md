@@ -6,10 +6,12 @@ All notable changes to the TrendCrusher project will be documented in this file.
 ### Fixed
 - **Trailing SL Persistence Bug**: Fixed a critical issue where the trailing stop loss calculated by the strategy engine was not being saved to the bot's state. This prevented the live bot from synchronizing updated stop-loss levels to the exchange.
 - **Stop-Loss Synchronization Deadlock**: Implemented a **Fail-safe Market Exit** mechanism. If the price hits a newly updated trailing stop price before the bot can synchronize it with the exchange, the bot now triggers an immediate market exit to protect profits and prevent a deadlock.
+- **Symbol Matching Resilience**: Improved the symbol matching logic in `sync_all_orders` to accurately handle Binance settlement suffixes (e.g., `ETH/USDT:USDT`). This prevents false "No Position" detections that previously caused bot state resets.
+- **SL Auto-Recovery Logic**: Enhanced the bot's resilience when a Stop-Loss order is missing from the exchange. Instead of an immediate emergency exit, the bot now attempts to re-create the SL order while keeping the position active, ensuring profit-taking continues during temporary API issues.
 
 ### Added
 - **Real-time SL Update Notifications**: Added Telegram notifications that trigger specifically when the trailing stop loss is successfully updated on the exchange. The message includes the new SL price and the current Mark Price for transparency.
-- **Unit Test for SL Persistence**: Added `tests/test_trailing_update.py` to verify that the strategy engine correctly persists trailing SL updates to the state.
+- **Unit Test for SL Persistence**: Added `tests/test_trailing_update.py` (verified and then cleaned up) and updated `tests/test_sl_robustness.py` and `tests/test_e2e_simulation.py` to match the new resilient recovery behavior.
 
 ## [13.1.10] - 2026-04-06
 ### Refactored

@@ -97,12 +97,12 @@ async def test_emergency_sync_when_sl_missing(mock_bot):
     with patch.object(mock_bot, 'sync_all_orders', new_callable=AsyncMock) as mock_sync:
         with patch.object(mock_bot, 'execute_exit', new_callable=AsyncMock) as mock_exit:
             await mock_bot.check_exit()
-            
+
             # Should try to sync first
             mock_sync.assert_called_once()
-            # Since sl_order_id is still None, should trigger emergency exit
-            mock_exit.assert_called_once()
-
+            # New Logic: Should NOT trigger emergency exit yet, but notify user
+            mock_exit.assert_not_called()
+            mock_bot.notifier.send_message.assert_called()
 @pytest.mark.asyncio
 async def test_trailing_sl_sync_trigger(mock_bot):
     """Scenario: Trailing SL moves significantly. Should trigger exchange sync."""

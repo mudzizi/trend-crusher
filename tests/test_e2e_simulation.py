@@ -58,7 +58,7 @@ async def test_e2e_trading_cycle_simulation(mock_dependencies):
     assert bot.max_price_seen == 55000.0
     
     # 4. Simulate Exit Signal
-    # In new logic, check_exit only flags the hit and waits for exchange fill.
+    bot.last_sl_sync_price = bot.sl_price # Sync the SL price to avoid emergency exit
     with patch.object(bot.engine, 'check_exit_signal', return_value=True):
         await bot.check_exit()
     
