@@ -1,3 +1,29 @@
+# Trading Session Log (2026-04-14) - Milestone: Trailing SL Persistence & Fail-safe Sync (v13.1.11)
+
+## ✅ 완료된 작업
+1.  **트레일링 스탑 상태 저장 버그 수정 (SL Persistence)**:
+    -   `src/strategy.py`의 `check_exit_signal` 함수가 계산된 트레일링 가격을 `state['sl_price']`에 업데이트하지 않던 문제 해결.
+    -   이제 수익 발생 시 봇의 메모리상 손절가가 실시간으로 상승하며, 거래소 주문 갱신(Sync)을 정상적으로 트리거함.
+
+2.  **긴급 시장가 탈출 안전 장치 도입 (Fail-safe Market Exit)**:
+    -   새로운 트레일링 가격이 계산되었으나 아직 거래소 주문으로 동기화되기 전에 가격이 급락할 경우, 즉시 시장가(`execute_exit`)로 탈출하여 수익을 보호하는 로직 구현.
+    -   동기화 지연으로 인한 '무한 대기(Deadlock)' 현상 원천 차단.
+
+3.  **실시간 손절가 업데이트 알림 (Telegram Notification)**:
+    -   거래소에 손절가 주문이 성공적으로 갱신되었을 때만 텔레그램으로 상세 알림을 전송하도록 개선.
+    -   알림 내용에 새로운 손절가(New SL)와 현재 마크 가격(Mark Price)을 포함하여 투명성 확보.
+
+4.  **전용 검증 테스트 추가**:
+    -   `tests/test_trailing_update.py`를 신설하여 전략 엔진의 손절가 업데이트 무결성 검증.
+    -   기존 `tests/test_sl_robustness.py`를 신규 Fail-safe 로직에 맞춰 최신화.
+
+## 🧪 검증 결과
+-   **신규 테스트 통과**: 트레일링 스탑에 의한 `state['sl_price']` 업데이트 확인.
+-   **안정성 테스트 통과**: 동기화 전 급락 시 긴급 시장가 탈출 작동 확인.
+-   **전체 76개 테스트 100% 통과**: 기존 기능과의 호환성 및 안정성 최종 확인.
+
+---
+
 # Trading Session Log (2026-04-06) - Milestone: Event-Driven Exit & Precision Sync (v13.1.10)
 
 ## ✅ 완료된 작업

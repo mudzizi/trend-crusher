@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.11] - 2026-04-14
+### Fixed
+- **Trailing SL Persistence Bug**: Fixed a critical issue where the trailing stop loss calculated by the strategy engine was not being saved to the bot's state. This prevented the live bot from synchronizing updated stop-loss levels to the exchange.
+- **Stop-Loss Synchronization Deadlock**: Implemented a **Fail-safe Market Exit** mechanism. If the price hits a newly updated trailing stop price before the bot can synchronize it with the exchange, the bot now triggers an immediate market exit to protect profits and prevent a deadlock.
+
+### Added
+- **Real-time SL Update Notifications**: Added Telegram notifications that trigger specifically when the trailing stop loss is successfully updated on the exchange. The message includes the new SL price and the current Mark Price for transparency.
+- **Unit Test for SL Persistence**: Added `tests/test_trailing_update.py` to verify that the strategy engine correctly persists trailing SL updates to the state.
+
 ## [13.1.10] - 2026-04-06
 ### Refactored
 - **Event-Driven Exit Architecture**: Removed redundant market exit orders from `check_exit`. The bot now solely relies on the exchange's SL (StopLoss) trigger and processes the resulting `FILLED` event via WebSocket, effectively eliminating race conditions and double-ordering bugs.

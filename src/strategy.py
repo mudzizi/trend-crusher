@@ -213,10 +213,18 @@ class TrendCrusherV2:
 
         if state['position'] == 1:
             trail_sl = state['max_price_seen'] - (row['atr'] * curr_atr_mult)
-            if last_price <= trail_sl or last_price <= state['sl_price']: return True
+            # 트레일링 스탑이 기존 SL보다 높아지면 상태 업데이트
+            if trail_sl > state['sl_price']:
+                state['sl_price'] = trail_sl
+            
+            if last_price <= state['sl_price']: return True
         elif state['position'] == -1:
             trail_sl = state['min_price_seen'] + (row['atr'] * curr_atr_mult)
-            if last_price >= trail_sl or last_price >= state['sl_price']: return True
+            # 트레일링 스탑이 기존 SL보다 낮아지면 상태 업데이트 (숏)
+            if state['sl_price'] == 0 or trail_sl < state['sl_price']:
+                state['sl_price'] = trail_sl
+                
+            if last_price >= state['sl_price']: return True
         return False
 
     def run_streaming_backtest(self, df_1m, **kwargs):

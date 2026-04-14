@@ -589,9 +589,15 @@ class SymbolBotAsync:
 
         # 3. Handle Exit Condition
         if is_exit_triggered:
-            # We TRUST the exchange-side StopLoss order to fill at the sl_price.
-            # We DO NOT send a market order here to avoid double-ordering and race conditions.
-            # The state will be cleared in on_order_update() when the WS FILL event arrives.
+            # [FAIL-SAFE] 만약 현재가가 손절가에 도달했는데, 거래소 주문이 아직 예전 가격(동기화 전)에 머물러 있다면
+            # 거래소 체결을 기다리지 않고 즉시 시장가로 탈출하여 수익을 보존합니다.
+            sync_diff = abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1)
+            if sync_diff > 0.0005: # 0.05% 이상 차이날 경우 동기화 전으로 판단
+                self.logger.warning(f"🚨 {self.symbol} SL Hit ({self.last_price:,.2f}) before Exchange Sync (Diff: {sync_diff:.4f}). Emergency Market Exit!")
+                await self.execute_exit()
+                return
+
+            # 일반적인 경우(동기화 완료)에는 거래소의 SL 주문이 체결되기를 기다립니다.
             if (self.position == 1 and self.last_price <= self.sl_price) or \
                (self.position == -1 and self.last_price >= self.sl_price):
                 self.logger.info(f"⏳ {self.symbol} price {self.last_price:,.2f} hit SL {self.sl_price:,.2f}. Waiting for exchange FILL event...")
@@ -611,6 +617,13 @@ class SymbolBotAsync:
             sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
             self.sl_order_id, self.last_sl_sync_price = sl_order['id'], self.sl_price
             self.persist_state()
+            
+            # 성공 시 텔레그램 알림 발송
+            self.notifier.send_message(
+                f"🛡️ **SL Updated: {self.symbol}**\n"
+                f"- New SL: `{self.sl_price:,.2f}`\n"
+                f"- Mark Price: `{self.last_price:,.2f}`"
+            )
         except Exception as e: self.logger.error(f"❌ SL Sync Failed for {self.symbol}: {e}")
 
     async def execute_entry(self, direction, atr):

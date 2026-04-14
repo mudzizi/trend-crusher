@@ -73,6 +73,7 @@ async def test_no_market_order_on_sl_hit(mock_bot):
     """Scenario: Price hits SL. Bot should NOT send market order, wait for fill."""
     mock_bot.position = 1 # LONG
     mock_bot.sl_price = 49000.0
+    mock_bot.last_sl_sync_price = 49000.0 # Synced!
     mock_bot.last_price = 48500.0 # Price is below SL
     mock_bot.sl_order_id = "SL_123"
     
