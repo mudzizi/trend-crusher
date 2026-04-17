@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.12] - 2026-04-14
+### Fixed
+- **Standardized ADX Logic**: Replaced simple moving average ADX with **Wilder's Smoothing (EMA-based)** calculation. This ensures ADX correctly reflects trend strength and matches industry standards (TradingView, Binance), fixing the issue where ADX moved inversely to price.
+- **Sniper Mode Stability**: Introduced a **0.03% Safety Gap** for Sniper entries. If the price is too close to the breakout level or already beyond it, the bot now switches to a **MARKET** entry. This eliminates "Order would immediately trigger" errors and improves entry reliability.
+- **Peak Price Update Priority**: Optimized the order of operations in `live_bot_async.py` to update `max_price_seen` **before** calculating the trailing stop. This ensures current tick highs are immediately reflected in the stop-loss level.
+
 ## [13.1.11] - 2026-04-14
 ### Fixed
 - **Trailing SL Persistence Bug**: Fixed a critical issue where the trailing stop loss calculated by the strategy engine was not being saved to the bot's state. This prevented the live bot from synchronizing updated stop-loss levels to the exchange.

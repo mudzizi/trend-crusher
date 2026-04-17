@@ -25,24 +25,26 @@ def numba_check_entry(last_price, ema_h, upper, lower, atr, adx, avg_vol, volume
             return 3, lower, sl
     
     elif use_sniper:
-        dist_top = abs(last_price - upper) / (last_price + 1e-10)
-        dist_bottom = abs(last_price - lower) / (last_price + 1e-10)
+        dist_top = (upper - last_price) / (last_price + 1e-10) if last_price < upper else -1.0
+        dist_bottom = (last_price - lower) / (last_price + 1e-10) if last_price > lower else -1.0
 
-        # Sniper: In proximity to breakout
-        if last_price > ema_h and dist_top <= (p_thresh + 1e-6):
+        # 1. Sniper: In proximity to breakout (but NOT yet broken)
+        # 안전 마진(0.03%)보다 멀리 있고, 진입 임계치(p_thresh)보다는 가까울 때만 Sniper 작동
+        if last_price > ema_h and 0.0003 <= dist_top <= (p_thresh + 1e-6):
             sl = upper - (atr * initial_sl_atr)
             return 2, upper, sl
-        elif last_price < ema_h and dist_bottom <= (p_thresh + 1e-6):
+        elif last_price < ema_h and 0.0003 <= dist_bottom <= (p_thresh + 1e-6):
             sl = lower + (atr * initial_sl_atr)
-            return 2, lower, lower + (atr * initial_sl_atr)
+            return 2, lower, sl
         
-        # Sniper Fallback: Already breakout
-        if last_price > ema_h and last_price >= upper:
+        # 2. Fallback: Already breakout or TOO close (Safety Gap hit)
+        # 이미 돌파했거나 거리가 너무 가까우면 시장가 진입(1)으로 전환
+        if last_price > ema_h and last_price >= (upper * 0.9997):
             sl = last_price - (atr * initial_sl_atr)
-            return 2, last_price, sl
-        elif last_price < ema_h and last_price <= lower:
+            return 1, last_price, sl
+        elif last_price < ema_h and last_price <= (lower * 1.0003):
             sl = last_price + (atr * initial_sl_atr)
-            return 2, last_price, sl
+            return 1, last_price, sl
     
     else:
         if last_price > ema_h and last_price > upper:

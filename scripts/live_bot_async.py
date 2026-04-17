@@ -589,6 +589,10 @@ class SymbolBotAsync:
                     self.notifier.send_message(f"⚠️ **SL Creation Failed: {self.symbol}**\n봇이 다음 루프에서 재시도를 진행합니다. 확인이 필요합니다.")
                     return
 
+        # 1. Update Peak Prices first to ensure current tick is reflected
+        if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
+        else: self.min_price_seen = min(self.min_price_seen, self.last_price)
+
         row = self.df_indicators.iloc[-1]
         state = {
             'position': self.position, 
@@ -604,8 +608,6 @@ class SymbolBotAsync:
         
         # Update local values from engine result
         self.sl_price = state['sl_price']
-        if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
-        else: self.min_price_seen = min(self.min_price_seen, self.last_price)
 
         # 3. Handle Exit Condition
         if is_exit_triggered:
