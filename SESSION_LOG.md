@@ -1,3 +1,18 @@
+# Trading Session Log (2026-04-20) - Milestone: Race Condition & Double-Entry Fix (v13.1.13)
+
+## ✅ 완료된 작업
+1.  **중복 진입 방지 로직 (Race Condition Fix)**:
+    -   체결 확인(`on_order_update`) 직후 SL 주문을 넣는 비동기 지연 시간(약 10~12초) 동안 새로운 진입이 발생하는 문제 해결.
+    -   `is_processing_fill` 잠금 플래그와 즉각적인 `self.position` 업데이트를 통해 원자적(Atomic) 상태 전이 보장.
+2.  **비동기 루프 안정화**:
+    -   가격 업데이트(`on_mark_price_update`) 시 현재 포지션이 있거나 **진입 처리 중**인 경우 새로운 진입 체크를 즉시 차단하도록 개선.
+
+## 🧪 검증 결과
+-   **중복 진입 검증**: 체결 처리 중 발생하는 가격 변동에도 추가 주문이 나가지 않음을 확인.
+-   **전체 75개 테스트 통과**: 잠금 로직 추가 후에도 기존 시뮬레이션 및 유닛 테스트 무결성 확인.
+
+---
+
 # Trading Session Log (2026-04-14) - Milestone: ADX Standard & Sniper Stabilization (v13.1.12)
 
 ## ✅ 완료된 작업

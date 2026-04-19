@@ -56,6 +56,7 @@ class SymbolBotAsync:
         self.active_retest_order_id = None 
         self.use_retest_maker = self.settings.get("USE_RETEST_MAKER", False) 
         self.retest_order_ts = None 
+        self.is_processing_fill = False # 진입/체결 처리 중복 방지 플래그
         
         self.ohlcv_1h = None
         self.ohlcv_4h = None
@@ -408,23 +409,31 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Error recording live status: {e}")
 
     async def _on_fill_success(self, direction):
+        if self.is_processing_fill: return
+        self.is_processing_fill = True
+        
         side_str = "LONG" if direction == 1 else "SHORT"
         try:
+            # [CRITICAL] 포지션 상태를 '즉시' 업데이트하여 중복 진입 차단
+            self.position = direction
+            self.max_price_seen = self.min_price_seen = self.entry_price
+            
             if not self.settings["DRY_RUN"]:
                 params = {'stopPrice': self.sl_price, 'reduceOnly': True}
                 sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if direction == 1 else 'buy', self.quantity, None, params)
                 self.sl_order_id = sl_order['id']
             else: self.sl_order_id = "DRY_SL"
+            
+            self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
+            self.persist_state()
+            self.notifier.notify_entry(f"🚀 {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
         except Exception as sl_err:
             self.logger.error(f"🚨 CRITICAL: SL failed: {sl_err}. EMERGENCY LIQUIDATION!")
             if not self.settings["DRY_RUN"]:
                 await self.create_reduce_only_market_order('sell' if direction == 1 else 'buy', self.quantity)
-            return
-        self.position = direction
-        self.max_price_seen = self.min_price_seen = self.entry_price
-        self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
-        self.persist_state()
-        self.notifier.notify_entry(f"🚀 {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
+            self.position = 0 # 실패 시 초기화
+        finally:
+            self.is_processing_fill = False
 
     async def check_sniper_fill(self):
         if self.settings["DRY_RUN"] or not self.active_sniper_order_id: return
@@ -562,7 +571,8 @@ class SymbolBotAsync:
             if self.active_sniper_order_id: await self.check_sniper_fill()
             if self.active_retest_order_id: await self.check_retest_fill()
             self.last_fill_poll_ts = now
-        if self.position != 0: await self.check_exit()
+        if self.position != 0 or self.is_processing_fill: 
+            await self.check_exit()
         else:
             if self.settings["DRY_RUN"] and self.active_retest_order_id:
                 is_filled = (self.entry_price > 0 and price <= self.entry_price) or (self.entry_price < 0 and price >= abs(self.entry_price))

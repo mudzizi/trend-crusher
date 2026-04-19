@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.1.13] - 2026-04-20
+### Fixed
+- **Double Entry Race Condition**: Eliminated a race condition where the bot could execute multiple entries for the same signal due to the asynchronous gap between fill detection and SL order creation.
+- **Atomic Position Locking**: Introduced `is_processing_fill` atomic lock and prioritized immediate `self.position` updates upon fill detection. This prevents concurrent entry checks from triggering redundant orders while a fill is being processed.
+
 ## [13.1.12] - 2026-04-14
 ### Fixed
 - **Standardized ADX Logic**: Replaced simple moving average ADX with **Wilder's Smoothing (EMA-based)** calculation. This ensures ADX correctly reflects trend strength and matches industry standards (TradingView, Binance), fixing the issue where ADX moved inversely to price.

@@ -2,7 +2,7 @@
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION = "13.1.12"
+VERSION = "13.1.13"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.
