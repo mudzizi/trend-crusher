@@ -71,49 +71,44 @@ class BinanceWebSocketManager:
     def _on_open(self, _):
         logger.info("✅ WebSocket Connection Opened/Re-opened")
         self.last_reconnect_ts = time.time()
-        
-        # [SAFE] Attempt subscription, but handle case where ws_client might not be assigned yet
-        self._subscribe_public_streams()
-
-        # Signal a reconnection event to the queue so the bot can sync orders
+        # Signal a reconnection event to the queue
         if self.loop and self.loop.is_running():
             self.loop.call_soon_threadsafe(self.queue.put_nowait, {"e": "WS_RECONNECTED"})
 
-    def _subscribe_public_streams(self):
-        """Internal helper to subscribe to all configured symbols."""
-        if not self.ws_client or not self.symbols:
-            return
-            
-        for symbol in self.symbols:
-            s = symbol.replace('/', '').upper() # Use UPPERCASE for Binance
-            try:
-                # Use individual method calls as recommended by official connector
-                self.ws_client.mark_price(symbol=s, speed=1)
-                self.ws_client.kline(symbol=s, interval="1m")
-                self.ws_client.kline(symbol=s, interval="1h")
-            except Exception as e:
-                logger.error(f"Failed to subscribe to {symbol}: {e}")
-        logger.info(f"📡 Subscribed to Public Streams for {len(self.symbols)} symbols")
-
     async def connect(self):
-        """Initializes the UMWebsocketClient and starts streams."""
+        """Initializes the UMWebsocketClient with Combined Streams for maximum reliability."""
         self._running = True
         
-        # 1. Initialize official UM Futures WebSocket Client
+        # 1. Construct Combined Stream URL if symbols are provided
+        # Format: wss://fstream.binance.com/stream?streams=btcusdt@markPrice/ethusdt@markPrice/...
+        final_url = self.base_url
+        if self.symbols:
+            stream_names = []
+            for symbol in self.symbols:
+                s = symbol.replace('/', '').lower()
+                stream_names.append(f"{s}@markPrice")
+                stream_names.append(f"{s}@kline_1m")
+                stream_names.append(f"{s}@kline_1h")
+            
+            # Use /stream?streams= for combined streams
+            final_url = "wss://fstream.binance.com/stream?streams=" + "/".join(stream_names)
+            logger.info(f"🔗 Using Combined Stream URL: {final_url[:100]}...")
+
+        # 2. Initialize official UM Futures WebSocket Client
         self.ws_client = UMFuturesWebsocketClient(
             on_message=self._on_message,
             on_error=self._on_error,
             on_open=self._on_open,
-            stream_url=self.base_url
+            stream_url=final_url
         )
         
-        # 2. Immediate subscription attempt after client creation
-        await asyncio.sleep(1) # Give a brief moment for background thread to initialize
-        self._subscribe_public_streams()
-
         # 3. Subscribe to Private User Data Stream
         if self.api_key:
             await self._refresh_user_data_stream()
+
+    def _subscribe_public_streams(self):
+        """Deprecated for Combined Streams, but kept for compatibility."""
+        pass
 
     async def _refresh_user_data_stream(self):
         """Fetches a new listenKey and starts/updates the user data stream."""
