@@ -21,7 +21,7 @@ class BinanceWebSocketManager:
     Advanced WebSocket Manager for Binance Futures.
     Handles 24h reconnection, Ping/Pong, and resilient ListenKey management.
     """
-    def __init__(self, symbols=None, api_key=None, api_secret=None, base_url="wss://fstream.binance.com"):
+    def __init__(self, symbols=None, api_key=None, api_secret=None, base_url="wss://fstream.binance.com/ws"):
         self.symbols = symbols
         self.api_key = api_key
         self.api_secret = api_secret
