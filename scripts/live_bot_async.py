@@ -821,6 +821,15 @@ async def handle_commands(bots, notifier, pm):
                         status_report = "📊 **Current Status Report**\n\n"
                         for sym, bot in bots.items(): status_report += bot.get_detailed_status()
                         notifier.send_message(status_report)
+                    elif text == "/check":
+                        check_report = "🔍 **WebSocket Connectivity Check**\n\n"
+                        now = time.time()
+                        for sym, bot in bots.items():
+                            last_seen = getattr(bot, 'last_ws_msg_ts', 0)
+                            diff = now - last_seen if last_seen > 0 else 999999
+                            status = "✅ Active" if diff < 30 else f"❌ SILENT ({int(diff)}s)"
+                            check_report += f"• {sym}: {status}\n"
+                        notifier.send_message(check_report)
                     elif text == "/close_all":
                         notifier.send_message("⚠️ **EMERGENCY: Closing all positions!**")
                         await asyncio.gather(*[bot.force_exit() for bot in bots.values()])
@@ -849,36 +858,51 @@ async def main():
         for bot in bots.values(): await bot.initialize()
         ws_manager = BinanceWebSocketManager(CONFIG["SYMBOLS_LIST"], api_key=CONFIG["BINANCE_API_KEY"], api_secret=CONFIG["BINANCE_SECRET"])
         async def ws_loop():
+            msg_count = 0
+            last_msg_log = time.time()
+
+            async def process_msg(payload):
+                try:
+                    e_type = payload.get('e')
+                    raw_symbol = payload.get('s') if 's' in payload else (payload['o']['s'] if 'o' in payload else None)
+                    if not raw_symbol: return
+                    
+                    symbol = None
+                    if raw_symbol in bots: 
+                        symbol = raw_symbol
+                    else:
+                        for quote in ["USDT", "USDC"]:
+                            if raw_symbol.endswith(quote):
+                                test_sym = raw_symbol.replace(quote, f"/{quote}")
+                                if test_sym in bots:
+                                    symbol = test_sym
+                                    break
+                    
+                    if symbol:
+                        bots[symbol].last_ws_msg_ts = time.time()
+                        if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
+                        elif e_type == 'markPriceUpdate': await bots[symbol].on_mark_price_update(float(payload['p']))
+                        elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
+                except Exception as e:
+                    logger.error(f"Error processing symbol event: {e}")
+
             async for msg in ws_manager.stream():
                 try:
+                    msg_count += 1
+                    now = time.time()
+                    if now - last_msg_log > 60:
+                        logger.info(f"📡 WS Heartbeat: Received {msg_count} messages in last 60s")
+                        msg_count = 0
+                        last_msg_log = now
+
                     if isinstance(msg, dict) and msg.get('e') == 'WS_RECONNECTED':
                         logger.info("🔄 WS Reconnected. Triggering full order sync for all bots...")
                         for bot in bots.values(): asyncio.create_task(bot.sync_all_orders())
                         continue
 
                     payload = msg.get('data', msg) if isinstance(msg, dict) else msg
-                    if 'e' in payload:
-                        e_type = payload['e']
-                        raw_symbol = payload['s'] if 's' in payload else (payload['o']['s'] if 'o' in payload else None)
-                        if not raw_symbol: continue
-                        
-                        # Flexible symbol matching: Supports USDT, USDC, etc.
-                        symbol = None
-                        if raw_symbol in bots: 
-                            symbol = raw_symbol
-                        else:
-                            # Try replacing common quote assets with slash format
-                            for quote in ["USDT", "USDC"]:
-                                if raw_symbol.endswith(quote):
-                                    test_sym = raw_symbol.replace(quote, f"/{quote}")
-                                    if test_sym in bots:
-                                        symbol = test_sym
-                                        break
-                        
-                        if symbol:
-                            if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
-                            elif e_type == 'markPriceUpdate': await bots[symbol].on_mark_price_update(float(payload['p']))
-                            elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
+                    # Offload symbol processing to a separate task to avoid blocking the WS loop
+                    asyncio.create_task(process_msg(payload))
                 except Exception as e: logger.error(f"Error in ws_loop: {e}")
         logger.info(f"🚀 TrendCrusher {CONFIG['VERSION']} Async Core Started.")
         await asyncio.gather(ws_loop(), handle_commands(bots, notifier, pm))
