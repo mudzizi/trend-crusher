@@ -21,7 +21,7 @@ class BinanceWebSocketManager:
     Advanced WebSocket Manager for Binance Futures.
     Handles 24h reconnection, Ping/Pong, and resilient ListenKey management.
     """
-    def __init__(self, symbols=None, api_key=None, api_secret=None, base_url="wss://fstream.binance.com/ws"):
+    def __init__(self, symbols=None, api_key=None, api_secret=None, base_url="wss://fstream.binance.com:443"):
         self.symbols = symbols
         self.api_key = api_key
         self.api_secret = api_secret
@@ -32,6 +32,7 @@ class BinanceWebSocketManager:
         self._running = False
         self.listen_key = None
         self.last_reconnect_ts = 0
+        self._msg_debug_count = 0
 
     def _on_message(self, _, message):
         """Callback for all incoming WebSocket messages."""
@@ -39,6 +40,11 @@ class BinanceWebSocketManager:
             return
             
         try:
+            # Debug: Log first 5 messages of any type to verify data flow
+            if self._msg_debug_count < 5:
+                logger.info(f"📥 Raw WS Message Received: {message[:100]}...")
+                self._msg_debug_count += 1
+
             data = json.loads(message)
             
             # [CRITICAL] Log EVERY order update for the entire account
