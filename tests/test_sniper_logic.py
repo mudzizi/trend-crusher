@@ -21,6 +21,7 @@ def mock_bot(mock_config):
     # Updated: mock create_order to return a specific ID for STOP_MARKET
     mock_exchange.create_order = AsyncMock(return_value={'id': 'stop_market_123'})
     mock_exchange.cancel_order = AsyncMock()
+    mock_exchange.fetch_order = AsyncMock(return_value={'id': 'stop_market_123', 'status': 'open'})
     mock_exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
     mock_exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
     
@@ -69,7 +70,8 @@ async def test_sniper_ambush_aborted_when_condition_fails(mock_bot):
     # Scenario: Sniper is active but conditions die (engine returns None)
     mock_bot.active_sniper_order_id = 'stop_market_123'
     
-    with patch.object(mock_bot.engine, 'check_entry_signal', return_value=(None, None, None)):
+    with patch.object(mock_bot.engine, 'check_entry_signal', return_value=(None, None, None)), \
+         patch.object(mock_bot, 'fetch_trigger_order', AsyncMock(return_value={'status': 'open'})):
         await mock_bot.check_entry()
     
     assert mock_bot.active_sniper_order_id is None 

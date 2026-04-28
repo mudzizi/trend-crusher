@@ -188,8 +188,16 @@ class SymbolBotAsync:
         if not self.active_retest_order_id: return
         try:
             if not self.settings["DRY_RUN"]:
-                await self.retry_api_call(self.exchange.cancel_order, self.active_retest_order_id, self.symbol)
-            self.logger.info(f"🎣 Retest order {self.active_retest_order_id} cancelled.")
+                # Verify existence before cancel to prevent -1102
+                try:
+                    order = await self.retry_api_call(self.exchange.fetch_order, self.active_retest_order_id, self.symbol)
+                    if order['status'] in ['open', 'untouched', 'partially_filled']:
+                        await self.retry_api_call(self.exchange.cancel_order, self.active_retest_order_id, self.symbol)
+                        self.logger.info(f"🎣 Retest order {self.active_retest_order_id} cancelled.")
+                    else:
+                        self.logger.info(f"🎣 Retest order {self.active_retest_order_id} already {order['status']}. Clearing state.")
+                except ccxt.OrderNotFound:
+                    self.logger.info(f"🎣 Retest order {self.active_retest_order_id} not found on exchange. Clearing state.")
         except Exception as e:
             self.logger.warning(f"Failed to cancel retest order for {self.symbol}: {e}")
         finally:
@@ -200,12 +208,28 @@ class SymbolBotAsync:
     async def cancel_sniper_ambush(self):
         if not self.active_sniper_order_id: return
         try:
-            await self.cancel_trigger_order(self.active_sniper_order_id)
-            self.logger.info(f"♻️ Sniper Cancelled for {self.symbol}")
-        except ccxt.OrderNotFound: pass
-        except Exception as e: self.logger.warning(f"Sniper cancel error: {e}")
-        self.active_sniper_order_id = None
-        self.persist_state()
+            if not self.settings["DRY_RUN"]:
+                # Sniper (STOP_MARKET) needs trigger-order fetch
+                try:
+                    order = await self.fetch_trigger_order(self.active_sniper_order_id)
+                    if order['status'] in ['open', 'untouched', 'partially_filled']:
+                        await self.cancel_trigger_order(self.active_sniper_order_id)
+                        self.logger.info(f"♻️ Sniper Cancelled for {self.symbol}")
+                    else:
+                        self.logger.info(f"♻️ Sniper {self.active_sniper_order_id} already {order['status']}. Clearing state.")
+                except ccxt.OrderNotFound:
+                    self.logger.info(f"♻️ Sniper order {self.active_sniper_order_id} not found on exchange. Clearing state.")
+                except Exception as e:
+                    if "-1102" in str(e):
+                        self.logger.error(f"❌ Malformed Sniper ID {self.active_sniper_order_id}. Clearing state.")
+                    else: raise e
+            else:
+                self.logger.info(f"♻️ Dry Sniper state cleared for {self.symbol}")
+        except Exception as e:
+            self.logger.warning(f"Sniper cancel error for {self.symbol}: {e}")
+        finally:
+            self.active_sniper_order_id = None
+            self.persist_state()
 
     async def initialize(self):
         try:
