@@ -71,6 +71,19 @@ class BinanceWebSocketManager:
     def _on_open(self, _):
         logger.info("✅ WebSocket Connection Opened/Re-opened")
         self.last_reconnect_ts = time.time()
+        
+        # [CRITICAL] Subscribe to Public Streams AFTER connection is confirmed open
+        if self.symbols:
+            for symbol in self.symbols:
+                s = symbol.replace('/', '').lower()
+                try:
+                    self.ws_client.mark_price(symbol=s, speed=1)
+                    self.ws_client.kline(symbol=s, interval="1m")
+                    self.ws_client.kline(symbol=s, interval="1h")
+                except Exception as e:
+                    logger.error(f"Failed to subscribe to {symbol}: {e}")
+            logger.info(f"📡 Subscribed to Public Streams for {len(self.symbols)} symbols")
+
         # Signal a reconnection event to the queue so the bot can sync orders
         self.loop.call_soon_threadsafe(self.queue.put_nowait, {"e": "WS_RECONNECTED"})
 
@@ -79,7 +92,7 @@ class BinanceWebSocketManager:
         self._running = True
         
         # 1. Initialize official UM Futures WebSocket Client
-        # The library handles PING/PONG and 24h reconnection internally.
+        # Using 443 port explicitly to bypass potential GCP blocks on 9443
         self.ws_client = UMFuturesWebsocketClient(
             on_message=self._on_message,
             on_error=self._on_error,
@@ -87,15 +100,6 @@ class BinanceWebSocketManager:
             stream_url=self.base_url
         )
         
-        # 2. Subscribe to Public Streams
-        if self.symbols:
-            for symbol in self.symbols:
-                s = symbol.replace('/', '').lower()
-                self.ws_client.kline(symbol=s, interval="1h")
-                self.ws_client.kline(symbol=s, interval="1m")
-                self.ws_client.mark_price(symbol=s, speed=1)
-            logger.info(f"📡 Subscribed to Public Streams for {len(self.symbols)} symbols")
-
         # 3. Subscribe to Private User Data Stream
         if self.api_key:
             await self._refresh_user_data_stream()
