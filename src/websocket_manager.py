@@ -72,27 +72,34 @@ class BinanceWebSocketManager:
         logger.info("✅ WebSocket Connection Opened/Re-opened")
         self.last_reconnect_ts = time.time()
         
-        # [CRITICAL] Subscribe to Public Streams AFTER connection is confirmed open
-        if self.symbols:
-            for symbol in self.symbols:
-                s = symbol.replace('/', '').lower()
-                try:
-                    self.ws_client.mark_price(symbol=s, speed=1)
-                    self.ws_client.kline(symbol=s, interval="1m")
-                    self.ws_client.kline(symbol=s, interval="1h")
-                except Exception as e:
-                    logger.error(f"Failed to subscribe to {symbol}: {e}")
-            logger.info(f"📡 Subscribed to Public Streams for {len(self.symbols)} symbols")
+        # [SAFE] Attempt subscription, but handle case where ws_client might not be assigned yet
+        self._subscribe_public_streams()
 
         # Signal a reconnection event to the queue so the bot can sync orders
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, {"e": "WS_RECONNECTED"})
+        if self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, {"e": "WS_RECONNECTED"})
+
+    def _subscribe_public_streams(self):
+        """Internal helper to subscribe to all configured symbols."""
+        if not self.ws_client or not self.symbols:
+            return
+            
+        for symbol in self.symbols:
+            s = symbol.replace('/', '').lower()
+            try:
+                # Use individual method calls as recommended by official connector
+                self.ws_client.mark_price(symbol=s, speed=1)
+                self.ws_client.kline(symbol=s, interval="1m")
+                self.ws_client.kline(symbol=s, interval="1h")
+            except Exception as e:
+                logger.error(f"Failed to subscribe to {symbol}: {e}")
+        logger.info(f"📡 Subscribed to Public Streams for {len(self.symbols)} symbols")
 
     async def connect(self):
         """Initializes the UMWebsocketClient and starts streams."""
         self._running = True
         
         # 1. Initialize official UM Futures WebSocket Client
-        # Using 443 port explicitly to bypass potential GCP blocks on 9443
         self.ws_client = UMFuturesWebsocketClient(
             on_message=self._on_message,
             on_error=self._on_error,
@@ -100,6 +107,10 @@ class BinanceWebSocketManager:
             stream_url=self.base_url
         )
         
+        # 2. Immediate subscription attempt after client creation
+        await asyncio.sleep(1) # Give a brief moment for background thread to initialize
+        self._subscribe_public_streams()
+
         # 3. Subscribe to Private User Data Stream
         if self.api_key:
             await self._refresh_user_data_stream()
