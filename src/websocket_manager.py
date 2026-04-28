@@ -40,9 +40,9 @@ class BinanceWebSocketManager:
             return
             
         try:
-            # Debug: Log first 5 messages of any type to verify data flow
-            if self._msg_debug_count < 5:
-                logger.info(f"📥 Raw WS Message Received: {message[:100]}...")
+            # Debug: Log first 20 messages of any type to verify data flow
+            if self._msg_debug_count < 20:
+                logger.info(f"📥 Raw WS Message Received: {message[:120]}...")
                 self._msg_debug_count += 1
 
             data = json.loads(message)
@@ -85,7 +85,7 @@ class BinanceWebSocketManager:
             return
             
         for symbol in self.symbols:
-            s = symbol.replace('/', '').lower()
+            s = symbol.replace('/', '').upper() # Use UPPERCASE for Binance
             try:
                 # Use individual method calls as recommended by official connector
                 self.ws_client.mark_price(symbol=s, speed=1)
