@@ -55,6 +55,9 @@ class BinanceWebSocketManager:
 
     async def _keep_alive_loop(self):
         """Periodically extends the listenKey to prevent expiry."""
+        if not self.api_key:
+            return
+            
         while self._running and self.listen_key:
             await asyncio.sleep(1800) # 30 minutes
             from src.config import CONFIG
@@ -128,17 +131,31 @@ class BinanceWebSocketManager:
 
             except Exception as e:
                 if self._running:
-                    logger.error(f"❌ WS Connection Error: {e}. Reconnecting in 5s...")
+                    import traceback
+                    logger.error(f"❌ WS Connection Error: {e}")
+                    logger.error(traceback.format_exc())
                     await asyncio.sleep(5)
 
     async def stream(self):
         """Interface for the main bot loop."""
-        # Ensure the connection runner is started
-        asyncio.create_task(self.connect_and_run())
+        self._running = True
+        # Ensure the connection runner is started only once
+        if not hasattr(self, '_conn_task') or self._conn_task.done():
+            self._conn_task = asyncio.create_task(self.connect_and_run())
+            # Give it a tiny head start
+            await asyncio.sleep(0.1)
         
-        while self._running:
-            msg = await self.queue.get()
-            yield msg
+        while self._running or not self.queue.empty():
+            try:
+                # Use a small timeout to allow checking self._running
+                msg = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+                yield msg
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                if self._running:
+                    logger.error(f"Error in stream generator: {e}")
+                break
 
     def stop(self):
         self._running = False
