@@ -34,6 +34,7 @@ class SymbolBotAsync:
         self.notifier = notifier
         self.db = db
         self.logger = logging.getLogger(f"Async-{symbol.split('/')[0]}")
+        self.lock = asyncio.Lock() # 심볼별 메시지 처리 순차 보장용 락
         
         self.settings = CONFIG.copy()
         if "SYMBOL_SETTINGS" in CONFIG and self.symbol in CONFIG["SYMBOL_SETTINGS"]:
@@ -291,117 +292,111 @@ class SymbolBotAsync:
             self.df_indicators = self.engine.calculate_indicators(self.ohlcv_1h, self.ohlcv_4h, self.settings, is_live=is_live)
 
     async def on_kline_update(self, tf, kline):
-        try:
-            signal_tf = self.settings["SIGNAL_TIMEFRAME"]
-            trend_tf = self.settings["TREND_TIMEFRAME"]
-            if tf not in [signal_tf, trend_tf]: return
+        async with self.lock:
+            try:
+                signal_tf = self.settings["SIGNAL_TIMEFRAME"]
+                trend_tf = self.settings["TREND_TIMEFRAME"]
+                if tf not in [signal_tf, trend_tf]: return
 
-            is_signal_tf = (tf == signal_tf)
-            target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
-            if target_df is None: return
+                is_signal_tf = (tf == signal_tf)
+                target_df = self.ohlcv_1h if is_signal_tf else self.ohlcv_4h
+                if target_df is None: return
 
-            kline_ts = pd.to_datetime(kline['t'], unit='ms')
-            self.last_price = float(kline['c'])
-            
-            last_idx = target_df.index[-1]
-            if kline_ts == target_df.loc[last_idx, 'timestamp']:
-                target_df.loc[last_idx, ['open', 'high', 'low', 'close', 'volume']] = [
-                    float(kline['o']), float(kline['h']), float(kline['l']), self.last_price, float(kline['v'])
-                ]
-            elif kline_ts > target_df.loc[last_idx, 'timestamp']:
-                if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
-                else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
-                self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
-            
-            now = time.time()
-            if kline['x'] or (now - self.last_indicator_calc_ts > 10):
-                self._update_indicators(is_live=True)
-                self.last_indicator_calc_ts = now
+                kline_ts = pd.to_datetime(kline['t'], unit='ms')
+                self.last_price = float(kline['c'])
                 
-                # [CRITICAL] Log 1h snapshot when signal candle closes
-                if kline['x'] and tf == signal_tf:
-                    last_row = self.df_indicators.iloc[-1]
-                    try:
-                        self.db.log_history_1h(
-                            self.symbol,
-                            self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                            float(last_row['close']),
-                            float(last_row['ema_h']),
-                            float(last_row['upper']),
-                            float(last_row['lower']),
-                            float(last_row['volume']),
-                            float(last_row['adx'])
-                        )
-                        self.logger.info(f"💾 Hourly snapshot logged for {self.symbol}")
-                    except Exception as e:
-                        self.logger.error(f"Error logging hourly snapshot: {e}")
+                last_idx = target_df.index[-1]
+                if kline_ts == target_df.loc[last_idx, 'timestamp']:
+                    target_df.loc[last_idx, ['open', 'high', 'low', 'close', 'volume']] = [
+                        float(kline['o']), float(kline['h']), float(kline['l']), self.last_price, float(kline['v'])
+                    ]
+                elif kline_ts > target_df.loc[last_idx, 'timestamp']:
+                    if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
+                    else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
+                    self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
                 
-                # Also record live status for dashboard
-                asyncio.create_task(self._record_live_status())
+                now = time.time()
+                if kline['x'] or (now - self.last_indicator_calc_ts > 10):
+                    self._update_indicators(is_live=True)
+                    self.last_indicator_calc_ts = now
+                    
+                    if kline['x'] and tf == signal_tf:
+                        last_row = self.df_indicators.iloc[-1]
+                        try:
+                            self.db.log_history_1h(
+                                self.symbol,
+                                self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
+                                float(last_row['close']),
+                                float(last_row['ema_h']),
+                                float(last_row['upper']),
+                                float(last_row['lower']),
+                                float(last_row['volume']),
+                                float(last_row['adx'])
+                            )
+                            self.logger.info(f"💾 Hourly snapshot logged for {self.symbol}")
+                        except Exception as e:
+                            self.logger.error(f"Error logging hourly snapshot: {e}")
+                    
+                    asyncio.create_task(self._record_live_status())
 
-            # [REAL-TIME] Continuous check even on unclosed candles
-            if not kline['x']:
-                if self.position != 0: await self.check_exit()
-                else: await self.check_entry()
-        except Exception as e:
-            self.logger.error(f"⚠️ Error updating OHLCV buffer for {self.symbol}: {e}")
+                if not kline['x']:
+                    if self.position != 0: await self.check_exit()
+                    else: await self.check_entry()
+            except Exception as e:
+                self.logger.error(f"⚠️ Error updating OHLCV buffer for {self.symbol}: {e}")
 
     async def on_order_update(self, order_data):
-        try:
-            order_id = str(order_data['i'])
-            symbol = order_data['s']
-            status = order_data['X']
-            side = order_data['S'].lower()
-            qty = float(order_data['z'])
-            avg_price = float(order_data.get('ap', order_data['L'])) 
-            
-            self.logger.info(f"📝 WS Order Update: {symbol} {side} {status} (ID: {order_id}, Qty: {qty}, Price: {avg_price:,.2f})")
-            
-            if status == 'FILLED':
-                # 1. Ambush Fill (Entry)
-                if order_id in [str(self.active_sniper_order_id), str(self.active_retest_order_id)]:
-                    if avg_price == 0:
-                        self.logger.warning(f"⚠️ Ambush filled via WS but avg_price is 0! Using last_price {self.last_price}")
-                        avg_price = self.last_price
-                    self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
-                    self.quantity, self.entry_price = qty, avg_price
-                    direction = 1 if side == 'buy' else -1
-                    await self._on_fill_success(direction)
-                    self.active_sniper_order_id = self.active_retest_order_id = None
+        async with self.lock:
+            try:
+                order_id = str(order_data['i'])
+                symbol = order_data['s']
+                status = order_data['X']
+                side = order_data['S'].lower()
+                qty = float(order_data['z'])
+                avg_price = float(order_data.get('ap', order_data['L'])) 
                 
-                # 2. StopLoss or Any Exit Fill
-                elif order_id == str(self.sl_order_id) or (self.position != 0 and side != ('buy' if self.position == 1 else 'sell')):
-                    self.logger.info(f"🛡️ Exit/SL FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
+                self.logger.info(f"📝 WS Order Update: {symbol} {side} {status} (ID: {order_id}, Qty: {qty}, Price: {avg_price:,.2f})")
+                
+                if status == 'FILLED':
+                    if order_id in [str(self.active_sniper_order_id), str(self.active_retest_order_id)]:
+                        if avg_price == 0:
+                            self.logger.warning(f"⚠️ Ambush filled via WS but avg_price is 0! Using last_price {self.last_price}")
+                            avg_price = self.last_price
+                        self.logger.info(f"🎯 Ambush FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
+                        self.quantity, self.entry_price = qty, avg_price
+                        direction = 1 if side == 'buy' else -1
+                        await self._on_fill_success(direction)
+                        self.active_sniper_order_id = self.active_retest_order_id = None
                     
-                    if self.entry_price == 0: self.entry_price = self.last_price or avg_price
-                    pnl_pct = ((avg_price / self.entry_price) - 1) * 100 * self.position
-                    pnl_usdt = (avg_price - self.entry_price) * qty * self.position
-                    
-                    self.db.log_trade_close(self.symbol, avg_price, pnl_pct, pnl_usdt)
-                    await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
-                    
-                    # Reset state
-                    self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_price = 0
-                    self.sl_order_id = self.active_sniper_order_id = self.active_retest_order_id = None
-                    self.max_price_seen = 0; self.min_price_seen = float('inf')
-                    self.persist_state()
-                    self.notifier.notify_exit(f"SL/Exit {self.symbol}", avg_price, pnl_pct, pnl_usdt)
-                    
-                    # Double Check: Ensure exchange position is really 0
-                    asyncio.create_task(self.sync_all_orders())
-            
-            elif status == 'CANCELED':
-                if order_id == str(self.sl_order_id):
-                    self.logger.warning(f"⚠️ SL Order {order_id} was CANCELED externally!")
-                    self.sl_order_id = None
-                elif order_id == str(self.active_sniper_order_id):
-                    self.active_sniper_order_id = None
-                    self.persist_state()
-                elif order_id == str(self.active_retest_order_id):
-                    self.active_retest_order_id = None
-                    self.persist_state()
-        except Exception as e:
-            self.logger.error(f"Error in on_order_update: {e}")
+                    elif order_id == str(self.sl_order_id) or (self.position != 0 and side != ('buy' if self.position == 1 else 'sell')):
+                        self.logger.info(f"🛡️ Exit/SL FILLED via WS: {symbol} {side} at {avg_price:,.2f}")
+                        
+                        if self.entry_price == 0: self.entry_price = self.last_price or avg_price
+                        pnl_pct = ((avg_price / self.entry_price) - 1) * 100 * self.position
+                        pnl_usdt = (avg_price - self.entry_price) * qty * self.position
+                        
+                        self.db.log_trade_close(self.symbol, avg_price, pnl_pct, pnl_usdt)
+                        await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
+                        
+                        self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_price = 0
+                        self.sl_order_id = self.active_sniper_order_id = self.active_retest_order_id = None
+                        self.max_price_seen = 0; self.min_price_seen = float('inf')
+                        self.persist_state()
+                        self.notifier.notify_exit(f"SL/Exit {self.symbol}", avg_price, pnl_pct, pnl_usdt)
+                        asyncio.create_task(self.sync_all_orders())
+                
+                elif status == 'CANCELED':
+                    if order_id == str(self.sl_order_id):
+                        self.logger.warning(f"⚠️ SL Order {order_id} was CANCELED externally!")
+                        self.sl_order_id = None
+                    elif order_id == str(self.active_sniper_order_id):
+                        self.active_sniper_order_id = None
+                        self.persist_state()
+                    elif order_id == str(self.active_retest_order_id):
+                        self.active_retest_order_id = None
+                        self.persist_state()
+            except Exception as e:
+                self.logger.error(f"Error in on_order_update: {e}")
 
     async def _record_live_status(self):
         if self.df_indicators is None or self.df_indicators.empty: return
@@ -588,25 +583,26 @@ class SymbolBotAsync:
         elif sig_type == 'MARKET': direction = 1 if target_p > row['ema_h'] else -1; await self.execute_entry(direction, row['atr'])
 
     async def on_mark_price_update(self, price):
-        self.last_price = price
-        now = time.time()
-        if now - self.last_db_record_ts > 5: await self._record_live_status(); self.last_db_record_ts = now
-        if now - self.last_fill_poll_ts > 30:
-            if self.active_sniper_order_id: await self.check_sniper_fill()
-            if self.active_retest_order_id: await self.check_retest_fill()
-            self.last_fill_poll_ts = now
-        if self.position != 0 or self.is_processing_fill: 
-            await self.check_exit()
-        else:
-            if self.settings["DRY_RUN"] and self.active_retest_order_id:
-                is_filled = (self.entry_price > 0 and price <= self.entry_price) or (self.entry_price < 0 and price >= abs(self.entry_price))
-                if is_filled:
-                    self.logger.info(f"🧪 [DRY RUN] Retest Maker FILLED at {price}")
-                    direction = 1 if self.entry_price > 0 else -1
-                    self.entry_price = abs(self.entry_price)
-                    await self._on_fill_success(direction)
-                    self.active_retest_order_id = None
-            await self.check_entry()
+        async with self.lock:
+            self.last_price = price
+            now = time.time()
+            if now - self.last_db_record_ts > 5: await self._record_live_status(); self.last_db_record_ts = now
+            if now - self.last_fill_poll_ts > 30:
+                if self.active_sniper_order_id: await self.check_sniper_fill()
+                if self.active_retest_order_id: await self.check_retest_fill()
+                self.last_fill_poll_ts = now
+            if self.position != 0 or self.is_processing_fill: 
+                await self.check_exit()
+            else:
+                if self.settings["DRY_RUN"] and self.active_retest_order_id:
+                    is_filled = (self.entry_price > 0 and price <= self.entry_price) or (self.entry_price < 0 and price >= abs(self.entry_price))
+                    if is_filled:
+                        self.logger.info(f"🧪 [DRY RUN] Retest Maker FILLED at {price}")
+                        direction = 1 if self.entry_price > 0 else -1
+                        self.entry_price = abs(self.entry_price)
+                        await self._on_fill_success(direction)
+                        self.active_retest_order_id = None
+                await self.check_entry()
 
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
