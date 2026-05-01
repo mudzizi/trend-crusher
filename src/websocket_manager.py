@@ -3,6 +3,9 @@ import json
 import logging
 import time
 import os
+import traceback
+from urllib.parse import quote
+
 import websockets
 
 # --- Account-wide Order Logger Setup ---
@@ -16,149 +19,226 @@ if not order_logger.handlers:
 
 logger = logging.getLogger(__name__)
 
+PUBLIC_WS_BASE_URL = "wss://fstream.binancefuture.com"
+PRIVATE_WS_BASE_URL = "wss://fstream.binance.com"
+
 class BinanceWebSocketManager:
     """
-    Pure Async WebSocket Manager for Binance Futures.
-    Optimized for GCP/Cloud environments:
-    1. Uses port 443 (Standard HTTPS) to bypass firewall blocks.
-    2. Uses Combined Streams for maximum data reliability.
-    3. Runs entirely within the asyncio loop (No background threads).
+    Async Binance Futures WebSocket manager.
+    Uses combined streams so market data and user-data events share one queue.
     """
-    def __init__(self, symbols=None, api_key=None, api_secret=None, base_url="wss://fstream.binance.com/stream"):
-        self.symbols = symbols
+    def __init__(self, symbols=None, api_key=None, api_secret=None):
+        self.symbols = symbols or []
         self.api_key = api_key
         self.api_secret = api_secret
-        self.base_url = base_url
         self.queue = asyncio.Queue()
+        self.loop = None # Will be set in stream()
         self._running = False
+        self.ws = None
+        self.private_ws = None
         self.listen_key = None
+        self._msg_count = 0
+        self._raw_debug_count = {"public": 0, "private": 0}
         self._keep_alive_task = None
-        self._msg_debug_count = 0
+        self._public_task = None
+        self._private_task = None
+
+    @staticmethod
+    def _normalize_symbol(symbol):
+        """Convert CCXT symbols like BTC/USDT:USDT into Binance stream names."""
+        base_symbol = symbol.split(':', 1)[0]
+        return base_symbol.replace('/', '').lower()
+
+    def _build_public_streams(self):
+        streams = []
+        for symbol in self.symbols:
+            sym = self._normalize_symbol(symbol)
+            streams.append(f"{sym}@markPrice")
+            streams.append(f"{sym}@kline_1m")
+            streams.append(f"{sym}@kline_1h")
+
+        return streams
+
+    def _build_public_ws_url(self):
+        streams = self._build_public_streams()
+        if not streams:
+            raise ValueError("No websocket streams configured.")
+
+        # Binance combined streams must use /stream?streams=a/b/c.
+        # /ws/<stream> is only valid for a single raw stream.
+        return f"{PUBLIC_WS_BASE_URL}/stream?streams={'/'.join(streams)}"
+
+    def _build_ws_url(self):
+        # Backward-compatible alias for older tests and diagnostics.
+        return self._build_public_ws_url()
+
+    def _build_private_ws_url(self):
+        if not self.listen_key:
+            raise ValueError("No listenKey configured for private websocket.")
+        listen_key = quote(self.listen_key, safe="")
+        events = quote("ORDER_TRADE_UPDATE", safe="")
+        return f"{PRIVATE_WS_BASE_URL}/private/ws?listenKey={listen_key}&events={events}"
+
+    def _enqueue(self, payload):
+        if self.loop:
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, payload)
+
+    def _handle_message(self, message, label="unknown"):
+        try:
+            self._msg_count += 1
+            if self._raw_debug_count.get(label, 0) < 5:
+                logger.info(f"📥 Raw WS Message ({label}): {message[:180]}...")
+                self._raw_debug_count[label] = self._raw_debug_count.get(label, 0) + 1
+
+            data = json.loads(message)
+            payload = data.get('data', data)
+
+            if isinstance(payload, dict) and payload.get('result') is None and 'id' in payload:
+                logger.info(f"✅ WebSocket subscription acknowledged ({label}, id={payload['id']}).")
+                return
+            
+            # [DIAGNOSTIC] Log every 50th message to prove life without flooding
+            if self._msg_count % 50 == 1:
+                logger.info(f"📊 WS Data Flowing... (Msg #{self._msg_count}) Last Type: {payload.get('e')} Source: {label}")
+
+            if isinstance(payload, dict) and label == "private":
+                logger.info(f"🔐 Private WS Event: {payload.get('e')}")
+
+            if isinstance(payload, dict):
+                event_type = payload.get('e')
+                if event_type == 'ORDER_TRADE_UPDATE':
+                    o = payload['o']
+                    order_logger.info(
+                        f"🔔 [ORDER] {o['s']} | {o['S']} {o['o']} | Status: {o['X']} | "
+                        f"Exec: {o['x']} | Qty: {o['z']}/{o['q']} | Price: {o.get('ap', o.get('L', '0'))} | ID: {o['i']}"
+                    )
+                elif event_type == 'TRADE_LITE':
+                    order_logger.info(
+                        f"⚡ [TRADE_LITE] {payload.get('s')} | Side: {payload.get('S')} | "
+                        f"Qty: {payload.get('q')} | Price: {payload.get('p')} | Order: {payload.get('i')}"
+                    )
+                elif event_type == 'ACCOUNT_UPDATE':
+                    order_logger.info(f"💰 [ACCOUNT_UPDATE] Reason: {payload.get('a', {}).get('m')}")
+
+            self._enqueue(payload)
+        except Exception as e:
+            logger.error(f"Error parsing message: {e}")
+
+    def _on_message(self, ws, message):
+        # Backward-compatible hook for tests or legacy websocket-client callers.
+        self._handle_message(message)
 
     async def _get_listen_key(self):
-        """Fetches a fresh listenKey using ccxt."""
         from src.config import CONFIG
         import ccxt.async_support as ccxt
-        exchange = ccxt.binance({
-            'apiKey': self.api_key or CONFIG.get("BINANCE_API_KEY"),
-            'secret': self.api_secret or CONFIG.get("BINANCE_SECRET"),
-            'options': {'defaultType': 'future'}
-        })
+        exchange = ccxt.binance({'apiKey': self.api_key or CONFIG.get("BINANCE_API_KEY"), 'secret': self.api_secret or CONFIG.get("BINANCE_SECRET"), 'options': {'defaultType': 'future'}})
         try:
-            response = await exchange.fapiPrivatePostListenKey()
+            res = await exchange.fapiPrivatePostListenKey()
             await exchange.close()
-            return response.get('listenKey')
+            listen_key = res.get('listenKey')
+            if listen_key:
+                logger.info(f"🔑 User Data Stream listenKey active: {listen_key[:6]}***")
+            return listen_key
         except Exception as e:
-            logger.error(f"Failed to fetch new listenKey: {e}")
+            logger.error(f"ListenKey Error: {e}")
             await exchange.close()
             return None
 
     async def _keep_alive_loop(self):
-        """Periodically extends the listenKey to prevent expiry."""
-        if not self.api_key:
-            return
-            
+        from src.config import CONFIG
+        import ccxt.async_support as ccxt
+
         while self._running and self.listen_key:
-            await asyncio.sleep(1800) # 30 minutes
-            from src.config import CONFIG
-            import ccxt.async_support as ccxt
-            exchange = ccxt.binance({
-                'apiKey': self.api_key or CONFIG.get("BINANCE_API_KEY"),
-                'secret': self.api_secret or CONFIG.get("BINANCE_SECRET"),
-                'options': {'defaultType': 'future'}
-            })
             try:
-                await exchange.fapiPrivatePutListenKey()
-                logger.info("📡 listenKey keep-alive successful.")
+                await asyncio.sleep(30 * 60)
+                exchange = ccxt.binance({
+                    'apiKey': self.api_key or CONFIG.get("BINANCE_API_KEY"),
+                    'secret': self.api_secret or CONFIG.get("BINANCE_SECRET"),
+                    'options': {'defaultType': 'future'},
+                })
+                try:
+                    await exchange.fapiPrivatePutListenKey({'listenKey': self.listen_key})
+                    logger.info("🔑 Binance listenKey keep-alive refreshed.")
+                finally:
+                    await exchange.close()
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                logger.warning(f"⚠️ listenKey keep-alive failed: {e}. Re-fetching...")
-                self.listen_key = await self._get_listen_key()
-                # If re-fetching happens, the main loop will handle reconnection if needed
-            finally:
-                await exchange.close()
+                logger.error(f"ListenKey keep-alive error: {e}")
+
+    async def _run_socket(self, url, label):
+        display_url = url
+        if label == "private" and self.listen_key:
+            display_url = url.replace(self.listen_key, f"{self.listen_key[:6]}***")
+        logger.info(f"🔗 Connecting {label} stream: {display_url[:180]}...")
+
+        async with websockets.connect(url, ping_interval=20, ping_timeout=15) as ws:
+            if label == "private":
+                self.private_ws = ws
+            else:
+                self.ws = ws
+            logger.info(f"✅ WebSocket Handshake Success ({label}).")
+            self._enqueue({"e": "WS_RECONNECTED"})
+
+            async for message in ws:
+                self._handle_message(message, label)
 
     async def connect_and_run(self):
-        """Main connection loop with automatic reconnection."""
+        # Backward-compatible public-stream runner for older tests and scripts.
+        await self._run_socket(self._build_public_ws_url(), "public")
+
+    async def _connection_loop(self, url_builder, label):
+        backoff = 1
+        while self._running:
+            try:
+                await self._run_socket(url_builder(), label)
+                backoff = 1
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"❌ WebSocket connection error: {e}")
+                logger.error(traceback.format_exc())
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+
+    async def stream(self):
         self._running = True
+        self.loop = asyncio.get_running_loop()
         
-        # 1. Start Keep-alive task if API keys are present
-        if self.api_key and not self._keep_alive_task:
+        if self.api_key:
             self.listen_key = await self._get_listen_key()
             if self.listen_key:
                 self._keep_alive_task = asyncio.create_task(self._keep_alive_loop())
 
-        while self._running:
-            try:
-                # 2. Construct Combined Stream URL
-                # Standard streams
-                streams = []
-                for symbol in self.symbols:
-                    s = symbol.replace('/', '').lower()
-                    streams.append(f"{s}@markPrice")
-                    streams.append(f"{s}@kline_1m")
-                    streams.append(f"{s}@kline_1h")
-                
-                # Add private stream if available
-                if self.listen_key:
-                    streams.append(self.listen_key)
-                
-                url = f"{self.base_url}?streams={'/'.join(streams)}"
-                logger.info(f"🔗 Connecting to Combined Stream: {url[:80]}...")
+        self._public_task = asyncio.create_task(
+            self._connection_loop(self._build_public_ws_url, "public")
+        )
 
-                # 3. Connect via port 443 (implicitly handled by wss://)
-                async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
-                    logger.info("✅ WebSocket Connected (Port 443/Combined)")
-                    self.queue.put_nowait({"e": "WS_RECONNECTED"})
-                    
-                    async for message in ws:
-                        if not self._running: break
-                        
-                        # Debug: Log first 10 raw messages
-                        if self._msg_debug_count < 10:
-                            logger.info(f"📥 Raw WS Message: {message[:100]}...")
-                            self._msg_debug_count += 1
+        if self.listen_key:
+            self._private_task = asyncio.create_task(
+                self._connection_loop(self._build_private_ws_url, "private")
+            )
 
-                        data = json.loads(message)
-                        # Normalize Combined Stream format (Binance wraps data in 'data' field)
-                        payload = data.get('data', data)
-                        
-                        # [CRITICAL] Log Order Updates
-                        if isinstance(payload, dict) and payload.get('e') == 'ORDER_TRADE_UPDATE':
-                            o = payload['o']
-                            order_logger.info(f"🔔 [ORDER] {o['s']} | {o['X']} | ID: {o['i']} | Price: {o['ap']}")
-
-                        self.queue.put_nowait(payload)
-
-            except Exception as e:
-                if self._running:
-                    import traceback
-                    logger.error(f"❌ WS Connection Error: {e}")
-                    logger.error(traceback.format_exc())
-                    await asyncio.sleep(5)
-
-    async def stream(self):
-        """Interface for the main bot loop."""
-        self._running = True
-        # Ensure the connection runner is started only once
-        if not hasattr(self, '_conn_task') or self._conn_task.done():
-            self._conn_task = asyncio.create_task(self.connect_and_run())
-            # Give it a tiny head start
-            await asyncio.sleep(0.1)
-        
-        while self._running or not self.queue.empty():
-            try:
-                # Use a small timeout to allow checking self._running
-                msg = await asyncio.wait_for(self.queue.get(), timeout=1.0)
-                yield msg
-            except asyncio.TimeoutError:
-                continue
-            except Exception as e:
-                if self._running:
-                    logger.error(f"Error in stream generator: {e}")
-                break
+        try:
+            while self._running:
+                try:
+                    # Use a timeout to avoid hanging forever if no data comes
+                    msg = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+                    yield msg
+                except asyncio.TimeoutError:
+                    continue
+                except Exception as e:
+                    logger.error(f"Stream error: {e}")
+                    break
+        finally:
+            self.stop()
 
     def stop(self):
         self._running = False
-        if self._keep_alive_task:
+        if self._keep_alive_task and not self._keep_alive_task.done():
             self._keep_alive_task.cancel()
+        if self._public_task and not self._public_task.done():
+            self._public_task.cancel()
+        if self._private_task and not self._private_task.done():
+            self._private_task.cancel()
         logger.info("Stopping WebSocket Manager...")
