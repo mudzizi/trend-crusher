@@ -23,6 +23,8 @@ SYMBOLS_LIST:
 MAX_CONCURRENT_TRADES: 3
 MARGIN_MODE: "ISOLATED"
 MAX_LEVERAGE: 5
+# Maximum total position value (including pending orders) in USDT for a single symbol
+MAX_POSITION_VALUE_USDT: 1000.0
 
 # --- GLOBAL MODE DEFAULTS ---
 # These apply to all symbols unless overridden in SYMBOL_SETTINGS.

@@ -22,6 +22,8 @@ def mock_bot(mock_config):
     mock_exchange.create_order = AsyncMock(return_value={'id': 'stop_market_123'})
     mock_exchange.cancel_order = AsyncMock()
     mock_exchange.fetch_order = AsyncMock(return_value={'id': 'stop_market_123', 'status': 'open'})
+    mock_exchange.fetch_positions = AsyncMock(return_value=[])
+    mock_exchange.fetch_open_orders = AsyncMock(return_value=[])
     mock_exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
     mock_exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
     
@@ -34,6 +36,7 @@ def mock_bot(mock_config):
     
     bot = SymbolBotAsync("BTC/USDT", mock_exchange, mock_pm, mock_notifier, MagicMock())
     bot.hot_reload_settings(mock_config)
+    bot.settings["MAX_POSITION_VALUE_USDT"] = 1000000.0 # Increase limit for tests
     bot.use_sniper = True
     
     # Setup dummy indicators to bypass basic checks

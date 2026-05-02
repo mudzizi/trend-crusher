@@ -119,12 +119,49 @@ class SymbolBotAsync:
             params={'reduceOnly': True},
         )
 
+    async def _is_over_safety_limit(self, new_order_value_usdt=0):
+        """
+        [SAFETY GUARD] Checks if current position + open orders + new order 
+        exceeds the MAX_POSITION_VALUE_USDT threshold.
+        """
+        if self.settings.get("DRY_RUN"): return False
+        
+        limit = float(self.settings.get("MAX_POSITION_VALUE_USDT", 1000.0))
+        try:
+            # 1. Get current position value
+            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
+            pos = next((p for p in positions if p['symbol'] == self.symbol or p['symbol'].replace(':USDT','') == self.symbol), None)
+            current_pos_value = abs(float(pos['notional'])) if pos and pos.get('notional') else 0
+            
+            # 2. Get all open orders for this symbol
+            open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+            pending_value = 0
+            for o in open_orders:
+                # Value = Price * Quantity
+                # For STOP_MARKET, use stopPrice, otherwise use price or last_price
+                price = float(o.get('stopPrice') or o.get('price') or self.last_price)
+                qty = float(o.get('amount', 0))
+                pending_value += (price * qty)
+            
+            total_exposure = current_pos_value + pending_value + new_order_value_usdt
+            
+            if total_exposure > limit:
+                self.logger.warning(f"⚠️ SAFETY LIMIT REACHED: Total exposure ${total_exposure:,.2f} exceeds limit ${limit:,.2f}. Blocking order.")
+                return True
+            return False
+        except Exception as e:
+            self.logger.error(f"Error in safety limit check: {e}")
+            return True # Block by default if check fails
+
     async def manage_retest_ambush(self, direction, target_price, sl_price):
         if self.active_retest_order_id: return
         qty = await self.pm.calculate_order_qty(self.symbol, target_price, sl_price)
         if qty is None or (isinstance(qty, (int, float)) and qty <= 0): return
         
         self.quantity = float(qty)
+        # --- Safety Guardrail ---
+        if await self._is_over_safety_limit(self.quantity * target_price): return
+        
         side = 'buy' if direction == 1 else 'sell'
         try:
             if self.settings["DRY_RUN"]:
@@ -159,6 +196,9 @@ class SymbolBotAsync:
         if qty is None or (isinstance(qty, (int, float)) and qty <= 0): return
         
         self.quantity = float(qty)
+        # --- Safety Guardrail ---
+        if await self._is_over_safety_limit(self.quantity * target_price): return
+        
         side = 'buy' if direction == 1 else 'sell'
         try:
             if self.settings["DRY_RUN"]:
@@ -697,6 +737,9 @@ class SymbolBotAsync:
         qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
         if qty is None or qty <= 0: return
         self.quantity = float(qty)
+        # --- Safety Guardrail ---
+        if await self._is_over_safety_limit(self.quantity * self.last_price): return
+        
         try:
             if not self.settings["DRY_RUN"]:
                 balance = await self.retry_api_call(self.exchange.fetch_balance)

@@ -19,8 +19,11 @@ def mock_bot():
     
     # Initialize Bot (symbol, exchange, pm, notifier, db)
     with patch('scripts.live_bot_async.TrendCrusherV2'):
+        mock_exchange.fetch_positions = AsyncMock(return_value=[])
+        mock_exchange.fetch_open_orders = AsyncMock(return_value=[])
         bot = SymbolBotAsync("BTC/USDT", mock_exchange, mock_pm, mock_notifier, mock_db)
         bot.settings = config
+        bot.settings["MAX_POSITION_VALUE_USDT"] = 1000000.0 # Increase limit for tests
         bot.last_price = 50000.0
         bot.ohlcv_1h = pd.DataFrame([{'timestamp': pd.Timestamp.now(), 'atr': 100.0}])
         bot.entry_price = 0
