@@ -1,3 +1,27 @@
+# Trading Session Log (2026-05-01) - Milestone: Cloud Optimization & Safety Guardrails (v13.2.0)
+
+## ✅ 완료된 작업
+1.  **웹소켓 엔진 전면 리팩토링 (GCP 최적화)**:
+    -   `websockets` 라이브러리를 활용한 순수 비동기 아키텍처 도입.
+    -   GCP 방화벽 우회를 위해 **443 포트** 및 **Combined Streams** 방식 적용.
+    -   Public/Private 스트림을 독립 루프로 분리하여 안정성 극대화.
+2.  **경쟁 상태(Race Condition) 원천 차단**:
+    -   심볼별 `asyncio.Lock`을 도입하여 가격 업데이트와 주문 처리를 직렬화.
+    -   동일 신호에 대해 중복 주문이 나가는 "Order Flooding" 현상 완벽 해결.
+3.  **물량 폭주 방지 가드레일 (Safety Guardrail)**:
+    -   `MAX_POSITION_VALUE_USDT` 설정 추가.
+    -   주문 전 거래소 실제 포지션 + 대기 주문 가치를 합산 검증하여 한도 초과 시 주문 차단.
+4.  **실전 검증 도구 추가**:
+    -   `scripts/verify_live_order.py`를 통해 실제 거래소에서의 소액 사이클 테스트 완료.
+    -   텔레그램 `/check` 명령어로 실시간 소켓 상태 모니터링 기능 추가.
+
+## 🧪 검증 결과
+-   **중복 주문 방지 검증**: 락(Lock) 적용 후 병렬 메시지 유입 시에도 주문이 1회만 발생함을 확인.
+-   **가드레일 검증**: 설정한 $1000 한도 초과 시 주문이 즉시 차단됨을 로그로 확인.
+-   **전체 75개 테스트 통과**: 새로운 비동기 구조 및 가드레일 로직 반영 후 무결성 확인.
+
+---
+
 # Trading Session Log (2026-04-20) - Milestone: Race Condition & Double-Entry Fix (v13.1.13)
 
 ## ✅ 완료된 작업

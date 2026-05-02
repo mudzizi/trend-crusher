@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.2.0] - 2026-05-01
+### **🚀 Cloud Stability & Safety Guardrails**
+- **WebSocket Engine Overhaul**: Re-architected the WebSocket manager to use pure async `websockets` library with **Combined Streams** and **Port 443** bypass, ensuring bit-perfect data flow in GCP/Cloud environments.
+- **Race Condition Prevention**: Introduced `asyncio.Lock` per symbol to serialize event processing. This solves the "Order Flooding" issue where rapid price updates triggered multiple duplicate entries before state updates.
+- **Total Exposure Guardrail**: Implemented `MAX_POSITION_VALUE_USDT` safety check. The bot now verifies `Current Position + Open Orders + New Order` against a global limit (Default $1000) before placing any trade.
+- **Verification Suite**: Added `scripts/verify_live_order.py` for safe, low-risk validation of the entire trade lifecycle on real exchanges.
+- **Diagnostic Tools**: Added `/check` Telegram command for real-time WebSocket connectivity status and latency reporting.
+- **Resilient Cancellation**: Improved `cancel_order` logic with pre-emptive exchange verification to eliminate Binance `-1102 (Malformed orderId)` and `-2011 (Unknown order)` errors.
+
 ## [13.1.13] - 2026-04-20
 ### Fixed
 - **Double Entry Race Condition**: Eliminated a race condition where the bot could execute multiple entries for the same signal due to the asynchronous gap between fill detection and SL order creation.
