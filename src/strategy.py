@@ -173,12 +173,18 @@ class TrendCrusherV2:
         df['avg_vol'] = calculate_avg_vol(df, period=config.get("AVG_VOL_PERIOD", 20))
         df['adx'] = calculate_adx(df, period=config.get("ADX_PERIOD", 14))
         
-        df_t = df_trend.copy()
-        if 'timestamp' not in df_t.columns: df_t = df_t.reset_index()
-            
-        ema_vals = calculate_ema(df_t, period=config.get("EMA_TREND_PERIOD", 200))
-        df_h = pd.DataFrame({'timestamp': df_t['timestamp'], 'ema_h': ema_vals}).set_index('timestamp')
-        df = df.set_index('timestamp').join(df_h).ffill()
+        # --- IMPROVED EMA LOGIC ---
+        # Instead of ffilling 4h EMA (which causes stepping), we calculate a smooth EMA 
+        # directly on the 1h bars that approximates the 4h period.
+        # 4h EMA 200 is roughly equivalent to 1h EMA 800.
+        ema_period = config.get("EMA_TREND_PERIOD", 200)
+        # Use a scaling factor to match the signal timeframe vs trend timeframe
+        # signal: 1h, trend: 4h -> factor is 4
+        smooth_ema = calculate_ema(df, period=ema_period * 4)
+        df['ema_h'] = smooth_ema
+        
+        # Keep 4h join logic for other trend indicators if needed, 
+        # but EMA is now smooth on the signal timeframe.
         return df
 
     def check_entry_signal(self, row, last_price, use_sniper=False, retest_maker=False, config=None, is_ambushing=False):

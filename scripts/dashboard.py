@@ -97,7 +97,14 @@ def index():
                 # Add the very latest live data as the last point
                 # row is from live_status_df which contains the latest live_indicators
                 prices.append(row['last_price'])
-                ema_values.append(row['ema_value'] if 'ema_value' in row else (row['upper_band'] - (row['upper_band'] - row['lower_column'])/2))
+                
+                # [FIX] Do not use Donchian midpoint as EMA fallback. 
+                # If ema_value is missing, use None to avoid jumping the line.
+                ema_val = row.get('ema_value')
+                if ema_val is None or ema_val == 0:
+                    ema_val = ema_values[-1] if ema_values else row['last_price']
+                ema_values.append(ema_val)
+                
                 upper_bands.append(row['upper_band'])
                 lower_bands.append(row['lower_column'])
                 volumes.append(row['vol_ratio'] * (sum(volumes)/len(volumes) if volumes else 1.0)) # Scaled volume

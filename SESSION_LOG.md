@@ -128,7 +128,22 @@
 
 ---
 
-# Trading Session Log (2026-04-02) - Milestone: EMA Visualization Fix (v13.1.7)
+# Trading Session Log (2026-05-06) - Milestone: EMA Precision & Visualization Overhaul
+
+## 1. EMA 계산 로직 정밀화 및 시각화 개선
+대시보드 차트에서 EMA(지수이동평균)가 "불명확하다"는 사용자 피드백을 반영하여 지표 계산 및 연동 구조를 전면 개편하였습니다.
+
+### 주요 변경 사항:
+- **Stepping 현상 제거**: 기존에 4시간봉(4h) EMA를 1시간봉(1h)에 단순 복사(`ffill`)하여 사용하던 방식에서, 1시간봉 데이터에서 직접 **EMA 800**($200 \text{ period} \times 4 \text{ ratio}$)을 계산하도록 변경. 이를 통해 계단식 점프 현상을 제거하고 매끄러운 트렌드 곡선 구현.
+- **대시보드 데이터 정합성 확보**: `scripts/dashboard.py`에서 실시간 EMA 데이터 부재 시 돈치안 채널의 중간값(Midpoint)을 대체제로 사용하던 오동작 로직 제거. 데이터 누락 시 마지막 알려진 EMA 값을 유지하여 차트가 급격히 꺾이는 현상 방지.
+- **실시간 지표 업데이트 강화**: `src/strategy.py`의 `calculate_indicators` 엔진이 1시간봉 단위에서 고해상도 EMA를 직접 산출하도록 최적화.
+
+### 검증 결과:
+- `tests/test_indicators.py` 및 `tests/test_strategy_v2.py` 전체 테스트 통과 (12/12).
+- 대시보드 시각화 시 EMA 라인이 1시간봉 캔들 흐름에 맞춰 매끄럽게 연결됨을 논리적으로 확인.
+
+---
+
 
 ## ✅ 완료된 작업
 1.  **실시간 EMA 데이터 저장 및 연동**:
