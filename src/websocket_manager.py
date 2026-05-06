@@ -19,13 +19,16 @@ if not order_logger.handlers:
 
 logger = logging.getLogger(__name__)
 
-PUBLIC_WS_BASE_URL = "wss://fstream.binancefuture.com"
-PRIVATE_WS_BASE_URL = "wss://fstream.binance.com"
+# --- Binance Futures 2026 WebSocket Architecture ---
+# As of March 2026, endpoints are specialized for stability and performance.
+WS_PUBLIC_BASE = "wss://fstream.binance.com/public"   # High-frequency (Orderbook, etc.)
+WS_MARKET_BASE = "wss://fstream.binance.com/market"   # Regular market data (Klines, MarkPrice)
+WS_PRIVATE_BASE = "wss://fstream.binance.com/private" # User Data Streams (Order updates)
 
 class BinanceWebSocketManager:
     """
     Async Binance Futures WebSocket manager.
-    Uses combined streams so market data and user-data events share one queue.
+    Migrated to March 2026 Multi-Endpoint Architecture.
     """
     def __init__(self, symbols=None, api_key=None, api_secret=None):
         self.symbols = symbols or []
@@ -60,24 +63,31 @@ class BinanceWebSocketManager:
         return streams
 
     def _build_public_ws_url(self):
+        """
+        Builds URL for Market Data streams. 
+        Uses WS_MARKET_BASE for regular frequency data like klines and markPrice.
+        """
         streams = self._build_public_streams()
         if not streams:
             raise ValueError("No websocket streams configured.")
 
         # Binance combined streams must use /stream?streams=a/b/c.
-        # /ws/<stream> is only valid for a single raw stream.
-        return f"{PUBLIC_WS_BASE_URL}/stream?streams={'/'.join(streams)}"
+        return f"{WS_MARKET_BASE}/stream?streams={'/'.join(streams)}"
 
     def _build_ws_url(self):
         # Backward-compatible alias for older tests and diagnostics.
         return self._build_public_ws_url()
 
     def _build_private_ws_url(self):
+        """
+        Builds URL for Private User Data streams.
+        Uses WS_PRIVATE_BASE as per March 2026 requirements.
+        """
         if not self.listen_key:
             raise ValueError("No listenKey configured for private websocket.")
         listen_key = quote(self.listen_key, safe="")
-        events = quote("ORDER_TRADE_UPDATE", safe="")
-        return f"{PRIVATE_WS_BASE_URL}/private/ws?listenKey={listen_key}&events={events}"
+        # In 2026 architecture, /private/ws is the dedicated path
+        return f"{WS_PRIVATE_BASE}/ws?listenKey={listen_key}"
 
     def _enqueue(self, payload):
         if self.loop:
