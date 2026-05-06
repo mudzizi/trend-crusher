@@ -359,7 +359,7 @@ class SymbolBotAsync:
                 elif kline_ts > target_df.loc[last_idx, 'timestamp']:
                     if is_signal_tf: self.ohlcv_1h = await self.fetch_ohlcv(tf)
                     else: self.ohlcv_4h = await self.fetch_ohlcv(tf)
-                    self.logger.info(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
+                    self.logger.debug(f"🕯️ New Candle ({tf}) synced at {kline_ts}")
                 
                 now = time.time()
                 if kline['x'] or (now - self.last_indicator_calc_ts > 10):
@@ -379,7 +379,8 @@ class SymbolBotAsync:
                                 float(last_row['volume']),
                                 float(last_row['adx'])
                             )
-                            self.logger.info(f"💾 Hourly snapshot logged for {self.symbol}")
+                            # Reduced log frequency
+                            self.logger.debug(f"💾 Hourly snapshot logged for {self.symbol}")
                         except Exception as e:
                             self.logger.error(f"Error logging hourly snapshot: {e}")
                     
@@ -551,7 +552,7 @@ class SymbolBotAsync:
     async def sync_all_orders(self):
         """Gap-filling sync: Check all pending orders and actual position via REST API."""
         if self.settings["DRY_RUN"]: return
-        self.logger.info(f"🔍 Syncing all orders & position for {self.symbol}...")
+        self.logger.debug(f"🔍 Syncing all orders & position for {self.symbol}...")
         try:
             # 1. Sync Actual Position from Exchange
             # Fetch all positions to ensure we catch symbols with settlement suffixes like :USDT
@@ -718,7 +719,7 @@ class SymbolBotAsync:
         target_side = 'sell' if self.position == 1 else 'buy'
         
         try:
-            self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
+            self.logger.debug(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
             if self.sl_order_id:
                 try: await self.cancel_trigger_order(self.sl_order_id)
                 except: pass
@@ -726,15 +727,17 @@ class SymbolBotAsync:
             # Use captured local variables for the actual API call
             params = {'stopPrice': target_sl, 'reduceOnly': True}
             sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', target_side, target_qty, None, params)
+            
+            # [REDUCED NOISE] Only notify if SL move is significant (>0.1%)
+            if abs(target_sl - self.last_sl_sync_price) / (self.last_sl_sync_price or 1) > 0.001:
+                self.notifier.send_message(
+                    f"🛡️ **SL Updated: {self.symbol}**\n"
+                    f"- New SL: `{target_sl:,.2f}`\n"
+                    f"- Mark Price: `{self.last_price:,.2f}`"
+                )
+            
             self.sl_order_id, self.last_sl_sync_price = sl_order['id'], target_sl
             self.persist_state()
-            
-            # 성공 시 텔레그램 알림 발송
-            self.notifier.send_message(
-                f"🛡️ **SL Updated: {self.symbol}**\n"
-                f"- New SL: `{target_sl:,.2f}`\n"
-                f"- Mark Price: `{self.last_price:,.2f}`"
-            )
         except Exception as e: self.logger.error(f"❌ SL Sync Failed for {self.symbol}: {e}")
 
     async def execute_entry(self, direction, atr):
@@ -830,19 +833,31 @@ class SymbolBotAsync:
         if self.position == 1: pos_str = "🟢 LONG"
         elif self.position == -1: pos_str = "🔴 SHORT"
 
-        # Guard against zero entry price to prevent float division by zero
         pnl_str = ""
         if self.position != 0 and self.entry_price != 0:
-            pnl_str = f" ({(((self.last_price / self.entry_price) - 1) * 100 * self.position):+.2f}%)"
+            pnl_pct = ((self.last_price / self.entry_price) - 1) * 100 * self.position
+            pnl_str = f" ({pnl_pct:+.2f}%) | SL: {self.sl_price:,.2f}"
 
         ambush = "🎯 Sniper" if self.active_sniper_order_id else ("🎣 Retest" if self.active_retest_order_id else "None")
         upper, lower, ema, adx = row['upper'], row['lower'], row['ema_h'], row['adx']
         vol_target = row['avg_vol'] * self.settings.get('VOL_MULTIPLIER', 2.0)
         vol_ratio = (row['volume'] / vol_target * 100) if vol_target > 0 else 0
+        adx_limit = self.settings.get('ADX_FILTER_LEVEL', 25.0)
         prox_pct = self.settings.get('SNIPER_PROXIMITY_PCT', 0.005)
         dist = abs((upper if self.last_price > ema else lower) - self.last_price)
         prox = max(0, 1.0 - (dist / ((upper if self.last_price > ema else lower) * prox_pct))) * 100 if prox_pct > 0 else 0
-        return f"• **{self.symbol}**: {pos_str}{pnl_str}\n  - Price: {self.last_price:,.2f} | EMA: {ema:,.2f}\n  - Bands: [{lower:,.2f} ~ {upper:,.2f}]\n  - Filters: Vol {vol_ratio:.1f}% | ADX {adx:.1f} | Prox {prox:.1f}%\n  - Ambush: {ambush}\n"
+        
+        # Anomaly Detection Hint
+        status_icon = "✅"
+        if vol_ratio > 300: status_icon = "⚠️ (Vol Burst!!)"
+        elif adx > 60: status_icon = "⚠️ (Extreme Trend)"
+        elif prox > 95 and self.position == 0: status_icon = "⚡ (Entry Imminent)"
+        
+        return (f"• **{self.symbol}** {status_icon}: {pos_str}{pnl_str}\n"
+                f"  - Prc: {self.last_price:,.2f} | EMA: {ema:,.2f}\n"
+                f"  - Bands: [{lower:,.2f} ~ {upper:,.2f}]\n"
+                f"  - Indicators: Vol {vol_ratio:.1f}% | ADX {adx:.1f}/{adx_limit} | Prox {prox:.1f}%\n"
+                f"  - Order: {ambush} | ID: {self.active_sniper_order_id or self.active_retest_order_id or 'None'}\n")
 
     def persist_state(self):
         try: self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_price, self.sl_order_id, self.active_sniper_order_id, self.active_retest_order_id)
@@ -893,6 +908,21 @@ async def handle_commands(bots, notifier, pm):
         except Exception as e: logger.error(f"Error in handle_commands: {e}")
         await asyncio.sleep(2)
 
+async def periodic_logger(bots):
+    """Logs detailed status for all symbols every 10 minutes."""
+    while True:
+        try:
+            await asyncio.sleep(600) # 10 minutes
+            log_msg = "\n" + "="*50 + "\n"
+            log_msg += f"🕒 Periodic System Status ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})\n"
+            log_msg += "="*50 + "\n"
+            for sym, bot in bots.items():
+                status = bot.get_detailed_status().replace("**", "").replace("• ", "")
+                log_msg += status + "-"*30 + "\n"
+            logger.info(log_msg)
+        except Exception as e:
+            logger.error(f"Error in periodic_logger: {e}")
+
 async def main():
     db, notifier = DBManager(), TelegramNotifier()
     exchange = getattr(ccxt, CONFIG["EXCHANGE"])({'apiKey': CONFIG["BINANCE_API_KEY"], 'secret': CONFIG["BINANCE_SECRET"], 'options': {'defaultType': 'future'}})
@@ -935,8 +965,8 @@ async def main():
                 try:
                     msg_count += 1
                     now = time.time()
-                    if now - last_msg_log > 60:
-                        logger.info(f"📡 WS Heartbeat: Received {msg_count} messages in last 60s")
+                    if now - last_msg_log > 600: # 10 minutes
+                        logger.info(f"📡 WS Heartbeat: Received {msg_count} messages in last 10m")
                         msg_count = 0
                         last_msg_log = now
 
@@ -950,7 +980,7 @@ async def main():
                     asyncio.create_task(process_msg(payload))
                 except Exception as e: logger.error(f"Error in ws_loop: {e}")
         logger.info(f"🚀 TrendCrusher {CONFIG['VERSION']} Async Core Started.")
-        await asyncio.gather(ws_loop(), handle_commands(bots, notifier, pm))
+        await asyncio.gather(ws_loop(), handle_commands(bots, notifier, pm), periodic_logger(bots))
     except Exception as e: logger.error(f"Fatal crash: {e}"); notifier.send_message(f"🚨 **CRITICAL BOT CRASH**: {e}")
     finally: await exchange.close(); logger.info("📡 Exchange connection closed.")
 

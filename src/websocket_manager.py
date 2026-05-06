@@ -96,36 +96,37 @@ class BinanceWebSocketManager:
     def _handle_message(self, message, label="unknown"):
         try:
             self._msg_count += 1
-            if self._raw_debug_count.get(label, 0) < 5:
-                logger.info(f"📥 Raw WS Message ({label}): {message[:180]}...")
+            
+            # [DIAGNOSTIC] Log ONLY private raw messages at DEBUG for initial troubleshooting
+            if label == "private" and self._raw_debug_count.get(label, 0) < 5:
+                logger.debug(f"🔐 Private WS Handshake Msg: {message[:180]}...")
                 self._raw_debug_count[label] = self._raw_debug_count.get(label, 0) + 1
 
             data = json.loads(message)
             payload = data.get('data', data)
 
             if isinstance(payload, dict) and payload.get('result') is None and 'id' in payload:
-                logger.info(f"✅ WebSocket subscription acknowledged ({label}, id={payload['id']}).")
+                logger.debug(f"✅ WebSocket subscription acknowledged ({label}, id={payload['id']}).")
                 return
             
-            # [DIAGNOSTIC] Log every 50th message to prove life without flooding
-            if self._msg_count % 50 == 1:
-                logger.info(f"📊 WS Data Flowing... (Msg #{self._msg_count}) Last Type: {payload.get('e')} Source: {label}")
+            # [REDUCED NOISE] Silence all public diagnostics at INFO level
+            if self._msg_count % 1000 == 1:
+                logger.debug(f"📊 WS Flow Heartbeat (Total: {self._msg_count}) | Last Type: {payload.get('e')} | Src: {label}")
 
             if isinstance(payload, dict) and label == "private":
-                logger.info(f"🔐 Private WS Event: {payload.get('e')}")
-
-            if isinstance(payload, dict):
                 event_type = payload.get('e')
+                
+                # Keep major private events at INFO level
+                if event_type in ['ORDER_TRADE_UPDATE', 'ACCOUNT_UPDATE', 'MARGIN_CALL', 'ORDER_TRADE_LITE']:
+                    logger.info(f"🔐 Private WS Event: {event_type}")
+                else:
+                    logger.debug(f"🔐 Private WS Misc Event: {event_type}")
+
                 if event_type == 'ORDER_TRADE_UPDATE':
                     o = payload['o']
                     order_logger.info(
                         f"🔔 [ORDER] {o['s']} | {o['S']} {o['o']} | Status: {o['X']} | "
                         f"Exec: {o['x']} | Qty: {o['z']}/{o['q']} | Price: {o.get('ap', o.get('L', '0'))} | ID: {o['i']}"
-                    )
-                elif event_type == 'TRADE_LITE':
-                    order_logger.info(
-                        f"⚡ [TRADE_LITE] {payload.get('s')} | Side: {payload.get('S')} | "
-                        f"Qty: {payload.get('q')} | Price: {payload.get('p')} | Order: {payload.get('i')}"
                     )
                 elif event_type == 'ACCOUNT_UPDATE':
                     order_logger.info(f"💰 [ACCOUNT_UPDATE] Reason: {payload.get('a', {}).get('m')}")
