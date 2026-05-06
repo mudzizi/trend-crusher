@@ -180,7 +180,14 @@ class TrendCrusherV2:
         ema_period = config.get("EMA_TREND_PERIOD", 200)
         # Use a scaling factor to match the signal timeframe vs trend timeframe
         # signal: 1h, trend: 4h -> factor is 4
-        smooth_ema = calculate_ema(df, period=ema_period * 4)
+        target_span = ema_period * 4
+        
+        # [ADAPTIVE] If we have less data than target_span, reduce span to available length
+        # to ensure we get at least some EMA value instead of NaN.
+        actual_span = min(target_span, len(df))
+        if actual_span < 2: actual_span = 2 # Minimum span for EMA
+        
+        smooth_ema = calculate_ema(df, period=actual_span)
         df['ema_h'] = smooth_ema
         
         # Keep 4h join logic for other trend indicators if needed, 

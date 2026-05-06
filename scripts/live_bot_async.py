@@ -287,7 +287,7 @@ class SymbolBotAsync:
                 self.active_retest_order_id = state.get('retest_order_id')
                 self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}, Sniper={self.active_sniper_order_id}")
 
-            self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=500)
+            self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=1000)
             self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=500)
             
             self._update_indicators()
