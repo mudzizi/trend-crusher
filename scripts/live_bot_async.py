@@ -84,7 +84,7 @@ class SymbolBotAsync:
                 self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
                 await asyncio.sleep(delay * (i + 1))
 
-    async def fetch_ohlcv(self, tf, limit=100):
+    async def fetch_ohlcv(self, tf, limit=1000):
         ohlcv = await self.retry_api_call(self.exchange.fetch_ohlcv, self.symbol, tf, limit=limit)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -288,7 +288,7 @@ class SymbolBotAsync:
                 self.logger.info(f"💾 Recovered: Pos={self.position}, Entry={self.entry_price}, Sniper={self.active_sniper_order_id}")
 
             self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=1000)
-            self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=500)
+            self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=1000)
             
             self._update_indicators()
             

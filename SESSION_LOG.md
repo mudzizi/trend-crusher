@@ -1,3 +1,21 @@
+# Trading Session Log (2026-05-07) - Milestone: EMA Precision & Stability Fix (v13.2.1)
+
+## ✅ 완료된 작업
+1.  **EMA 계산 급변(Kink) 현상 해결**:
+    -   라이브 봇이 새로운 캔들 형성 시 OHLCV 데이터를 기본 100개만 가져오던 로직을 **1000개**로 대폭 상향.
+    -   이로 인해 EMA 800(4h EMA 200의 1h 환산치) 계산 시 데이터 부족으로 인해 span이 800에서 100으로 급격히 줄어들며 지표값이 튀는 현상을 완벽히 수정.
+2.  **데이터 정합성 보장 (Consistent Data Fetching)**:
+    -   `scripts/live_bot_async.py`와 `scripts/live_bot.py` 모두 데이터 fetch limit을 1000으로 통일하여, 초기화(Initialize) 시점과 실시간 운영 시점의 계산 환경을 일치시킴.
+3.  **지표 안정성 검증 테스트 추가**:
+    -   `tests/test_ema_fix.py`를 통해 100개 데이터 사용 시(오차 9.7%)와 1000개 데이터 사용 시(안정적 유지)의 차이를 수치적으로 증명.
+
+## 🧪 검증 결과
+-   **EMA 안정성 검증**: 데이터 길이 변화에도 EMA 800 값이 튀지 않고 매끄럽게 유지됨을 확인.
+-   **리그레션 테스트**: `tests/test_ema_fix.py` 포함 전체 테스트 무결성 확인.
+-   **대시보드 연동**: 실시간 EMA 값이 이전 백필 데이터와 단절 없이 매끄럽게 연결됨을 논리적으로 확인.
+
+---
+
 # Trading Session Log (2026-05-01) - Milestone: Cloud Optimization & Safety Guardrails (v13.2.0)
 
 ## ✅ 완료된 작업

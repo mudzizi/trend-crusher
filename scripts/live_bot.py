@@ -62,7 +62,7 @@ class TrendCrusherLive:
         logger.info("="*50)
         self.notifier.notify_status(f"Bot v{CONFIG['VERSION']} Started on {self.symbol}. Seed: {self.initial_seed} USDT")
 
-    def fetch_data(self, tf, limit=250):
+    def fetch_data(self, tf, limit=1000):
         ohlcv = self.exchange.fetch_ohlcv(self.symbol, tf, limit=limit)
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
