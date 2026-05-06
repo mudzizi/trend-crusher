@@ -192,6 +192,9 @@ class TrendCrusherV2:
         
         # Keep 4h join logic for other trend indicators if needed, 
         # but EMA is now smooth on the signal timeframe.
+        if 'timestamp' in df.columns:
+            df = df.set_index('timestamp')
+            
         return df
 
     def check_entry_signal(self, row, last_price, use_sniper=False, retest_maker=False, config=None, is_ambushing=False):

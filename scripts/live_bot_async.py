@@ -300,8 +300,14 @@ class SymbolBotAsync:
                 saved_count = 0
                 for idx, row in history_slice.iterrows():
                     try:
-                        # Extract timestamp from index (Pandas DatetimeIndex expected)
-                        ts_str = idx.strftime("%Y-%m-%d %H:%M:%S")
+                        # Extract timestamp from index or column
+                        if hasattr(idx, 'strftime'):
+                            ts_str = idx.strftime("%Y-%m-%d %H:%M:%S")
+                        elif 'timestamp' in row:
+                            ts_obj = pd.to_datetime(row['timestamp'])
+                            ts_str = ts_obj.strftime("%Y-%m-%d %H:%M:%S")
+                        else:
+                            continue # Skip if no timestamp found
 
                         # Using correct engine columns: ema_h, upper, lower
                         self.db.log_history_1h(
