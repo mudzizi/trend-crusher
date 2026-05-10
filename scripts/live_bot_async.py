@@ -579,13 +579,27 @@ class SymbolBotAsync:
                     self.max_price_seen = max(self.max_price_seen, self.entry_price) if self.position == 1 else self.max_price_seen
                     self.min_price_seen = min(self.min_price_seen, self.entry_price) if self.position == -1 else self.min_price_seen
                     self.persist_state()
-            elif self.position != 0:
-                # Exchange says no position, but bot thinks we have one
-                # ONLY reset if we actually got a valid response from the exchange containing other data
+            else:
+                # Exchange says no position, but bot might think we have one or have orphan orders
                 if positions is not None and len(positions) > 0:
-                    self.logger.warning(f"⚠️ Exchange confirmed NO position for {self.symbol}, but bot state is {self.position}. Resetting bot state.")
-                    self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None
-                    self.persist_state()
+                    if self.position != 0:
+                        self.logger.warning(f"⚠️ Exchange confirmed NO position for {self.symbol}, but bot state is {self.position}. Resetting bot state.")
+                        self.position = 0; self.entry_price = 0; self.quantity = 0; self.sl_order_id = None
+                        self.persist_state()
+                    
+                    # [AGGRESSIVE CLEANUP] Even if position was 0, ensure NO orphan orders exist for this symbol
+                    # This prevents "Ghost SL" orders from creating accidental new positions
+                    try:
+                        open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                        if open_orders:
+                            self.logger.warning(f"🧹 Orphan orders found for {self.symbol} with NO position. Cleaning up {len(open_orders)} orders...")
+                            await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
+                            self.sl_order_id = None
+                            self.active_sniper_order_id = None
+                            self.active_retest_order_id = None
+                            self.persist_state()
+                    except Exception as clean_e:
+                        self.logger.error(f"Failed to cleanup orphan orders for {self.symbol}: {clean_e}")
                 else:
                     self.logger.warning(f"⚠️ Could not verify position for {self.symbol} (empty exchange response). Skipping state reset.")
 
@@ -719,7 +733,7 @@ class SymbolBotAsync:
         target_side = 'sell' if self.position == 1 else 'buy'
         
         try:
-            self.logger.debug(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
+            self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
             if self.sl_order_id:
                 try: await self.cancel_trigger_order(self.sl_order_id)
                 except: pass

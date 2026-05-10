@@ -116,11 +116,12 @@ class BinanceWebSocketManager:
             if isinstance(payload, dict) and label == "private":
                 event_type = payload.get('e')
                 
-                # Keep major private events at INFO level
+                # Keep major private events at INFO level for user visibility
                 if event_type in ['ORDER_TRADE_UPDATE', 'ACCOUNT_UPDATE', 'MARGIN_CALL', 'ORDER_TRADE_LITE']:
                     logger.info(f"🔐 Private WS Event: {event_type}")
                 else:
-                    logger.debug(f"🔐 Private WS Misc Event: {event_type}")
+                    # Elevate misc private events to INFO as well per user request
+                    logger.info(f"🔐 Private WS Misc Event: {event_type}")
 
                 if event_type == 'ORDER_TRADE_UPDATE':
                     o = payload['o']
@@ -159,9 +160,23 @@ class BinanceWebSocketManager:
         from src.config import CONFIG
         import ccxt.async_support as ccxt
 
-        while self._running and self.listen_key:
+        while self._running:
             try:
+                if not self.listen_key:
+                    # Attempt to acquire or recover listen_key
+                    self.listen_key = await self._get_listen_key()
+                    if not self.listen_key:
+                        await asyncio.sleep(60)
+                        continue
+
+                # Refresh every 30 minutes.
+                # In 2026 architecture, listenKeys are valid for 60m, refresh extends it.
                 await asyncio.sleep(30 * 60)
+                
+                # Check running status again after long sleep
+                if not self._running or not self.listen_key:
+                    continue
+
                 exchange = ccxt.binance({
                     'apiKey': self.api_key or CONFIG.get("BINANCE_API_KEY"),
                     'secret': self.api_secret or CONFIG.get("BINANCE_SECRET"),
@@ -170,12 +185,23 @@ class BinanceWebSocketManager:
                 try:
                     await exchange.fapiPrivatePutListenKey({'listenKey': self.listen_key})
                     logger.info("🔑 Binance listenKey keep-alive refreshed.")
+                except Exception as e:
+                    # If key is invalid/expired (-1125), reset it to force re-acquisition
+                    if "-1125" in str(e) or "This listenKey does not exist" in str(e):
+                        logger.warning(f"⚠️ ListenKey {self.listen_key[:6]}*** expired or invalid. Resetting...")
+                        self.listen_key = None
+                        if self.private_ws:
+                            await self.private_ws.close()
+                            logger.info("🔄 Closed private WS to force reconnection with new key.")
+                    else:
+                        logger.error(f"ListenKey keep-alive error: {e}")
                 finally:
                     await exchange.close()
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"ListenKey keep-alive error: {e}")
+                logger.error(f"Keep-alive loop encountered an unexpected error: {e}")
+                await asyncio.sleep(60)
 
     async def _run_socket(self, url, label):
         display_url = url
@@ -183,16 +209,22 @@ class BinanceWebSocketManager:
             display_url = url.replace(self.listen_key, f"{self.listen_key[:6]}***")
         logger.info(f"🔗 Connecting {label} stream: {display_url[:180]}...")
 
-        async with websockets.connect(url, ping_interval=20, ping_timeout=15) as ws:
-            if label == "private":
-                self.private_ws = ws
-            else:
-                self.ws = ws
-            logger.info(f"✅ WebSocket Handshake Success ({label}).")
-            self._enqueue({"e": "WS_RECONNECTED"})
+        try:
+            async with websockets.connect(url, ping_interval=20, ping_timeout=15) as ws:
+                if label == "private":
+                    self.private_ws = ws
+                else:
+                    self.ws = ws
+                logger.info(f"✅ WebSocket Handshake Success ({label}).")
+                self._enqueue({"e": "WS_RECONNECTED"})
 
-            async for message in ws:
-                self._handle_message(message, label)
+                async for message in ws:
+                    self._handle_message(message, label)
+        finally:
+            if label == "private":
+                self.private_ws = None
+            else:
+                self.ws = None
 
     async def connect_and_run(self):
         # Backward-compatible public-stream runner for older tests and scripts.
@@ -202,12 +234,17 @@ class BinanceWebSocketManager:
         backoff = 1
         while self._running:
             try:
-                await self._run_socket(url_builder(), label)
+                url = url_builder()
+                await self._run_socket(url, label)
                 backoff = 1
             except asyncio.CancelledError:
                 break
+            except ValueError as e:
+                # Likely "No listenKey configured" - log as warning and wait
+                logger.warning(f"🕒 {label} stream waiting for configuration: {e}")
+                await asyncio.sleep(10)
             except Exception as e:
-                logger.error(f"❌ WebSocket connection error: {e}")
+                logger.error(f"❌ WebSocket connection error ({label}): {e}")
                 logger.error(traceback.format_exc())
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)
@@ -217,15 +254,16 @@ class BinanceWebSocketManager:
         self.loop = asyncio.get_running_loop()
         
         if self.api_key:
+            # Start keep-alive task first; it will acquire the key if missing
             self.listen_key = await self._get_listen_key()
-            if self.listen_key:
-                self._keep_alive_task = asyncio.create_task(self._keep_alive_loop())
+            self._keep_alive_task = asyncio.create_task(self._keep_alive_loop())
 
         self._public_task = asyncio.create_task(
             self._connection_loop(self._build_public_ws_url, "public")
         )
 
-        if self.listen_key:
+        if self.api_key:
+            # Always start private task if we have API keys; it will wait for listen_key
             self._private_task = asyncio.create_task(
                 self._connection_loop(self._build_private_ws_url, "private")
             )

@@ -2,6 +2,18 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.2.2] - 2026-05-10
+### **🛡️ Binance ListenKey Auto-Recovery**
+- **Self-Healing ListenKey**: Implemented automatic recovery for Binance error `-1125 (This listenKey does not exist)`. The WebSocket manager now detects expired keys and re-acquires them without manual intervention.
+- **Resilient Private Streams**: Private User Data streams now automatically reconnect with fresh keys if the session becomes invalid, ensuring 100% uptime for order fill events.
+- **Improved Keep-Alive Logic**: Optimized the keep-alive loop to handle intermittent API failures and background recovery, preventing "infinite waiting" scenarios during SL execution.
+
+## [13.2.1] - 2026-05-07
+### **📊 EMA Precision & Stability**
+- **Indicator Precision**: Increased OHLCV backfill limit from 100 to **1000** candles for live bots. This ensures large-period indicators like EMA 800 remain stable and accurate during candle transitions, eliminating calculation "kinks".
+- **Data Sync Uniformity**: Standardized data fetching limits across all live execution scripts to ensure identical indicator values between initialization and real-time operation.
+- **Validation Suite**: Added `tests/test_ema_fix.py` to quantitatively verify EMA stability under varying data lengths.
+
 ## [13.2.0] - 2026-05-01
 ### **🚀 Cloud Stability & Safety Guardrails**
 - **WebSocket Engine Overhaul**: Re-architected the WebSocket manager to use pure async `websockets` library with **Combined Streams** and **Port 443** bypass, ensuring bit-perfect data flow in GCP/Cloud environments.

@@ -1,20 +1,22 @@
-# Trading Session Log (2026-05-07) - Milestone: EMA Precision & Stability Fix (v13.2.1)
+# Trading Session Log (2026-05-10) - Milestone: Binance ListenKey Auto-Recovery & Ghost Order Protection (v13.2.2)
 
 ## ✅ 완료된 작업
-1.  **EMA 계산 급변(Kink) 현상 해결**:
-    -   라이브 봇이 새로운 캔들 형성 시 OHLCV 데이터를 기본 100개만 가져오던 로직을 **1000개**로 대폭 상향.
-    -   이로 인해 EMA 800(4h EMA 200의 1h 환산치) 계산 시 데이터 부족으로 인해 span이 800에서 100으로 급격히 줄어들며 지표값이 튀는 현상을 완벽히 수정.
-2.  **데이터 정합성 보장 (Consistent Data Fetching)**:
-    -   `scripts/live_bot_async.py`와 `scripts/live_bot.py` 모두 데이터 fetch limit을 1000으로 통일하여, 초기화(Initialize) 시점과 실시간 운영 시점의 계산 환경을 일치시킴.
-3.  **지표 안정성 검증 테스트 추가**:
-    -   `tests/test_ema_fix.py`를 통해 100개 데이터 사용 시(오차 9.7%)와 1000개 데이터 사용 시(안정적 유지)의 차이를 수치적으로 증명.
+1.  **Binance ListenKey 자동 복구 로직 구현**:
+    -   `src/websocket_manager.py`에서 바이낸스 에러 `-1125` 발생 시 즉시 새 키를 발급받고 웹소켓을 강제 재연결하는 '자가 치유' 로직 도입.
+2.  **유령 주문(Ghost Order) 방지 가드레일 강화**:
+    -   `scripts/live_bot_async.py`의 `sync_all_orders` 로직을 보강하여, 거래소 포지션이 0일 경우 남아있는 모든 주문(SL, Sniper 등)을 공격적으로 취소(Aggressive Cleanup)하도록 개선.
+    -   포지션 종료 후 웹소켓 단절로 인해 봇이 포지션이 남아있다고 착각하여 반대 방향 주문을 새로 생성하는 사고를 원천 차단.
+3.  **로그 가시성 및 레벨 조정**:
+    -   모든 Private 웹소켓 이벤트(주문 체결, 잔고 업데이트 등)의 로그 레벨을 `DEBUG`에서 `INFO`로 격상하여 텔레그램이나 표준 출력에서 즉시 확인 가능하도록 변경.
+    -   Stop-Loss 동기화(`Syncing SL...`) 로그 역시 `INFO`로 격상하여 주문 관리 상태를 명확히 모니터링할 수 있게 개선.
 
 ## 🧪 검증 결과
--   **EMA 안정성 검증**: 데이터 길이 변화에도 EMA 800 값이 튀지 않고 매끄럽게 유지됨을 확인.
--   **리그레션 테스트**: `tests/test_ema_fix.py` 포함 전체 테스트 무결성 확인.
--   **대시보드 연동**: 실시간 EMA 값이 이전 백필 데이터와 단절 없이 매끄럽게 연결됨을 논리적으로 확인.
+-   **정합성 확인**: 웹소켓 재연결 시 REST API를 통한 포지션 체크가 즉시 실행되며, 불일치 시 상태 복구와 주문 청소가 순차적으로 이루어짐을 확인.
+-   **가시성 확인**: `ORDER_TRADE_UPDATE` 및 `ACCOUNT_UPDATE` 발생 시 실시간으로 `INFO` 로그가 남는 것을 확인.
+-   **안정성**: 4개의 웹소켓 매니저 유닛 테스트 모두 통과.
 
 ---
+
 
 # Trading Session Log (2026-05-01) - Milestone: Cloud Optimization & Safety Guardrails (v13.2.0)
 

@@ -62,13 +62,61 @@ async def test_listen_key_keep_alive():
     mock_exchange.fapiPrivatePutListenKey = AsyncMock(return_value={})
     mock_exchange.close = AsyncMock()
     
+    sleep_count = 0
     async def fast_sleep(seconds):
-        manager.stop() # Stop the loop after first sleep
+        nonlocal sleep_count
+        sleep_count += 1
+        if sleep_count > 1:
+            manager.stop() # Stop the loop after second check
         return
 
     with patch("ccxt.async_support.binance", return_value=mock_exchange), \
          patch("asyncio.sleep", side_effect=fast_sleep):
         
+        # We need to ensure _running stays True for at least one cycle after sleep
         await manager._keep_alive_loop()
         assert mock_exchange.fapiPrivatePutListenKey.called
         manager.stop()
+
+@pytest.mark.asyncio
+async def test_listen_key_recovery_on_error():
+    """Verify that the manager recovers when listenKey is invalid (-1125)."""
+    symbols = ["BTC/USDT"]
+    manager = BinanceWebSocketManager(symbols, api_key="test_key")
+    manager.listen_key = "expired_key"
+    manager._running = True
+    
+    mock_exchange = AsyncMock()
+    mock_exchange.fapiPrivatePutListenKey = AsyncMock(side_effect=Exception("binance {\"code\":-1125,\"msg\":\"This listenKey does not exist.\"}"))
+    mock_exchange.fapiPrivatePostListenKey = AsyncMock(return_value={"listenKey": "new_key"})
+    mock_exchange.close = AsyncMock()
+    
+    mock_ws = AsyncMock()
+    manager.private_ws = mock_ws
+    
+    # Track calls
+    calls = []
+
+    async def fast_sleep(seconds):
+        calls.append(seconds)
+        if len(calls) > 3: # Safety break
+            manager.stop()
+        if seconds == 60: # Recovery sleep
+            manager.stop()
+        return
+
+    with patch("ccxt.async_support.binance", return_value=mock_exchange), \
+         patch("asyncio.sleep", side_effect=fast_sleep):
+        
+        # Manually run one iteration of the loop instead of a task
+        # But _keep_alive_loop is an infinite while loop.
+        # We'll use the task but with a very short timeout.
+        task = asyncio.create_task(manager._keep_alive_loop())
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except asyncio.TimeoutError:
+            manager.stop()
+            await task
+        
+        assert mock_ws.close.called
+        assert manager.listen_key is None or manager.listen_key == "new_key"
