@@ -28,10 +28,14 @@ def calculate_adx(df, period=14):
     df = df.copy()
     
     # 1. DM (Directional Movement) 계산
+    # UpMove = H_curr - H_prev
+    # DownMove = L_prev - L_curr
     df['up_move'] = df['high'].diff()
-    df['down_move'] = df['low'].diff().abs()
+    df['down_move'] = df['low'].shift(1) - df['low']
     
+    # plus_dm: UpMove > DownMove 이고 UpMove > 0 이면 UpMove, 아니면 0
     df['plus_dm'] = np.where((df['up_move'] > df['down_move']) & (df['up_move'] > 0), df['up_move'], 0)
+    # minus_dm: DownMove > UpMove 이고 DownMove > 0 이면 DownMove, 아니면 0
     df['minus_dm'] = np.where((df['down_move'] > df['up_move']) & (df['down_move'] > 0), df['down_move'], 0)
     
     # 2. TR (True Range) 계산
@@ -41,7 +45,7 @@ def calculate_adx(df, period=14):
     df['tr'] = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
     
     # 3. Smoothed TR, +DM, -DM 계산 (Wilder's Smoothing equivalent to EMA with alpha=1/period)
-    # adjust=False와 span=(2*period - 1)을 사용하면 Wilder's Smoothing과 동일한 효과를 냅니다.
+    # adjust=False와 span=(2*period - 1)을 사용하면 Wilder's Smoothing(alpha=1/period)과 동일한 효과를 냅니다.
     span_val = 2 * period - 1
     smoothed_tr = df['tr'].ewm(span=span_val, adjust=False).mean()
     smoothed_plus_dm = df['plus_dm'].ewm(span=span_val, adjust=False).mean()

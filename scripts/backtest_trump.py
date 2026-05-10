@@ -22,10 +22,11 @@ def run_trump_best_backtest():
     # 1. 스크린샷 설정과 동일하게 수정
     symbol = "TRUMP/USDT"
     best_params = {
-        "VOL_MULTIPLIER": 2.5,
+        "VOL_MULTIPLIER": 2.2,
         "TRAILING_ATR_MULT": 4.5,
-        "RISK_PER_TRADE": 0.02,
-        "EMA_TREND_PERIOD": 100
+        "RISK_PER_TRADE": 0.08,
+        "EMA_TREND_PERIOD": 100,
+        "ADX_FILTER_LEVEL":20
     }
     
     # 설정 업데이트
@@ -49,10 +50,12 @@ def run_trump_best_backtest():
     df_sig = pd.read_csv(f_sig)
     df_trend = pd.read_csv(f_trend)
     df_check = pd.read_csv(f_check)
+    df_check['timestamp'] = pd.to_datetime(df_check['timestamp'])
     
     # 3. 전략 실행
     strategy = TrendCrusherV2(config=test_config)
-    trades, equity_curve = strategy.run_precision_backtest(df_sig, df_trend, df_check)
+    # V2 엔진에서는 run_streaming_backtest를 사용하여 1분봉 데이터로 정밀 시뮬레이션을 수행합니다.
+    trades, equity_curve, _ = strategy.run_streaming_backtest(df_check)
     
     if not trades:
         print("No trades executed.")

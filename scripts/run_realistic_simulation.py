@@ -86,6 +86,7 @@ async def main():
         'atr_trail_mult': 4.5,
         'ema_period': 100,
         'risk_pct': 0.08,
+        'adx_threshold': 20,
         'use_adaptive': True,
         'adaptive_steps': [
             {"pnl_pct": 5.0, "tighten_ratio": 0.5},
@@ -93,7 +94,7 @@ async def main():
         ]
     }
 
-    targets = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "TRUMP/USDT"]
+    targets = ["XAU/USDT", "ETH/USDT", "SOL/USDT", "TRUMP/USDT"]
     
     results = []
     for symbol in targets:

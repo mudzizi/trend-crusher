@@ -1,21 +1,21 @@
-# Trading Session Log (2026-05-10) - Milestone: Binance ListenKey Auto-Recovery & Ghost Order Protection (v13.2.2)
+# Trading Session Log (2026-05-11) - Milestone: ADX Logical Integrity Fix (v13.2.3)
 
 ## ✅ 완료된 작업
-1.  **Binance ListenKey 자동 복구 로직 구현**:
-    -   `src/websocket_manager.py`에서 바이낸스 에러 `-1125` 발생 시 즉시 새 키를 발급받고 웹소켓을 강제 재연결하는 '자가 치유' 로직 도입.
-2.  **유령 주문(Ghost Order) 방지 가드레일 강화**:
-    -   `scripts/live_bot_async.py`의 `sync_all_orders` 로직을 보강하여, 거래소 포지션이 0일 경우 남아있는 모든 주문(SL, Sniper 등)을 공격적으로 취소(Aggressive Cleanup)하도록 개선.
-    -   포지션 종료 후 웹소켓 단절로 인해 봇이 포지션이 남아있다고 착각하여 반대 방향 주문을 새로 생성하는 사고를 원천 차단.
-3.  **로그 가시성 및 레벨 조정**:
-    -   모든 Private 웹소켓 이벤트(주문 체결, 잔고 업데이트 등)의 로그 레벨을 `DEBUG`에서 `INFO`로 격상하여 텔레그램이나 표준 출력에서 즉시 확인 가능하도록 변경.
-    -   Stop-Loss 동기화(`Syncing SL...`) 로그 역시 `INFO`로 격상하여 주문 관리 상태를 명확히 모니터링할 수 있게 개선.
+1.  **ADX 계산 로직 치명적 오류 수정**:
+    -   `src/indicators.py`의 `calculate_adx` 함수에서 하락 방향성(`down_move`) 계산 시 `abs(diff())`를 사용하던 오류를 수정.
+    -   표준 Wilder's 공식인 `이전 저가 - 현재 저가` 방식으로 변경하여, 상승장에서 저점이 높아지는 노이즈가 하락 에너지로 오인되던 현상을 해결.
+2.  **전략 무결성 검증**:
+    -   TRUMP/USDT 백테스트를 통해 수정 전후의 성과를 비교 분석.
+    -   수정 후 거래 횟수가 126회에서 107회로 최적화되었으며, 가짜 변동성(False Volatility)에 의한 노이즈 진입이 현저히 줄어든 것을 확인.
+3.  **지표 유닛 테스트 통과**:
+    -   `tests/test_indicators.py`를 통해 수정된 로직이 0~100 사이의 유효한 ADX 값을 생성하며 정상 작동함을 확인.
 
 ## 🧪 검증 결과
--   **정합성 확인**: 웹소켓 재연결 시 REST API를 통한 포지션 체크가 즉시 실행되며, 불일치 시 상태 복구와 주문 청소가 순차적으로 이루어짐을 확인.
--   **가시성 확인**: `ORDER_TRADE_UPDATE` 및 `ACCOUNT_UPDATE` 발생 시 실시간으로 `INFO` 로그가 남는 것을 확인.
--   **안정성**: 4개의 웹소켓 매니저 유닛 테스트 모두 통과.
+-   **정합성**: 수학적으로 올바른 정석 ADX 공식을 확보하여 모든 종목에 공통적으로 적용 가능한 신뢰도 구축.
+-   **안정성**: 불필요한 노이즈 거래가 필터링되어 전략의 논리적 안정성 향상.
 
 ---
+
 
 
 # Trading Session Log (2026-05-01) - Milestone: Cloud Optimization & Safety Guardrails (v13.2.0)

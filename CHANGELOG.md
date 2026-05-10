@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.2.3] - 2026-05-11
+### **📊 ADX Logical Integrity**
+- **Fixed ADX Calculation**: Corrected a critical flaw in the DMI calculation where `down_move` was incorrectly calculated using `abs()`. This now correctly uses the standard Wilder's formula (`low_prev - low_curr`), ensuring upward movements in lows are not counted as downward pressure.
+- **Improved Filter Accuracy**: The ADX filter now provides a more accurate representation of trend strength by eliminating false volatility noise from higher lows during uptrends.
+
 ## [13.2.2] - 2026-05-10
 ### **🛡️ Binance ListenKey Auto-Recovery**
 - **Self-Healing ListenKey**: Implemented automatic recovery for Binance error `-1125 (This listenKey does not exist)`. The WebSocket manager now detects expired keys and re-acquires them without manual intervention.
