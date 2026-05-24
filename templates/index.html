@@ -83,20 +83,30 @@
                         <div class="mb-2">
                             <div class="d-flex justify-content-between small mb-1">
                                 <span>ADX Strength (>{{ bot.adx_limit }})</span>
-                                <span><b>{{ bot.adx_value }}</b> / {{ bot.adx_ratio }}%</span>
+                                <span><b>{{ bot.adx_value }}</b></span>
                             </div>
                             <div class="progress">
-                                <div class="progress-bar-fill {% if bot.adx_ratio >= 100 %}bg-success{% else %}bg-info{% endif %}" style="width: {{ bot.adx_ratio }}%"></div>
+                                <div class="progress-bar-fill {% if bot.adx_value >= bot.adx_limit %}bg-success{% else %}bg-info{% endif %}" style="width: {{ (bot.adx_value/bot.adx_limit)*100 if bot.adx_limit > 0 else 0 }}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Chaos Index (>20)</span>
+                                <span><b>{{ bot.chaos_value }}</b></span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar-fill {% if bot.chaos_value >= 20 %}bg-warning{% else %}bg-secondary{% endif %}" style="width: {{ (bot.chaos_value/40)*100 }}%"></div>
                             </div>
                         </div>
 
                         <div class="mb-3">
                             <div class="d-flex justify-content-between small mb-1">
-                                <span>Breakout Proximity</span>
-                                <span>{{ bot.prox_ratio }}%</span>
+                                <span>Choppiness Index (<61)</span>
+                                <span class="{% if bot.chop_value > 61.8 %}text-danger{% else %}text-up{% endif %}"><b>{{ bot.chop_value }}</b></span>
                             </div>
                             <div class="progress">
-                                <div class="progress-bar-fill {% if bot.prox_ratio >= 100 %}bg-warning{% else %}bg-primary{% endif %}" style="width: {{ bot.prox_ratio }}%"></div>
+                                <div class="progress-bar-fill {% if bot.chop_value > 61.8 %}bg-danger{% else %}bg-success{% endif %}" style="width: {{ bot.chop_value }}%"></div>
                             </div>
                         </div>
 
@@ -106,10 +116,8 @@
                         </div>
 
                         <div class="d-flex justify-content-between small pt-2 border-top border-secondary">
-                            <span>Trend Filter</span>
-                            <span class="{% if bot.trend_ok %}text-up fw-bold{% else %}text-secondary{% endif %}">
-                                {{ "✅ ALIGNED" if bot.trend_ok else "❌ BLOCKED" }}
-                            </span>
+                            <span>Squeeze: <b class="{% if bot.squeeze == 'YES' %}text-warning{% else %}text-secondary{% endif %}">{{ bot.squeeze }}</b></span>
+                            <span>Slope: <b class="{% if bot.slope > 0 %}text-up{% else %}text-down{% endif %}">{{ bot.slope }}</b></span>
                         </div>
                     </div>
                 </div>
@@ -295,6 +303,24 @@
                             data: data.adx,
                             borderColor: '#38bdf8', // Blue
                             borderWidth: 1.5,
+                            pointRadius: 0,
+                            yAxisID: 'y_adx'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Chaos',
+                            data: data.chaos,
+                            borderColor: '#f472b6', // Pink
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            yAxisID: 'y_adx'
+                        },
+                        {
+                            type: 'line',
+                            label: 'Choppiness',
+                            data: data.chop,
+                            borderColor: '#a78bfa', // Purple
+                            borderWidth: 1,
                             pointRadius: 0,
                             yAxisID: 'y_adx'
                         },

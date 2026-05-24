@@ -387,7 +387,11 @@ class SymbolBotAsync:
                                 float(last_row['upper']),
                                 float(last_row['lower']),
                                 float(last_row['volume']),
-                                float(last_row['adx'])
+                                float(last_row['adx']),
+                                float(last_row.get('chaos', 0)),
+                                float(last_row.get('squeeze', 0)),
+                                float(last_row.get('ema_slope', 0)),
+                                float(last_row.get('chop', 0))
                             )
                             # Reduced log frequency
                             self.logger.debug(f"💾 Hourly snapshot logged for {self.symbol}")
@@ -479,9 +483,19 @@ class SymbolBotAsync:
                 prox_limit = lower * prox_pct
                 prox_ratio = max(0, 1.0 - (dist / prox_limit)) if prox_limit > 0 else 0
             if (last_price >= upper and trend_ok) or (last_price <= lower and trend_ok): prox_ratio = 1.0
+            
             score = (prox_ratio * 40) + (vol_ratio * 30) + (adx_ratio * 30)
             if not trend_ok: score *= 0.5
-            self.db.update_live_status(self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, float(row['adx']), float(ema))
+            
+            self.db.update_live_status(
+                self.symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, 
+                adx_value=float(row['adx']), 
+                ema_value=float(ema),
+                chaos_value=float(row.get('chaos', 0)),
+                squeeze_value=float(row.get('squeeze', 0)),
+                slope_value=float(row.get('ema_slope', 0)),
+                chop_value=float(row.get('chop', 0))
+            )
         except Exception as e: self.logger.error(f"Error recording live status: {e}")
 
     async def _on_fill_success(self, direction):

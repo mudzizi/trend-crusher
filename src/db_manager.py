@@ -80,14 +80,19 @@ class DBManager:
                     lower_column REAL,
                     adx_value REAL DEFAULT 0,
                     ema_value REAL DEFAULT 0,
+                    chaos_value REAL DEFAULT 0,
+                    squeeze_value REAL DEFAULT 0,
+                    slope_value REAL DEFAULT 0,
+                    chop_value REAL DEFAULT 0,
                     last_updated DATETIME DEFAULT (datetime('now','localtime'))
                 )
             """)
             
-            # Migration: Add ema_value if missing
-            try:
-                conn.execute("ALTER TABLE live_indicators ADD COLUMN ema_value REAL DEFAULT 0")
-            except: pass
+            # Migration: Add new columns if missing
+            for col in ['ema_value', 'chaos_value', 'squeeze_value', 'slope_value', 'chop_value']:
+                try:
+                    conn.execute(f"ALTER TABLE live_indicators ADD COLUMN {col} REAL DEFAULT 0")
+                except: pass
             
             # [NEW] Table for 1h Historical Data for Charting
             conn.execute("""
@@ -101,22 +106,31 @@ class DBManager:
                     donchian_lower REAL,
                     volume REAL,
                     adx REAL,
+                    chaos REAL DEFAULT 0,
+                    squeeze REAL DEFAULT 0,
+                    slope REAL DEFAULT 0,
+                    chop REAL DEFAULT 0,
                     UNIQUE(symbol, timestamp)
                 )
             """)
+            # Migration for history_1h
+            for col in ['chaos', 'squeeze', 'slope', 'chop']:
+                try:
+                    conn.execute(f"ALTER TABLE history_1h ADD COLUMN {col} REAL DEFAULT 0")
+                except: pass
             
             # Indexes for performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_live_indicators_symbol ON live_indicators(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_history_1h_symbol ON history_1h(symbol)")
 
-    def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx):
+    def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos=0, squeeze=0, slope=0, chop=0):
         """Logs 1h technical snapshot. timestamp can be explicit or None for 'now'."""
         ts = timestamp if timestamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self._get_connection() as conn:
             conn.execute("""
-                INSERT OR IGNORE INTO history_1h (symbol, timestamp, close, ema, donchian_upper, donchian_lower, volume, adx)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (symbol, ts, close, ema, d_upper, d_lower, vol, adx))
+                INSERT OR IGNORE INTO history_1h (symbol, timestamp, close, ema, donchian_upper, donchian_lower, volume, adx, chaos, squeeze, slope, chop)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (symbol, ts, close, ema, d_upper, d_lower, vol, adx, chaos, squeeze, slope, chop))
             
             # Cleanup old records (keep last 120 hours = 5 days)
             conn.execute("""
@@ -141,14 +155,17 @@ class DBManager:
             """
             return pd.read_sql_query(query, conn, params=(symbol, limit))
 
-    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, adx_value=0, ema_value=0):
+    def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, 
+                           adx_value=0, ema_value=0, chaos_value=0, squeeze_value=0, slope_value=0, chop_value=0):
         with self._get_connection() as conn:
             # Insert a new record for history instead of replacing
             conn.execute("""
                 INSERT INTO live_indicators 
-                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, adx_value, ema_value, last_updated)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
-            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, adx_value, ema_value))
+                (symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, signal_score, last_price, upper_band, lower_column, 
+                 adx_value, ema_value, chaos_value, squeeze_value, slope_value, chop_value, last_updated)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))
+            """, (symbol, vol_ratio, adx_ratio, prox_ratio, 1 if trend_ok else 0, score, last_price, upper, lower, 
+                  adx_value, ema_value, chaos_value, squeeze_value, slope_value, chop_value))
             
             # Optional: Cleanup old records (keep last 200 per symbol to prevent DB bloat)
             conn.execute("""

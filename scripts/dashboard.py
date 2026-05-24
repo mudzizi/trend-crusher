@@ -85,49 +85,48 @@ def index():
                     # Convert UTC to KST
                     hist_df['timestamp'] = pd.to_datetime(hist_df['timestamp']) + pd.Timedelta(hours=9)
                 
-                # --- [IMPROVEMENT] Append real-time point to the chart ---
                 prices = hist_df['close'].tolist()
                 ema_values = hist_df['ema'].tolist()
                 upper_bands = hist_df['donchian_upper'].tolist()
                 lower_bands = hist_df['donchian_lower'].tolist()
                 volumes = hist_df['volume'].tolist()
                 adx_values = hist_df['adx'].tolist()
+                chaos_values = hist_df['chaos'].tolist() if 'chaos' in hist_df.columns else [0]*len(prices)
+                chop_values = hist_df['chop'].tolist() if 'chop' in hist_df.columns else [0]*len(prices)
                 labels = [t.strftime('%H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
 
-                # Add the very latest live data as the last point
-                # row is from live_status_df which contains the latest live_indicators
+                # Add the very latest live data point
                 prices.append(row['last_price'])
                 
-                # [FIX] Do not use Donchian midpoint as EMA fallback. 
-                # If ema_value is missing, use None to avoid jumping the line.
-                ema_val = row.get('ema_value')
-                if ema_val is None or ema_val == 0:
-                    ema_val = ema_values[-1] if ema_values else row['last_price']
+                ema_val = row.get('ema_value') or (ema_values[-1] if ema_values else row['last_price'])
                 ema_values.append(ema_val)
                 
                 upper_bands.append(row['upper_band'])
                 lower_bands.append(row['lower_column'])
-                volumes.append(row['vol_ratio'] * (sum(volumes)/len(volumes) if volumes else 1.0)) # Scaled volume
-                adx_values.append(row['adx_value'] if 'adx_value' in row else 0)
+                volumes.append(row['vol_ratio'] * (sum(volumes)/len(volumes) if volumes else 1.0))
+                adx_values.append(row['adx_value'])
+                chaos_values.append(row.get('chaos_value', 0))
+                chop_values.append(row.get('chop_value', 0))
                 
-                # Current KST time label (HH:mm)
-                current_kst = datetime.now() # Server is already in KST based on user's 'date' output
+                current_kst = datetime.now()
                 labels.append(current_kst.strftime('%H:%M') + " (Now)")
 
                 live_monitors.append({
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
-                    "adx_ratio": round(row['adx_ratio'] * 100, 1),
-                    "adx_value": round(row['adx_value'], 1) if 'adx_value' in row else 0,
-                    "prox_ratio": round(row['prox_ratio'] * 100, 1),
+                    "adx_value": round(row['adx_value'], 1),
+                    "chaos_value": round(row.get('chaos_value', 0), 1),
+                    "chop_value": round(row.get('chop_value', 0), 1),
+                    "squeeze": "YES" if row.get('squeeze_value', 0) > 0 else "NO",
+                    "slope": round(row.get('slope_value', 0), 4),
                     "trend_ok": bool(row['trend_ok']),
                     "score": round(row['signal_score'], 1),
                     "price": row['last_price'],
                     "upper": row['upper_band'],
                     "lower": row['lower_column'],
                     "mode": "Sniper" if sym_settings.get("USE_SNIPER", CONFIG.get("USE_SNIPER")) else ("Retest" if sym_settings.get("USE_RETEST_MAKER", CONFIG.get("USE_RETEST_MAKER")) else "Market"),
-                    "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.0)),
-                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 25.0)),
+                    "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.2)),
+                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 20.0)),
                     "history": {
                         "prices": prices,
                         "ema": ema_values,
@@ -135,6 +134,8 @@ def index():
                         "lower": lower_bands,
                         "volume": volumes,
                         "adx": adx_values,
+                        "chaos": chaos_values,
+                        "chop": chop_values,
                         "labels": labels
                     }
                 })
