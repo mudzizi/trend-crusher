@@ -125,16 +125,20 @@ def test_tighten_ratio_logic_blackbox(base_config):
 
 def test_retest_maker_entry_and_fee(base_config):
     strategy = TrendCrusherV2(config=base_config)
-    
+
     # Case A: Market Entry (Taker)
     price = 100.0
-    sl_price = 90.0 # 100 - (5*2)
+    sl_price = 90.0 
+    # v13.3.0 applies 0.05% slippage on entry and 0.05% taker fee on exit
     strategy._open_position(1, price, sl_price, pd.Timestamp.now(), 0.02, is_maker=False)
     # Entry Price with Slippage (0.05%): 100.05
-    # Risk = 200, StopDist = 10.05, Qty = 19.9004975
-    # Fee = 100.05 * 19.9004975 * 0.0005 = 0.995522
-    # Cap = 10000 - 0.995522 = 9999.004478
-    assert strategy.capital == pytest.approx(9999.004478)
+    assert strategy.entry_price == 100.05
+    assert strategy.capital == 10000.0 
+
+    # Close at 110.0 (Taker)
+    strategy._close_position(110.0, pd.Timestamp.now(), is_maker=False)
+    # Final Cap = 10195.9199 (Accurate: Gross PnL 198.01 - Entry Fee 1.00 - Exit Fee 1.09)
+    assert strategy.capital == pytest.approx(10195.9199)
     assert strategy.trades[-1]['is_maker'] == False
     
     # Reset
@@ -143,8 +147,16 @@ def test_retest_maker_entry_and_fee(base_config):
     
     # Case B: Retest Maker Entry
     strategy._open_position(1, 100.0, 90.0, pd.Timestamp.now(), 0.02, is_maker=True)
-    # Fee = 100 * 20 * 0.0002 = 0.4
-    assert strategy.capital == pytest.approx(9999.6)
+    # In v13.3.0, fees are settled at close.
+    assert strategy.capital == 10000.0 
+    
+    strategy._close_position(110.0, pd.Timestamp.now(), is_maker=True)
+    # Qty = 200 / 10 = 20
+    # Gross PnL = (110 - 100) * 20 = 200
+    # Total Fee (Maker 0.02%): (100*20*0.0002) + (110*20*0.0002) = 0.4 + 0.44 = 0.84
+    # Net PnL = 200 - 0.84 = 199.16
+    # Final Cap = 10000 + 199.16 = 10199.16
+    assert strategy.capital == pytest.approx(10199.16)
     assert strategy.trades[-1]['is_maker'] == True
 
 def test_adx_filter_logic_check(base_config):

@@ -7,7 +7,7 @@ import signal
 import time
 from datetime import datetime, timedelta
 from src.config import CONFIG
-from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
+from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx, calculate_choppiness, calculate_chaos_index, calculate_squeeze_score
 from src.strategy import TrendCrusherV2
 from src.telegram_utils import TelegramNotifier
 from src.db_manager import DBManager
@@ -335,7 +335,17 @@ class SymbolBotAsync:
 
     def _update_indicators(self, is_live=False):
         if self.ohlcv_1h is not None and self.ohlcv_4h is not None:
-            self.df_indicators = self.engine.calculate_indicators(self.ohlcv_1h, self.ohlcv_4h, self.settings, is_live=is_live)
+            self.df_indicators = self.engine.calculate_indicators(
+                self.ohlcv_1h, self.ohlcv_4h, self.settings, is_live=is_live
+            )
+            
+            # Log V7.0 Status
+            if is_live:
+                last = self.df_indicators.iloc[-1]
+                self.logger.info(
+                    f"📊 Indicators: Price={self.last_price:.4f}, ADX={last['adx']:.1f}, "
+                    f"Chaos={last['chaos']:.1f}, Squeeze={'YES' if last['squeeze']>0 else 'NO'}"
+                )
 
     async def on_kline_update(self, tf, kline):
         async with self.lock:

@@ -9,19 +9,39 @@ def numba_check_entry(last_price, ema_h, upper, lower, atr, adx, avg_vol, volume
                       vol_mult, adx_threshold, initial_sl_atr, 
                       use_sniper, retest_maker, prox_threshold, is_ambushing=False,
                       fixed_sl_pct=0.0, adx_4h=0.0, adx_4h_threshold=20.0,
-                      chop=50.0, ema_slope=0.0, chaos=20.0, squeeze=0.0):
+                      chop=50.0, ema_slope=0.0, chaos=20.0, chaos_threshold=20.0, squeeze=0.0):
     # --- V7.0 Momentum Chaos Engine ---
     
-    # 1. Chaos Spike Filter (Based on 'Lucky Error')
-    if chaos < 15: return 0, 0.0, 0.0
+    # 1. Parameter Normalization (Hysteresis)
+    v_target = vol_mult * 0.8 if is_ambushing else vol_mult
+    a_target = adx_threshold * 0.8 if is_ambushing else adx_threshold
+    a4_target = adx_4h_threshold * 0.8 if is_ambushing else adx_4h_threshold
+    p_target = prox_threshold * 2.0 if is_ambushing else prox_threshold
 
-    # 2. Squeeze Breakout 
-    v_mult_final = vol_mult
-    if squeeze > 0: # Recently squeezed
-        v_mult_final *= 0.7 
+    # 2. Dynamic Barrier (Bypassable if chaos_threshold is 0)
+    v_mult_final = v_target
+    a_target_final = a_target
+    a4_target_final = a4_target
+    
+    if chaos_threshold > 0:
+        if chaos < chaos_threshold: return 0, 0.0, 0.0
         
+        is_long_cand = last_price > ema_h
+        if is_long_cand and ema_slope <= 0: return 0, 0.0, 0.0
+        if not is_long_cand and ema_slope >= 0: return 0, 0.0, 0.0
+
+        if chop > 61.8: v_mult_final *= 1.8
+        elif chop < 38.2: v_mult_final *= 0.8
+        if squeeze > 0: v_mult_final *= 0.7 
+        
+        # Asymmetric Bias for Shorts: Fear is faster
+        if not is_long_cand:
+            v_mult_final *= 0.6
+            a_target_final *= 0.7
+            a4_target_final *= 0.7
+
     # 3. Standard & MTF Filters
-    if volume <= (avg_vol * v_mult_final) or adx_4h < adx_4h_threshold:
+    if volume <= (avg_vol * v_mult_final) or adx <= a_target_final or adx_4h < a4_target_final:
         return 0, 0.0, 0.0
 
     is_long = last_price > ema_h
@@ -38,10 +58,10 @@ def numba_check_entry(last_price, ema_h, upper, lower, atr, adx, avg_vol, volume
         dist_top = (upper - last_price) / (last_price + 1e-10) if last_price < upper else -1.0
         dist_bottom = (last_price - lower) / (last_price + 1e-10) if last_price > lower else -1.0
 
-        if is_long and 0.0003 <= dist_top <= (prox_threshold + 1e-6):
+        if is_long and 0.0003 <= dist_top <= (p_target + 1e-6):
             sl = upper * (1 - fixed_sl_pct) if fixed_sl_pct > 0 else upper - (atr * initial_sl_atr)
             return 2, upper, sl
-        elif not is_long and 0.0003 <= dist_bottom <= (prox_threshold + 1e-6):
+        elif not is_long and 0.0003 <= dist_bottom <= (p_target + 1e-6):
             sl = lower * (1 + fixed_sl_pct) if fixed_sl_pct > 0 else lower + (atr * initial_sl_atr)
             return 2, lower, sl
         
@@ -155,12 +175,15 @@ class TrendCrusherV2:
         self.position, self.entry_price, self.quantity = 0, 0, 0
         self.max_price_seen, self.min_price_seen = 0, 0
         self.sl_price = 0
+        self.entry_fee = 0 # To store fee for closing settlement
         self.last_close_time = pd.Timestamp(0)
         self.trades, self.equity_curve = [], [self.capital]
 
     def calculate_indicators(self, df_sig, df_trend, config, is_live=False):
         df = df_sig.copy()
-        if 'timestamp' not in df.columns: df = df.reset_index()
+        has_ts = 'timestamp' in df.columns
+        if not has_ts: 
+            df['timestamp'] = pd.date_range(start='2024-01-01', periods=len(df), freq='h')
             
         df['upper'], df['lower'] = calculate_donchian(df, period=config.get("DONCHIAN_PERIOD", 20))
         df['atr'] = calculate_atr(df, period=config.get("ATR_PERIOD", 14))
@@ -175,11 +198,19 @@ class TrendCrusherV2:
         df['ema_slope'] = df['ema_h'].diff(3)
         
         df_4h = df_trend.copy()
+        if 'timestamp' not in df_4h.columns:
+            df_4h['timestamp'] = pd.date_range(start='2024-01-01', periods=len(df_4h), freq='4h')
+            
         df_4h['adx_4h'] = calculate_adx(df_4h, period=config.get("ADX_PERIOD", 14))
         df = df.merge(df_4h[['timestamp', 'adx_4h']], on='timestamp', how='left').ffill().fillna(0.0)
         
-        if 'timestamp' in df.columns: df = df.set_index('timestamp')
+        if has_ts: df = df.set_index('timestamp')
         return df
+
+    def calculate_position_size(self, price, stop_loss_price, risk_pct):
+        risk_amt = self.capital * risk_pct
+        stop_dist = abs(price - stop_loss_price)
+        return risk_amt / stop_dist if stop_dist > 0 else 0
 
     def check_entry_signal(self, row, last_price, use_sniper=False, retest_maker=False, config=None, is_ambushing=False):
         c = config if config else self.c
@@ -189,7 +220,7 @@ class TrendCrusherV2:
             use_sniper, retest_maker, c.get("SNIPER_PROXIMITY_PCT", 0.005), is_ambushing,
             fixed_sl_pct=c.get("INITIAL_SL_PCT", 0.0), adx_4h=row.get('adx_4h', 0.0), adx_4h_threshold=c.get("ADX_4H_THRESHOLD", 20.0),
             chop=row.get('chop', 50.0), ema_slope=row.get('ema_slope', 0.0),
-            chaos=row.get('chaos', 20.0), squeeze=row.get('squeeze', 0.0)
+            chaos=row.get('chaos', 20.0), chaos_threshold=c.get("CHAOS_THRESHOLD", 20.0), squeeze=row.get('squeeze', 0.0)
         )
         sig_map = {0: None, 1: 'MARKET', 2: 'SNIPER', 3: 'RETEST'}
         return sig_map[sig_idx], target_p, sl_p
@@ -216,15 +247,15 @@ class TrendCrusherV2:
             'adx_threshold': 'ADX_FILTER_LEVEL', 'donchian_period': 'DONCHIAN_PERIOD',
             'use_adaptive': 'USE_ADAPTIVE_TRAIL', 'adaptive_steps': 'ADAPTIVE_TRAIL_STEPS',
             'initial_sl_pct': 'INITIAL_SL_PCT', 'be_guard_threshold': 'BE_GUARD_THRESHOLD',
-            'adx_4h_threshold': 'ADX_4H_THRESHOLD'
+            'adx_4h_threshold': 'ADX_4H_THRESHOLD', 'chaos_threshold': 'CHAOS_THRESHOLD'
         }
         for k, v in kwargs.items(): config[mapping.get(k, k)] = v
 
         if 'pre_calculated_ind' in kwargs:
             df_1h_ind = kwargs['pre_calculated_ind']
         else:
-            df_1h_base = get_all_base_bars(df_1m, config["SIGNAL_TIMEFRAME"], include_incomplete=True)
-            df_4h_base = get_all_base_bars(df_1m, config["TREND_TIMEFRAME"], include_incomplete=True)
+            df_1h_base = get_all_base_bars(df_1m, config.get("SIGNAL_TIMEFRAME", "1h"), include_incomplete=True)
+            df_4h_base = get_all_base_bars(df_1m, config.get("TREND_TIMEFRAME", "4h"), include_incomplete=True)
             df_1h_ind = self.calculate_indicators(df_1h_base, df_4h_base, config)
 
         if not isinstance(df_1h_ind.index, pd.DatetimeIndex):
@@ -251,9 +282,9 @@ class TrendCrusherV2:
         for j, s in enumerate(steps):
             adaptive_steps_arr[j, 0], adaptive_steps_arr[j, 1] = s['pnl_pct'], s.get('tighten_ratio', 1.0)
 
-        vol_mult, adx_threshold, initial_sl_atr, fixed_sl_pct, atr_trail_mult, prox_threshold, adx_4h_threshold, be_guard_threshold = \
+        vol_mult, adx_threshold, initial_sl_atr, fixed_sl_pct, atr_trail_mult, prox_threshold, adx_4h_threshold, be_guard_threshold, chaos_threshold = \
             config.get("VOL_MULTIPLIER", 2.0), config.get("ADX_FILTER_LEVEL", 25.0), config.get("INITIAL_SL_ATR", 2.0), config.get("INITIAL_SL_PCT", 0.0), \
-            config.get("TRAILING_ATR_MULT", 3.0), config.get("SNIPER_PROXIMITY_PCT", 0.005), config.get("ADX_4H_THRESHOLD", 20.0), config.get("BE_GUARD_THRESHOLD", 0.0)
+            config.get("TRAILING_ATR_MULT", 3.0), config.get("SNIPER_PROX_PCT", 0.005), config["ADX_4H_THRESHOLD"], config["BE_GUARD_THRESHOLD"], config.get("CHAOS_THRESHOLD", 20.0)
         
         use_sniper, retest_maker, risk_pct, use_adaptive = \
             config.get("USE_SNIPER", True), config.get("USE_RETEST_MAKER", False), config.get("RISK_PER_TRADE", 0.02), config.get("USE_ADAPTIVE_TRAIL", False)
@@ -281,7 +312,7 @@ class TrendCrusherV2:
             if self.position == 0 and pd.Timestamp(m_times[i]) > self.last_close_time:
                 curr_bar_vol = np.sum(m_vols[i - (i % 60) : i+1])
                 sig_type, target_p, sl_p = numba_check_entry(last_p, r_ema_h, r_upper, r_lower, r_atr, r_adx, r_avg_vol, curr_bar_vol,
-                    vol_mult, adx_threshold, initial_sl_atr, use_sniper, retest_maker, prox_threshold, False, fixed_sl_pct, r_adx_4h, adx_4h_threshold, r_chop, r_slope, r_chaos, r_squeeze)
+                    vol_mult, adx_threshold, initial_sl_atr, use_sniper, retest_maker, prox_threshold, False, fixed_sl_pct, r_adx_4h, adx_4h_threshold, r_chop, r_slope, r_chaos, chaos_threshold, r_squeeze)
                 
                 if sig_type == 2 and ((target_p > r_ema_h and m_highs[i] >= target_p) or (target_p < r_ema_h and m_lows[i] <= target_p)):
                     self._open_position((1 if target_p > r_ema_h else -1), target_p, sl_p, pd.Timestamp(m_times[i]), risk_pct, True)
@@ -292,15 +323,37 @@ class TrendCrusherV2:
             i += 1
         return self.trades, self.equity_curve, df_1h_ind
 
-    def _open_position(self, side, price, sl, timestamp, risk_pct, is_sniper=False):
-        self.position, self.entry_price, self.sl_price = side, price, sl
-        self.max_price_seen, self.min_price_seen = price, price
-        self.quantity = (self.capital * risk_pct) / abs(price - sl) if abs(price - sl) > 0 else 0
-        self.trades.append({'time': timestamp, 'side': ('LONG' if side==1 else 'SHORT'), 'type': 'OPEN', 'price': price, 'is_sniper': is_sniper})
+    def _open_position(self, side, price, sl, timestamp, risk_pct, is_sniper=False, is_maker=False):
+        entry_price = price
+        if not is_maker:
+            slippage = entry_price * 0.0005 
+            entry_price = entry_price + slippage if side == 1 else entry_price - slippage
 
-    def _close_position(self, price, timestamp):
+        self.position, self.entry_price, self.sl_price = side, entry_price, sl
+        self.max_price_seen, self.min_price_seen = entry_price, entry_price
+        self.quantity = self.calculate_position_size(entry_price, sl, risk_pct)
+        
+        # Calculate and store entry fee
+        fee_rate = 0.0002 if is_maker else 0.0005
+        self.entry_fee = entry_price * self.quantity * fee_rate
+
+        self.trades.append({
+            'time': timestamp, 'side': ('LONG' if side==1 else 'SHORT'), 
+            'type': 'OPEN', 'price': entry_price, 'is_sniper': is_sniper, 'is_maker': is_maker
+        })
+
+    def _close_position(self, price, timestamp, is_maker=False):
+        fee_rate = 0.0002 if is_maker else 0.0005
+        exit_fee = price * self.quantity * fee_rate
+        
         pnl = (price - self.entry_price) * self.quantity * self.position
-        self.capital += pnl
-        self.trades.append({'time': timestamp, 'side': ('LONG' if self.position==1 else 'SHORT'), 'type': 'CLOSE', 'price': price, 'pnl': pnl})
-        self.position, self.entry_price, self.quantity, self.sl_price = 0, 0, 0, 0
+        # Deduct BOTH entry and exit fees at the end
+        net_pnl = pnl - (self.entry_fee + exit_fee)
+        
+        self.capital += net_pnl
+        self.trades.append({
+            'time': timestamp, 'side': ('LONG' if self.position==1 else 'SHORT'), 
+            'type': 'CLOSE', 'price': price, 'pnl': net_pnl, 'is_maker': is_maker, 'pnl_usdt': net_pnl
+        })
+        self.position, self.entry_price, self.quantity, self.sl_price, self.entry_fee = 0, 0, 0, 0, 0
         self.last_close_time = timestamp
