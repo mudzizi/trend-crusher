@@ -1,4 +1,4 @@
-# 🚀 TrendCrusher V13.2.3: The Self-Healing Async Engine
+# 🚀 TrendCrusher V13.3.0: The Chaos & Squeeze Engine
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
 > TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V12.8.0 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.
@@ -97,6 +97,29 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 
 ---
 
+## 📊 시뮬레이션 및 최적화 (Simulation & Optimization)
+
+V13.3.0은 복잡한 실험 도구들을 단 두 개의 **통합 엔진**으로 단일화했습니다.
+
+### 1. 정밀 백테스터 (`scripts/backtest.py`)
+특정 종목에 대해 V7.0 엔진의 성능을 검증하고 시각화 리포트를 생성합니다.
+```bash
+# ETH/USDT 최근 1년 테스트 (Market 모드)
+python3 scripts/backtest.py --symbol ETH/USDT --days 365
+
+# TRUMP/USDT 최근 180일 테스트 (Sniper 모드)
+python3 scripts/backtest.py --symbol TRUMP/USDT --days 180 --mode sniper
+```
+
+### 2. 인공지능 최적화 도구 (`scripts/optimize.py`)
+Optuna(베이지안 최적화)를 사용하여 최적의 파라미터 조합을 자동으로 찾아냅니다.
+```bash
+# TRUMP/USDT 최적 파라미터 100회 탐색
+python3 scripts/optimize.py --symbol TRUMP/USDT --trials 100
+```
+
+---
+
 ## 📊 성능 벤치마크 (Performance)
 *가혹한 시장 조건(슬리피지 0.5%) 하에서의 1년 누적 백테스트 결과*
 
@@ -114,5 +137,5 @@ nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
 3.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
 
 ---
-**TrendCrusher V13.2.3 Development Team**
+**TrendCrusher V13.3.0 Development Team**
 *Technical Co-Founder by AI Agent*

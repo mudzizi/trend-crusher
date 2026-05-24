@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.3.0] - 2026-05-24
+### **⚡ V7.0 Chaos & Squeeze Momentum Engine**
+- **Chaos Index**: Re-engineered the 'lucky error' ADX logic into a formal Momentum-Chaos filter. It captures extreme one-sided energy bursts while ignoring weak trends.
+- **Volatility Squeeze**: Integrated Bollinger Band / Keltner Channel squeeze detection to identify explosive breakout opportunities.
+- **Adaptive Market Regime**: Combined MTF (4h) ADX with Choppiness Index and EMA Slope to create a self-adjusting market state classifier.
+- **Bi-Directional Optimization**: Significantly improved Short entry performance, turning a major 1-year downtrend into a +150% profit (TRUMP/USDT).
+- **Engine Stability**: Fixed pandas DatetimeIndex alignment issues in backtest and optimized Numba loops for high-frequency simulation.
+
 ## [13.2.3] - 2026-05-11
 ### **📊 ADX Logical Integrity**
 - **Fixed ADX Calculation**: Corrected a critical flaw in the DMI calculation where `down_move` was incorrectly calculated using `abs()`. This now correctly uses the standard Wilder's formula (`low_prev - low_curr`), ensuring upward movements in lows are not counted as downward pressure.

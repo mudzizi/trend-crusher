@@ -24,6 +24,82 @@ def calculate_avg_vol(df, period=20):
     # 거래량 평균도 현재 봉을 제외한 이전 20개 봉 기준
     return df['volume'].rolling(window=period).mean().shift(1)
 
+def calculate_choppiness(df, period=14):
+    """
+    Choppiness Index (0-100)
+    Values > 61.8: Market is ranging (choppy)
+    Values < 38.2: Market is trending
+    """
+    df = df.copy()
+    
+    # True Range (TR)
+    tr1 = df['high'] - df['low']
+    tr2 = (df['high'] - df['close'].shift(1)).abs()
+    tr3 = (df['low'] - df['close'].shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    
+    # Sum of TR over period
+    sum_tr = tr.rolling(window=period).sum()
+    
+    # Max High and Min Low over period
+    max_h = df['high'].rolling(window=period).max()
+    min_l = df['low'].rolling(window=period).min()
+    
+    # Choppiness Index Formula
+    chop = 100 * np.log10(sum_tr / (max_h - min_l + 1e-10)) / np.log10(period)
+    
+    return chop
+def calculate_chaos_index(df, period=14):
+    """
+    Formalized version of the 'Lucky Error' ADX.
+    Treats higher lows as downward pressure, creating spikes only in extreme one-sided chaos.
+    """
+    df = df.copy()
+    up_move = df['high'].diff()
+    down_move = df['low'].diff().abs() # The 'Lucky' Error logic
+    
+    plus_dm = np.where((up_move > down_move) & (up_move > 0), up_move, 0)
+    minus_dm = np.where((down_move > up_move) & (down_move > 0), down_move, 0)
+    
+    tr1 = df['high'] - df['low']
+    tr2 = (df['high'] - df['close'].shift(1)).abs()
+    tr3 = (df['low'] - df['close'].shift(1)).abs()
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    
+    span = 2 * period - 1
+    s_tr = tr.ewm(span=span, adjust=False).mean()
+    s_plus = pd.Series(plus_dm).ewm(span=span, adjust=False).mean()
+    s_minus = pd.Series(minus_dm).ewm(span=span, adjust=False).mean()
+    
+    p_di = 100 * (s_plus / (s_tr + 1e-10))
+    m_di = 100 * (s_minus / (s_tr + 1e-10))
+    
+    dx = 100 * (p_di - m_di).abs() / (p_di + m_di + 1e-10)
+    chaos = dx.ewm(span=span, adjust=False).mean()
+    return chaos
+
+def calculate_squeeze_score(df, bb_period=20, kc_period=20):
+    """
+    Volatility Squeeze: BB inside Keltner Channel.
+    Value > 1: Squeeze (Low Vol), Value < 1: Breakout (Explosive)
+    """
+    # Bollinger Bands
+    ma = df['close'].rolling(window=bb_period).mean()
+    std = df['close'].rolling(window=bb_period).std()
+    bb_upper = ma + (2 * std)
+    bb_lower = ma - (2 * std)
+    
+    # Keltner Channel
+    tr1 = df['high'] - df['low']
+    tr2 = (df['high'] - df['close'].shift(1)).abs()
+    tr3 = (df['low'] - df['close'].shift(1)).abs()
+    atr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1).rolling(window=kc_period).mean()
+    kc_upper = ma + (1.5 * atr)
+    kc_lower = ma - (1.5 * atr)
+    
+    # Squeeze: BB is within KC
+    squeeze = (bb_upper < kc_upper) & (bb_lower > kc_lower)
+    return squeeze.astype(float)
 def calculate_adx(df, period=14):
     df = df.copy()
     

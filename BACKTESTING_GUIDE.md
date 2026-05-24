@@ -1,74 +1,66 @@
-# 📊 TrendCrusher V11.9.4: The Ultimate Backtesting Guide
+# 📊 TrendCrusher V13.3.0: Unified Simulation Suite
 
-이 가이드는 TrendCrusher의 업계 최고 수준 정밀 백테스팅 엔진과 시뮬레이션 도구들의 목적, 차이점 및 결과 해석 방법을 상세히 설명합니다. v11.9.4은 **Look-ahead Bias(미래 참조 오류)**를 원천 차단한 실전형 엔진을 제공합니다.
-
----
-
-## 🚀 핵심 기술: 스트리밍 시뮬레이션 (Streaming Simulation)
-
-기존 백테스트의 가장 큰 약점은 1시간봉이 마감된 후의 지표를 사용하여 그 시간대 내부의 진입을 결정하는 '미래 참조'였습니다. TrendCrusher v11.9.4은 이를 혁신적으로 해결했습니다.
-
-### 1. 단일 진실 공급원 (Single Source of Truth)
-- **공통 엔진**: `src/strategy.py`의 `TrendCrusherV2`가 라이브 거래와 모든 백테스트의 유일한 판단 기준입니다.
-- **로직 완벽 일치**: `check_entry_signal`과 `check_exit_signal` 메서드가 실전 매매와 백테스트에서 100% 동일하게 실행됩니다.
-
-### 2. 제로 바이어스 (No Look-ahead Bias)
-- **분 단위 지표 재구성**: `run_streaming_backtest` 메서드는 1분봉 데이터를 스트리밍하듯 읽으며, 매 분마다 **'현재까지 진행된 미완성 1시간봉'**을 기반으로 지표를 계산합니다.
-- **현실적인 거래량 판단**: 1시간이 끝나기 전, 실제로 거래량이 터지는 찰나의 순간을 포착하여 진입 타이밍을 시뮬레이션합니다.
+TrendCrusher V13.3.0은 복잡하게 흩어져 있던 백테스트 및 최적화 도구들을 단 두 개의 **통합 엔진(Unified Engine)**으로 단일화했습니다. 모든 도구는 **V7.0 Chaos & Squeeze** 로직을 기본 탑재하고 있습니다.
 
 ---
 
-## 📂 스크립트 요약 (Simulation Suite)
+## 1. 통합 백테스터: `scripts/backtest.py`
 
-| 파일명 | 유형 | 주요 목적 | 엔진 모드 |
-| :--- | :--- | :--- | :--- |
-| `scripts/run_realistic_simulation.py` | **최고 정밀** | ** Look-ahead Bias 0%** 초정밀 스트리밍 시뮬레이션 | `Streaming` |
-| `backtest/precision_backtester.py` | 표준 | 인트라-바 검증을 포함한 빠른 정밀 백테스트 | `Precision` |
-| `scripts/mega_optimizer_v2.py` | 최적화 | 다중 종목에 대한 고속 파라미터 그리드 서치 | `Precision` |
-| `backtest/sniper_backtester.py` | 분석 | 지정가 매복(Sniper)의 수수료 절감 효과 분석 | `Precision` |
+단일 종목 혹은 다수 종목에 대해 고정된 파라미터로 정밀 시뮬레이션을 수행하고 시각화 리포트를 생성합니다.
 
----
+### 🚀 주요 기능
+- **V7.0 엔진**: Chaos Index, Squeeze Score, MTF 필터 기본 적용.
+- **자동 데이터 동기화**: 시작 전 바이낸스에서 최신 데이터를 자동으로 가져옵니다.
+- **시각화 리포트**: `reports/` 폴더에 차트와 거래 내역을 자동으로 생성합니다.
 
-## 📝 주요 도구 상세 가이드
+### 💻 사용법
+```bash
+# 기본 실행 (ETH/USDT, 최근 365일, Market 모드)
+python3 scripts/backtest.py
 
-### 🏗️ Ultra-Realistic: `scripts/run_realistic_simulation.py`
-가장 권장되는 최종 검증 도구입니다. 
-- **특징:** 1분 단위 스트리밍 업데이트를 시뮬레이션하여 실전과 가장 유사한 수익률을 산출합니다.
-- **결과물:** 
-    - `reports/{SYMBOL}/{MODE}/{TIMESTAMP}/` 경로에 구조화된 저장.
-    - **Visual Chart**: 지표, 거래 시점, 자산 곡선이 통합된 4단 패널 PNG.
-    - **Trade Log**: 모든 진입/청산의 상세 내역 CSV.
-- **실행:** `python3 scripts/run_realistic_simulation.py`
+# 특정 종목 지정 및 기간 설정
+python3 scripts/backtest.py --symbol TRUMP/USDT --days 180 --mode sniper
 
-### 🧠 Hyper-Optimizer: `scripts/mega_optimizer_v2.py`
-수백 개의 파라미터 조합 중 수익/리스크 비율이 가장 좋은 최적값을 찾아줍니다.
-- **지표:** `Return/MDD Efficiency`가 가장 높은 조합을 우선 제안합니다.
-- **실행:** `python3 scripts/mega_optimizer_v2.py [종목수] [기간]`
+# 다수 종목 동시 테스트
+python3 scripts/backtest.py --symbol BTC/USDT,ETH/USDT,SOL/USDT --days 90
+```
 
 ---
 
-## 📊 결과 해석 및 시각화 (Visualization)
+## 2. 통합 최적화 도구: `scripts/optimize.py`
 
-v11.9.4은 데이터 수치를 넘어 시각적인 직관을 제공합니다.
+Optuna(베이지안 최적화)를 사용하여 주어진 기간 동안 가장 높은 효율(Return/MDD)을 내는 파라미터 조합을 찾습니다.
 
-1.  **종합 시각 리포트 (Visual Chart)**:
-    - **Price Panel**: 진입(▲/▼)과 청산(X) 지점을 가격 차트 위에 지표와 함께 표시.
-    - **ADX/Volume Panel**: 진입 당시의 추세 강도와 거래량 폭발 여부 검증.
-    - **Equity Panel**: 리스크 5% 등의 복리 효과가 자산 곡선에 미치는 영향 확인.
+### 🚀 주요 기능
+- **지능형 탐색**: 단순 그리드 서치가 아닌, 인공지능이 유망한 파라미터 영역을 집중 탐색합니다.
+- **V7.0 변수 탐색**: Chaos, Squeeze, Slope 지표의 임계값을 포함하여 최적의 조합을 산출합니다.
+- **다중 목적 최적화**: 수익률 극대화와 MDD 최소화를 동시에 고려합니다.
 
-2.  **대시보드 통합**:
-    - `python3 scripts/dashboard.py` 실행 후 웹 브라우저에서 모든 백테스트 이미지와 CSV를 즉시 확인 및 다운로드 가능.
+### 💻 사용법
+```bash
+# 기본 실행 (ETH/USDT, 365일, 100회 탐색)
+python3 scripts/optimize.py
+
+# 특정 종목에 대해 정밀 탐색 (500회)
+python3 scripts/optimize.py --symbol TRUMP/USDT --trials 500
+
+# 여러 종목의 최적값 순차 탐색
+python3 scripts/optimize.py --symbol ETH/USDT,XRP/USDT --days 180
+```
 
 ---
 
-## 🛠️ 백테스팅 실행 시 주의사항
+## 📂 결과 해석 가이드
 
-- **증분 데이터 업데이트**: `BinanceDataFetcher`는 이제 기존 데이터가 있다면 마지막 시점 이후의 데이터만 추가로 가져옵니다. 업데이트 속도가 매우 빠릅니다.
-- **현실적인 비용 설정**: 
-    - **Sniper/Market**: Taker 수수료(0.05%) + 현실적인 슬리피지 적용.
-    - **Retest Maker**: **Maker 수수료(0.02%)** + 제로 슬리피지 적용.
-- **리스크 경고**: 백테스트에서 MDD가 20%를 넘는다면 실전에서는 더 큰 심리적 고통이 따를 수 있습니다. `RISK_PER_TRADE`를 조절하여 본인에게 맞는 설정을 찾으세요.
+1.  **Efficiency (효율)**: `Return / (MDD + 0.1)`. 이 수치가 **1.0 이상**이면 매우 우수한 전략이며, **2.0 이상**이면 실전 투입 가치가 매우 높습니다.
+2.  **Chaos Index**: 최적화 결과 ADX보다 Chaos Index 문턱값이 높게 잡힌다면, 해당 종목은 '광기' 구간에서 수익이 극대화됨을 의미합니다.
+3.  **MDD Guard**: 백테스트 MDD가 25%를 초과할 경우, `RISK_PER_TRADE`를 낮추는 것을 권장합니다.
 
 ---
-**TrendCrusher Development Team**
-*The Gold Standard in Realistic Trading Simulation*
+
+## 🛠️ 레거시 도구 안내
+이전 버전의 스크립트들은 `legacy/` 폴더로 이동되었습니다. 특별한 사유가 없다면 위의 통합 도구 사용을 강력히 권장합니다.
+
+---
+**TrendCrusher V13.3.0 Development Team**
+*The New Standard in Momentum Trading*
