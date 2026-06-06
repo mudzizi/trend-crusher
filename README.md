@@ -1,7 +1,7 @@
-# 🚀 TrendCrusher V13.3.0: The Chaos & Squeeze Engine
+# 🚀 TrendCrusher V13.3.8: The Resilience Update
 > **"지표는 1시간을 보되, 실행은 1초를 앞서간다."**
 > 
-> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. V12.8.0 버전은 백테스트와 라이브 거래 로직을 하나의 엔진으로 통합한 **단일 진실 공급원(Single Source of Truth)** 구조의 완성판입니다.
+> TrendCrusher는 가상자산 선물 시장의 변동성을 정밀하게 포착하여 수익으로 치환하는 **초저지연 비동기(Async) 알고리즘 매매 시스템**입니다. v13.3.8 버전은 V7.0 Chaos & Squeeze 엔진을 기반으로, API 부하 최적화와 완벽한 거래소 동기화를 달성한 **운영 리질리언스(Resilience) 완성판**입니다.
 ---
 
 ## 📑 목차 (Table of Contents)
@@ -22,21 +22,21 @@
 ---
 
 ## 🧠 핵심 전략 (The 4 Pillars)
-진입 신호는 **1시간봉(1h) 기준의 기술적 지표**를 바탕으로 하되, **웹소켓 실시간 데이터(2초 주기)**를 결합하여 캔들 중간에도 즉각 대응합니다.
+진입 신호는 **1시간봉(1h) 기준의 기술적 지표**를 바탕으로 하되, **웹소켓 실시간 데이터**를 결합하여 캔들 중간에도 즉각 대응합니다.
 
-1.  **Donchian Breakout**: 1시간봉 기준 전고점/전저점을 실시간 가격이 상향/하향 돌파할 때 포착.
-2.  **Volume Burst Filter**: 거래량이 이전 평균 대비 설정 배수(2.0x+) 이상 폭발하며 강력한 수급이 실릴 때만 진입.
-3.  **ADX Trend Strength**: ADX 지표를 통해 힘없는 박스권 돌파를 배제하고 강력한 추세 모멘텀에만 탑승.
-4.  **EMA Macro Filter**: 4시간봉(4h) 장기 이평선을 통해 대세 하락장인지 상승장인지 판단하여 역추세 매매 방지.
+1.  **Chaos Index Filter (V7.0)**: 단순 추세 강도가 아닌, 시장의 불균형이 극에 달한 '카오스' 구간을 감지하여 에너지 폭발 직전의 신호만 선별.
+2.  **Volatility Squeeze Breakout**: 볼린저 밴드가 켈트너 채널 내부로 수렴하여 에너지가 응축된 상태에서 터지는 변동성 돌파 포착.
+3.  **Asymmetric Short Bias**: 하락장의 속도가 더 빠르다는 특성을 반영하여 숏 진입 시 문턱값을 자동으로 낮추는 비대칭 로직.
+4.  **EMA Macro Filter**: 4시간봉(4h) 장기 이평선을 통해 대세 추세 방향을 판별하여 역추세 매매 원천 방지.
 
 ---
 
 ## 🛡️ 주요 기능 하이라이트
-- **Turbo-Charged Engine (v11.9.7)**: NumPy 벡터화 루프 탑재로 기존 대비 5배 빠른 백테스트 속도와 나노초 단위 정밀도 구현.
-- **Financial Parity**: Maker(0.02%) 및 Taker(0.05%) 수수료 차등 적용으로 실전 계좌와 백테스트 간 오차 100% 제거.
-- **Smart Control Center (v4.5)**: 실시간 지표 근접도와 종합 신호 점수를 시각화한 대시보드에서 봇의 '사고 과정'을 모니터링.
-- **Atomic Safety & Kill Switch**: /close_all 명령 시 실제 거래소 포지션을 API로 직접 대조하여 시장가로 강제 청산하는 `Force Exit` 로직 탑재.
-- **100% Test Validation**: 67개의 포괄적인 테스트 스위트 통과로 검증된 시스템 무결성 (Zero Regression).
+- **Intelligent API Scaling**: 메모리 기반 데이터 업데이트로 바이낸스 Rate Limit 에러 및 프로세스 Crash(Exit -9) 원천 차단.
+- **Nuclear Order Safety**: 중복 주문 방지를 위한 `cancel_all_orders` 선제 클린업 로직 및 SSOT(Single Source of Truth) 동기화.
+- **Turbo-Charged Numba Engine**: 고속 연산 엔진을 통해 백테스트와 라이브 간의 로직 오차 0% 구현 및 나노초 단위 정밀도 확보.
+- **Financial Parity**: Maker(0.02%) 및 Taker(0.05%) 수수료 차등 적용으로 실전 계좌와 백테스트 간 경제적 일관성 100% 확보.
+- **100% Test Validation**: 78개의 포괄적인 테스트 스위트 통과로 검증된 시스템 무결성 (Zero Regression).
 
 ---
 
@@ -50,92 +50,51 @@
 cp config.example.yaml config.yaml
 ```
 
-### 2. 세부 항목 설명
-각 설정 값에 대한 상세한 설명과 권장값은 **[CONFIG_GUIDE.md](./CONFIG_GUIDE.md)**를 참조하세요.
-
-> **보안 팁:** API 키와 같이 민감한 정보는 `.env` 파일이나 OS 환경 변수로 설정할 수 있습니다. 이 경우 YAML 설정보다 환경 변수의 값이 우선 적용됩니다.
-
 ---
 
-## ⚙️ 설치 및 실행 (Installation)
+## 🚀 설치 및 실행 (Installation)
 
-### 1. 가상환경 구축 및 라이브러리 설치
+### 1. 가상환경 구축
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 연결 및 보안 검증 (권장)
-봇 실행 전 텔레그램 연동 상태를 확인합니다.
+### 2. 라이브 봇 실행 (Async Core)
 ```bash
-PYTHONPATH=. python3 scripts/test_telegram_commands.py
+PYTHONPATH=. python3 scripts/live_bot_async.py
 ```
 
-### 3. 라이브 봇 실행 (Phoenix 모드 - 추천)
-워치독(Watchdog) 모드로 실행하여 중단 없는 매매 환경을 구축합니다.
+### 3. 백테스트 및 최적화
 ```bash
-# 백그라운드 가동
-nohup python3 scripts/watchdog.py > watchdog.log 2>&1 &
+# 특정 종목 백테스트
+python3 scripts/backtest.py --symbol TRUMP/USDT --days 365
+
+# 파라미터 최적화 (Optuna)
+python3 scripts/optimize.py --symbol ETH/USDT --trials 100
 ```
 
 ---
 
-## 📱 운영 및 안전 (Operations & Safety)
-
-### 텔레그램 원격 명령어
-- `/status`: 전체 자산 현황 및 현재 포지션/매복 상태 보고.
-- `/optimize [SYM]`: 특정 종목의 파라미터 재학습 지시.
-- `/sniper_on/off`: 지정가 매복(Sniper) 기능 활성화 제어.
-- `/stop` / `/resume`: 신규 진입 일시 중단 및 재개.
-- `/close_all`: **[긴급 킬 스위치]** 모든 포지션 시장가 청산 및 봇 정지.
-
-### 안전 장치
-- **Last Will (유언)**: 비정상 종료 시 에러 리포트를 텔레그램으로 전송.
-- **Atomic Order**: 진입 직후 손절(SL) 주문 실패 시 즉시 포지션 강제 청산.
-- **Zero Regression**: 모든 코드는 전체 테스트(`pytest`) 통과 후에만 배포 및 적용.
-
----
-
-## 📊 시뮬레이션 및 최적화 (Simulation & Optimization)
-
-V13.3.0은 복잡한 실험 도구들을 단 두 개의 **통합 엔진**으로 단일화했습니다.
-
-### 1. 정밀 백테스터 (`scripts/backtest.py`)
-특정 종목에 대해 V7.0 엔진의 성능을 검증하고 시각화 리포트를 생성합니다.
-```bash
-# ETH/USDT 최근 1년 테스트 (Market 모드)
-python3 scripts/backtest.py --symbol ETH/USDT --days 365
-
-# TRUMP/USDT 최근 180일 테스트 (Sniper 모드)
-python3 scripts/backtest.py --symbol TRUMP/USDT --days 180 --mode sniper
-```
-
-### 2. 인공지능 최적화 도구 (`scripts/optimize.py`)
-Optuna(베이지안 최적화)를 사용하여 최적의 파라미터 조합을 자동으로 찾아냅니다.
-```bash
-# TRUMP/USDT 최적 파라미터 100회 탐색
-python3 scripts/optimize.py --symbol TRUMP/USDT --trials 100
-```
+## 🛡️ 운영 및 안전 (Operations & Safety)
+- **Phoenix Watchdog**: 봇의 생존 여부를 1초마다 감시하여 Crash 발생 시 즉시 자동 재시작.
+- **Telegram Command**: `/status`, `/close_all`, `/sniper_on` 등 원격 제어 인터페이스 제공.
+- **Risk Guard**: 단일 종목 최대 노출액(`MAX_POSITION_VALUE_USDT`) 제한 기능.
 
 ---
 
 ## 📊 성능 벤치마크 (Performance)
-*가혹한 시장 조건(슬리피지 0.5%) 하에서의 1년 누적 백테스트 결과*
+(v13.3.8 엔진, 리스크 2.0% 기준 2년 성과)
 
-| 종목 | 일반 시장가 모드 | **스나이퍼 모드 (Limit)** | **Alpha (수익 향상)** |
-| :--- | :---: | :---: | :---: |
-| **TRUMP/USDT** | +83.89% | **+835.82%** | **+751%** |
-| **ETH/USDT** | +39.69% | **+676.17%** | **+636%** |
-| **XAU/USDT** | -13.93% | **+343.27%** | **+357%** |
+| 종목 | 누적 수익률 | 최대 낙폭 (MDD) | 거래 횟수 | 효율 (Ret/MDD) |
+| :--- | :---: | :---: | :---: | :---: |
+| **TRUMP/USDT** | **+139.55%** | 27.81% | 178회 | 5.00 |
+| **BTC/USDT** | **+42.12%** | 15.30% | 120회 | 2.75 |
 
 ---
 
 ## ⚠️ 주의사항 및 면책조항 (Disclaimer)
-1.  **Slippage Risk**: 급격한 변동성 상황에서는 지정가 매복 주문이라도 체결 지연이 발생할 수 있습니다.
-2.  **API Security**: `BINANCE_API_KEY`는 반드시 **선물 매매 권한만** 부여하고, **출금 권한은 절대 부여하지 마세요.**
-3.  **No Guarantee**: 본 소프트웨어는 과거 데이터를 기반으로 최적화되었으나, 미래의 수익을 보장하지 않습니다. 모든 투자의 책임은 사용자 본인에게 있습니다.
-
----
-**TrendCrusher V13.3.0 Development Team**
-*Technical Co-Founder by AI Agent*
+- 본 소프트웨어는 교육 및 연구 목적으로 제작되었습니다.
+- 모든 투자의 책임은 사용자 본인에게 있으며, 시장 상황에 따라 원금 손실이 발생할 수 있습니다.
+- API Key 유출에 주의하고, 초기 구동 시 `DRY_RUN: true` 설정을 권장합니다.

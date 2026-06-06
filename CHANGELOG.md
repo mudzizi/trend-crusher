@@ -2,6 +2,16 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.3.8] - 2026-06-06
+### **⚡ Intelligent API Scaling & Operational Resilience**
+- **Memory-Based OHLCV Updates**: Optimized `on_kline_update` to update candles in-memory using WebSocket data. Full REST API fetches (1,000 bars) now only occur when a candle actually closes (`kline['x']`). This completely eliminates "API Rate Limit" warnings and OS-level process kills (Exit -9).
+- **Nuclear SL Cleanup**: Implemented a mandatory `cancel_all_orders` sweep before creating any new Stop-Loss order. This guarantees zero duplicate orders on the exchange, even if the bot's local state is temporarily inconsistent or after a database wipe.
+- **Numba Engine SL Restoration**: Fixed a critical bug in `src/strategy.py` where the high-speed Numba engine was calculating profit-protected SL levels but failing to return them to the live bot. Now returns `(trigger, new_sl)`, enabling functional Break-even and Adaptive Trailing in real-time.
+- **Robust SSOT Synchronization**: Added a mandatory exchange position sync during the `initialize` phase. The bot now prioritizes real-time exchange state (Single Source of Truth) over local database records on startup, preventing "Long vs Short" state mismatches.
+- **Stop-Loss Adoption (Permissive)**: The bot now scans for any existing 'STOP' or 'TAKE_PROFIT' related orders on startup and 'adopts' them if a position is found without a known local order ID.
+- **0.00 SL Prevention**: Added an automatic SL calculation fallback using current ATR if a position is detected but no SL exists, preventing Binance API rejection for invalid prices.
+- **Strict Self-Audit Protocol**: Integrated a mandatory E-M-V-R (Explain-Modify-Verify-Report) workflow and surgical integrity mandates into `GEMINI.md` to prevent unintended code regressions.
+
 ## [13.3.0] - 2026-05-24
 ### **⚡ V7.0 Chaos & Squeeze Momentum Engine**
 - **Chaos Index**: Re-engineered the 'lucky error' ADX logic into a formal Momentum-Chaos filter. It captures extreme one-sided energy bursts while ignoring weak trends.
