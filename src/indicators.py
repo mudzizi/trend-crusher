@@ -68,8 +68,8 @@ def calculate_chaos_index(df, period=14):
     
     span = 2 * period - 1
     s_tr = tr.ewm(span=span, adjust=False).mean()
-    s_plus = pd.Series(plus_dm).ewm(span=span, adjust=False).mean()
-    s_minus = pd.Series(minus_dm).ewm(span=span, adjust=False).mean()
+    s_plus = pd.Series(plus_dm, index=df.index).ewm(span=span, adjust=False).mean()
+    s_minus = pd.Series(minus_dm, index=df.index).ewm(span=span, adjust=False).mean()
     
     p_di = 100 * (s_plus / (s_tr + 1e-10))
     m_di = 100 * (s_minus / (s_tr + 1e-10))

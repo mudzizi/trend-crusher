@@ -836,7 +836,15 @@ class SymbolBotAsync:
         try:
             exit_price = self.last_price
             if not self.settings["DRY_RUN"]:
-                order = await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
+                try:
+                    order = await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
+                except Exception as e:
+                    if "-2022" in str(e) or "ReduceOnly Order is rejected" in str(e):
+                        self.logger.warning(f"⚠️ {self.symbol} ReduceOnly rejected. Position likely already closed. Resetting state.")
+                        await self.sync_all_orders() # Verify and reset
+                        return
+                    raise e
+                
                 await asyncio.sleep(1)
                 positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
                 pos = next((p for p in positions if p['symbol'] == self.symbol), None)
@@ -863,8 +871,13 @@ class SymbolBotAsync:
             exit_price = self.last_price
             if pos and float(pos['contracts']) != 0:
                 side = 'sell' if float(pos['contracts']) > 0 else 'buy'
-                order = await self.create_reduce_only_market_order(side, abs(float(pos['contracts'])))
-                if order and isinstance(order, dict): exit_price = float(order.get('average') or order.get('price') or exit_price)
+                try:
+                    order = await self.create_reduce_only_market_order(side, abs(float(pos['contracts'])))
+                    if order and isinstance(order, dict): exit_price = float(order.get('average') or order.get('price') or exit_price)
+                except Exception as e:
+                    if "-2022" in str(e):
+                        self.logger.warning(f"⚠️ {self.symbol} Force exit ReduceOnly rejected. Resetting state.")
+                    else: raise e
             await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
             if self.position != 0:
                 pnl_pct = ((exit_price / self.entry_price) - 1) * 100 * self.position
