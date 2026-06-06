@@ -40,7 +40,6 @@ class SymbolBotAsync:
         if "SYMBOL_SETTINGS" in CONFIG and self.symbol in CONFIG["SYMBOL_SETTINGS"]:
             self.settings.update(CONFIG["SYMBOL_SETTINGS"][self.symbol])
         
-        # Strategy Engine Instance (V7.1)
         self.engine = TrendCrusherV2(config=self.settings)
         
         self.position = 0 
@@ -63,25 +62,18 @@ class SymbolBotAsync:
         self.last_price = 0
         self.df_indicators = None
         
-        # Throttling & Sync states
         self.last_db_record_ts = 0
         self.last_indicator_calc_ts = 0
         self.last_sl_sync_price = 0
         self.last_fill_poll_ts = 0
         self.entry_fee = 0
-
-    def hot_reload_settings(self, new_params):
-        self.settings.update(new_params)
-        self.engine.c = self.settings
-        self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
+        self._initialized = False
 
     async def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
         for i in range(max_retries):
-            try:
-                return await func(*args, **kwargs)
+            try: return await func(*args, **kwargs)
             except Exception as e:
                 if i == max_retries - 1: raise e
-                self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
                 await asyncio.sleep(delay * (i + 1))
 
     async def fetch_ohlcv(self, tf, limit=1000):
@@ -99,28 +91,6 @@ class SymbolBotAsync:
     async def create_reduce_only_market_order(self, side, amount):
         return await self.retry_api_call(self.exchange.create_order, self.symbol, 'market', side, amount, None, params={'reduceOnly': True})
 
-    async def _is_over_safety_limit(self, new_order_value_usdt=0):
-        if self.settings.get("DRY_RUN"): return False
-        limit = float(self.settings.get("MAX_POSITION_VALUE_USDT", 1000.0))
-        try:
-            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
-            pos = next((p for p in positions if p['symbol'] == self.symbol or p['symbol'].replace(':USDT','') == self.symbol), None)
-            current_pos_value = abs(float(pos['notional'])) if pos and pos.get('notional') else 0
-            open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
-            pending_value = 0
-            for o in open_orders:
-                price = float(o.get('stopPrice') or o.get('price') or self.last_price)
-                qty = float(o.get('amount', 0))
-                pending_value += (price * qty)
-            total_exposure = current_pos_value + pending_value + new_order_value_usdt
-            if total_exposure > limit:
-                self.logger.warning(f"⚠️ SAFETY LIMIT REACHED: Total exposure ${total_exposure:,.2f} exceeds limit ${limit:,.2f}.")
-                return True
-            return False
-        except Exception as e:
-            self.logger.error(f"Error in safety limit check: {e}")
-            return True 
-
     async def initialize(self):
         try:
             state = self.db.get_bot_state(self.symbol)
@@ -134,43 +104,25 @@ class SymbolBotAsync:
                 self.sl_order_id = state['sl_order_id']
                 self.active_sniper_order_id = state.get('sniper_order_id')
                 self.active_retest_order_id = state.get('retest_order_id')
-                self.logger.info(f"💾 Recovered from DB: Pos={self.position}, Entry={self.entry_price}, Sniper={self.active_sniper_order_id}")
-
             self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=1000)
             self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=1000)
             self._update_indicators()
             asyncio.create_task(self._record_live_status())
-            
-            # [SSOT] Mandatory initial sync with exchange
             await self.sync_all_orders()
             self._initialized = True
-        except Exception as e:
-            self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
-            raise e
+        except Exception as e: self.logger.error(f"❌ Init failed: {e}"); raise e
 
     def _update_indicators(self, is_live=False):
         if self.ohlcv_1h is not None and self.ohlcv_4h is not None:
             self.df_indicators = self.engine.calculate_indicators(self.ohlcv_1h, self.ohlcv_4h, self.settings, is_live=is_live)
-            if is_live:
-                last = self.df_indicators.iloc[-1]
-                self.logger.info(f"📊 Indicators: Price={self.last_price:.4f}, ADX={last['adx']:.1f}, Chaos={last['chaos']:.1f}, Squeeze={'YES' if last['squeeze']>0 else 'NO'}")
 
-    async def on_kline_update(self, tf, kline):
-        async with self.lock:
-            try:
-                signal_tf = self.settings["SIGNAL_TIMEFRAME"]
-                if tf == signal_tf:
-                    self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
-                    self._update_indicators(is_live=True)
-                    if kline['x']:
-                        last_row = self.df_indicators.iloc[-1]
-                        self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"),
-                            float(last_row['close']), float(last_row['ema_h']), float(last_row['upper']), float(last_row['lower']),
-                            float(last_row['volume']), float(last_row['adx']), float(last_row.get('chaos', 0)), float(last_row.get('squeeze', 0)),
-                            float(last_row.get('ema_slope', 0)), float(last_row.get('chop', 0)))
-                elif tf == self.settings["TREND_TIMEFRAME"]:
-                    self.ohlcv_4h = await self.fetch_ohlcv(tf, limit=1000)
-            except Exception as e: self.logger.error(f"Kline update error: {e}")
+    async def _record_live_status(self):
+        if self.df_indicators is None or self.df_indicators.empty: return
+        try:
+            last = self.df_indicators.iloc[-1]
+            pnl_pct = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.position != 0 and self.entry_price != 0 else 0
+            self.db.log_live_status(self.symbol, self.position, self.entry_price, self.last_price, pnl_pct, last['upper'], last['lower'], last['ema_h'], last['atr'], last['adx'], last['chaos'], last['squeeze'], last['ema_slope'], last['chop'])
+        except Exception as e: self.logger.error(f"DB log error: {e}")
 
     async def on_mark_price_update(self, price):
         async with self.lock:
@@ -180,154 +132,120 @@ class SymbolBotAsync:
             if self.position != 0 or self.is_processing_fill: await self.check_exit()
             else: await self.check_entry()
 
-    async def check_entry(self):
-        if self.is_halted or self.df_indicators is None: return
-        row = self.df_indicators.iloc[-1]
-        is_ambushing = bool(self.active_sniper_order_id or self.active_retest_order_id)
-        sig_type, target_p, sl_p = self.engine.check_entry_signal(row, self.last_price, self.use_sniper, self.use_retest_maker, self.settings, is_ambushing=is_ambushing)
-        if sig_type is None:
-            if self.active_sniper_order_id: await self.cancel_sniper_ambush()
-            if self.active_retest_order_id: await self.cancel_retest_order()
-            return
-        if self.active_retest_order_id: return 
-        direction = 1 if target_p > row['ema_h'] else -1
-        if sig_type == 'RETEST': await self.manage_retest_ambush(direction, target_p, sl_p)
-        elif sig_type == 'SNIPER': await self.manage_sniper_ambush(direction, target_p, row['atr'])
-        elif sig_type == 'MARKET': await self.execute_entry(direction, row['atr'])
+    async def on_kline_update(self, tf, kline):
+        async with self.lock:
+            if tf == self.settings["SIGNAL_TIMEFRAME"]:
+                self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
+                self._update_indicators(is_live=True)
+                if kline['x']:
+                    r = self.df_indicators.iloc[-1]
+                    self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop']))
+            elif tf == self.settings["TREND_TIMEFRAME"]: self.ohlcv_4h = await self.fetch_ohlcv(tf, limit=1000)
+
+    async def on_order_update(self, o):
+        async with self.lock:
+            try:
+                oid, status, side, qty, avg_p = o['i'], o['X'], o['S'].lower(), float(o['z']), float(o['ap'])
+                if status == 'FILLED':
+                    if oid == self.sl_order_id:
+                        self.logger.info(f"🛡️ SL FILLED for {self.symbol}")
+                        await self._on_fill_success(-1 if side == 'buy' else 1, is_exit=True, price=avg_p)
+                    elif oid == self.active_sniper_order_id:
+                        self.logger.info(f"🎯 Sniper FILLED for {self.symbol}")
+                        self.active_sniper_order_id = None
+                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p)
+                    elif oid == self.active_retest_order_id:
+                        self.logger.info(f"🎣 Retest FILLED for {self.symbol}")
+                        self.active_retest_order_id = None
+                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p)
+            except Exception as e: self.logger.error(f"Order update error: {e}")
+
+    async def _on_fill_success(self, direction, is_exit=False, price=0):
+        if is_exit:
+            self.position, self.entry_price, self.quantity, self.sl_order_id = 0, 0, 0, None
+        else:
+            self.position, self.entry_price = direction, price
+            await self.sync_sl_to_exchange(force_create=True)
+        self.persist_state()
 
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
-        if not self.sl_order_id and not self.settings["DRY_RUN"]:
-            await self.sync_all_orders()
-            if not self.sl_order_id and self.position != 0: await self.sync_sl_to_exchange(force_create=True)
-
+        row = self.df_indicators.iloc[-1]
         if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
         else: self.min_price_seen = min(self.min_price_seen, self.last_price)
-
-        row = self.df_indicators.iloc[-1]
         state = {'position': self.position, 'entry_price': self.entry_price, 'max_price_seen': self.max_price_seen, 'min_price_seen': self.min_price_seen, 'sl_price': self.sl_price}
-        old_sl = self.sl_price
-        is_exit_triggered = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
-        self.sl_price = state['sl_price']
-
-        sync_needed = False
-        if self.last_sl_sync_price == 0: sync_needed = True
-        elif abs(self.sl_price - self.last_sl_sync_price) / self.last_sl_sync_price > 0.0003: sync_needed = True
-
-        if sync_needed and not is_exit_triggered:
-            self.logger.info(f"🔄 SL Update Required: {old_sl:,.2f} -> {self.sl_price:,.2f}")
+        triggered, new_sl = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
+        self.sl_price = new_sl
+        if (self.last_sl_sync_price == 0 or abs(self.sl_price - self.last_sl_sync_price)/self.last_sl_sync_price > 0.0003) and not triggered:
             await self.sync_sl_to_exchange()
-
-        if is_exit_triggered:
-            sync_diff = abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1)
-            if sync_diff > 0.0005:
-                self.logger.warning(f"🚨 {self.symbol} SL Hit before Sync. Emergency Exit!")
-                await self.execute_exit(); return
-            if (self.position == 1 and self.last_price <= self.sl_price) or (self.position == -1 and self.last_price >= self.sl_price):
-                return
+        if triggered:
+            if abs(self.sl_price - self.last_sl_sync_price)/(self.last_sl_sync_price or 1) > 0.0005:
+                await self.execute_exit()
 
     async def sync_all_orders(self):
         if self.settings["DRY_RUN"]: return
         try:
             positions = await self.retry_api_call(self.exchange.fetch_positions)
-            pos = next((p for p in positions if p['symbol'] == self.symbol or p['symbol'].replace(':USDT','') == self.symbol), None)
-            
+            pos = next((p for p in positions if p['symbol'].replace(':USDT','') == self.symbol.replace('/','')), None)
             if pos and float(pos['contracts']) != 0:
-                actual_qty, actual_entry = abs(float(pos['contracts'])), float(pos['entryPrice'])
-                side_f = pos.get('side', '').lower()
-                actual_side = -1 if side_f == 'short' or float(pos['contracts']) < 0 else 1
-                
-                if self.position != actual_side or abs(self.entry_price - actual_entry) > 0.1 or abs(self.quantity - actual_qty) > 0.0001:
-                    self.logger.info(f"🔄 State Repaired for {self.symbol}: Pos {self.position}->{actual_side}")
-                    self.position, self.entry_price, self.quantity = actual_side, actual_entry, actual_qty
-                    self.max_price_seen = self.min_price_seen = actual_entry
-                    self.persist_state()
-                
+                self.position = -1 if pos.get('side','').lower()=='short' or float(pos['contracts'])<0 else 1
+                self.entry_price, self.quantity = float(pos['entryPrice']), abs(float(pos['contracts']))
                 if self.sl_price == 0 and self.df_indicators is not None:
                     row = self.df_indicators.iloc[-1]
-                    self.sl_price = self.entry_price - (row['atr'] * self.settings.get("INITIAL_SL_ATR", 2.0)) if self.position == 1 else self.entry_price + (row['atr'] * self.settings.get("INITIAL_SL_ATR", 2.0))
-                    self.logger.info(f"🛡️ Initial SL Calculated: {self.sl_price:,.2f}")
+                    self.sl_price = self.entry_price + (row['atr']*2.0)*(-self.position)
             else:
-                if positions and self.position != 0:
-                    self.logger.warning(f"⚠️ Exchange says NO position. Resetting."); self.position = 0; self.persist_state()
-                    await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
-
-            # Adopt SL order from exchange
+                if self.position != 0: self.position = 0; await self.exchange.cancel_all_orders(self.symbol)
             if not self.sl_order_id and self.position != 0:
-                open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
                 target_side = 'sell' if self.position == 1 else 'buy'
-                for o in open_orders:
-                    if ('STOP' in str(o.get('type','')).upper() or 'TAKE_PROFIT' in str(o.get('type','')).upper()) and str(o.get('side','')).lower() == target_side:
-                        self.sl_order_id, self.sl_price = o['id'], float(o.get('stopPrice') or o.get('price') or self.sl_price)
-                        self.last_sl_sync_price = self.sl_price
-                        self.logger.info(f"🛡️ SL Adopted: ID={self.sl_order_id}, Price={self.sl_price:,.2f}"); self.persist_state(); break
+                for o in orders:
+                    if ('STOP' in str(o.get('type','')).upper()) and o.get('side','').lower()==target_side:
+                        self.sl_order_id, self.sl_price = o['id'], float(o.get('stopPrice', o.get('price', self.sl_price)))
+                        self.last_sl_sync_price = self.sl_price; break
+            self.persist_state()
         except Exception as e: self.logger.error(f"Sync error: {e}")
 
     async def sync_sl_to_exchange(self, force_create=False):
-        if self.settings["DRY_RUN"] or self.position == 0 or self.quantity <= 0: return
-        if not self.sl_order_id and not force_create: return
-        target_sl, target_qty, target_side = self.sl_price, self.quantity, ('sell' if self.position == 1 else 'buy')
+        if self.settings["DRY_RUN"] or self.position == 0: return
         try:
-            self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f}")
-            await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol) # [NUCLEAR CLEANUP]
-            params = {'stopPrice': target_sl, 'reduceOnly': True}
-            sl_order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', target_side, target_qty, None, params)
-            old_sync_p = self.last_sl_sync_price
-            self.sl_order_id, self.last_sl_sync_price = sl_order['id'], target_sl
+            await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
+            params = {'stopPrice': self.sl_price, 'reduceOnly': True}
+            order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
+            self.sl_order_id, self.last_sl_sync_price = order['id'], self.sl_price
             self.persist_state()
-            if old_sync_p == 0 or abs(target_sl - old_sync_p) / old_sync_p > 0.001:
-                self.notifier.send_message(f"🛡️ **SL Synchronized: {self.symbol}**\n- New SL: `{target_sl:,.2f}`\n- Mark Price: `{self.last_price:,.2f}`")
-        except Exception as e: self.logger.error(f"❌ SL Sync Failed: {e}")
+            self.notifier.send_message(f"🛡️ SL Sync: {self.symbol} -> {self.sl_price:,.2f}")
+        except Exception as e: self.logger.error(f"SL Sync error: {e}")
 
     async def execute_entry(self, direction, atr):
-        side_str = "LONG" if direction == 1 else "SHORT"
-        self.sl_price = float(self.last_price - (atr * self.settings["INITIAL_SL_ATR"]) if direction == 1 else self.last_price + (atr * self.settings["INITIAL_SL_ATR"]))
-        qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
-        if not qty or qty <= 0: return
-        self.quantity = float(qty)
-        if await self._is_over_safety_limit(self.quantity * self.last_price): return
         try:
-            if not self.settings["DRY_RUN"]:
-                order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, 'buy' if direction == 1 else 'sell', self.quantity)
-                self.entry_price = float(order.get('average') or order.get('price') or self.last_price)
-                self.quantity = float(order.get('filled') or self.quantity)
-                await self.sync_sl_to_exchange(force_create=True)
-            else: self.entry_price = self.last_price
-            self.position = direction
-            self.max_price_seen = self.min_price_seen = self.entry_price
-            self.db.log_trade_open(self.symbol, side_str, self.entry_price, self.quantity, 100)
-            self.persist_state(); self.notifier.notify_entry(f"Async {self.symbol} {side_str}", self.entry_price, self.sl_price, 100)
+            self.sl_price = self.last_price + (atr*2.0)*(-direction)
+            qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
+            if not qty or qty <= 0: return
+            self.quantity = float(qty)
+            order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, 'buy' if direction == 1 else 'sell', self.quantity)
+            self.entry_price = float(order.get('average', self.last_price))
+            await self._on_fill_success(direction, price=self.entry_price)
         except Exception as e: self.logger.error(f"Entry error: {e}")
 
     async def execute_exit(self):
-        if self.position == 0: return
         try:
-            if not self.settings["DRY_RUN"]:
-                try: await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
-                except Exception as e:
-                    if "-2022" in str(e): self.logger.warning(f"⚠️ ReduceOnly rejected. Resetting."); await self.sync_all_orders(); return
-                    raise e
-            self.logger.info(f"✅ Trade Closed: {self.symbol}"); self.position = 0; self.persist_state()
+            await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
+            await self._on_fill_success(0, is_exit=True)
         except Exception as e: self.logger.error(f"Exit error: {e}")
 
     async def force_exit(self):
-        self.logger.info(f"🚨 FORCE EXIT {self.symbol}")
-        await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
+        await self.exchange.cancel_all_orders(self.symbol)
         if self.position != 0: await self.execute_exit()
-
-    def get_detailed_status(self):
-        if self.df_indicators is None or self.df_indicators.empty: return f"• **{self.symbol}**: No data."
-        row, pos_str = self.df_indicators.iloc[-1], "IDLE"
-        if self.position == 1: pos_str = "🟢 LONG"
-        elif self.position == -1: pos_str = "🔴 SHORT"
-        pnl_pct = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.position != 0 and self.entry_price != 0 else 0
-        return f"• **{self.symbol}**: {pos_str} ({pnl_pct:+.2f}%) | SL: {self.sl_price:,.2f}\n  - Prc: {self.last_price:,.2f} | Indicators: Vol {row['volume']/row['avg_vol']*100:.1f}% | Chaos {row.get('chaos',0):.1f}\n"
 
     def persist_state(self):
         try: self.db.save_bot_state(self.symbol, self.position, self.entry_price, self.quantity, self.max_price_seen, self.min_price_seen, self.sl_price, self.sl_order_id, self.active_sniper_order_id, self.active_retest_order_id)
         except Exception as e: self.logger.error(f"Persist error: {e}")
 
-async def handle_commands(bots, notifier, pm):
+    def get_detailed_status(self):
+        pnl = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.position != 0 and self.entry_price != 0 else 0
+        return f"• {self.symbol}: {'LONG' if self.position==1 else ('SHORT' if self.position==-1 else 'IDLE')} ({pnl:+.2f}%) | SL: {self.sl_price:,.2f}\n"
+
+async def handle_commands(bots, notifier):
     offset = None
     while True:
         try:
@@ -337,13 +255,13 @@ async def handle_commands(bots, notifier, pm):
                     offset, msg = update["update_id"] + 1, update.get("message", {})
                     text = msg.get("text", "")
                     if text == "/status":
-                        status_report = "📊 **Status Report**\n\n"
-                        for sym, bot in bots.items(): status_report += bot.get_detailed_status()
-                        notifier.send_message(status_report)
+                        status = "📊 Bot Status:\n"
+                        for b in bots.values(): status += b.get_detailed_status()
+                        notifier.send_message(status)
                     elif text == "/close_all":
-                        await asyncio.gather(*[bot.force_exit() for bot in bots.values()])
+                        await asyncio.gather(*[b.force_exit() for b in bots.values()])
                         notifier.send_message("✅ Closed all."); os._exit(0)
-        except Exception as e: logger.error(f"Command error: {e}")
+        except Exception as e: logger.error(f"Cmd error: {e}")
         await asyncio.sleep(2)
 
 async def main():
@@ -351,29 +269,27 @@ async def main():
     exchange = getattr(ccxt, CONFIG["EXCHANGE"])({'apiKey': CONFIG["BINANCE_API_KEY"], 'secret': CONFIG["BINANCE_SECRET"], 'options': {'defaultType': 'future'}})
     pm = PortfolioManagerAsync(exchange, CONFIG)
     await exchange.load_markets()
-    bots = {symbol: SymbolBotAsync(symbol, exchange, pm, notifier, db) for symbol in CONFIG["SYMBOLS_LIST"]}
-    for bot in bots.values(): await bot.initialize()
+    bots = {s: SymbolBotAsync(s, exchange, pm, notifier, db) for s in CONFIG["SYMBOLS_LIST"]}
+    for b in bots.values(): await b.initialize()
     ws_manager = BinanceWebSocketManager(CONFIG["SYMBOLS_LIST"], api_key=CONFIG["BINANCE_API_KEY"], api_secret=CONFIG["BINANCE_SECRET"])
     async def ws_loop():
         async def process_msg(payload):
-            e_type = payload.get('e')
-            raw_symbol = payload.get('s') if 's' in payload else (payload['o']['s'] if 'o' in payload else None)
-            if not raw_symbol: return
-            symbol = raw_symbol if raw_symbol in bots else (raw_symbol.replace("USDT", "/USDT") if raw_symbol.replace("USDT", "/USDT") in bots else None)
-            if symbol:
-                bots[symbol].last_ws_msg_ts = time.time()
-                if e_type == 'kline': await bots[symbol].on_kline_update(payload['k']['i'], payload['k'])
-                elif e_type == 'markPriceUpdate': await bots[symbol].on_mark_price_update(float(payload['p']))
-                elif e_type == 'ORDER_TRADE_UPDATE': await bots[symbol].on_order_update(payload['o'])
+            e, raw_s = payload.get('e'), payload.get('s') if 's' in payload else (payload.get('o',{}).get('s'))
+            if not raw_s: return
+            s = raw_s if raw_s in bots else (raw_s.replace("USDT", "/USDT") if raw_s.replace("USDT", "/USDT") in bots else None)
+            if s:
+                if e == 'kline': await bots[s].on_kline_update(payload['k']['i'], payload['k'])
+                elif e == 'markPriceUpdate': await bots[s].on_mark_price_update(float(payload['p']))
+                elif e == 'ORDER_TRADE_UPDATE': await bots[s].on_order_update(payload['o'])
         async for msg in ws_manager.stream():
             if isinstance(msg, dict) and msg.get('e') == 'WS_RECONNECTED':
-                for bot in bots.values(): asyncio.create_task(bot.sync_all_orders())
+                for b in bots.values(): asyncio.create_task(b.sync_all_orders())
                 continue
             asyncio.create_task(process_msg(msg.get('data', msg) if isinstance(msg, dict) else msg))
     logger.info(f"🚀 TrendCrusher {CONFIG['VERSION']} Started.")
-    await asyncio.gather(ws_loop(), handle_commands(bots, notifier, pm))
+    await asyncio.gather(ws_loop(), handle_commands(bots, notifier))
 
 if __name__ == "__main__":
     try: asyncio.run(main())
     except KeyboardInterrupt: pass
-    except Exception as fatal_e: print(f"Fatal: {fatal_e}")
+    except Exception as e: print(f"Fatal: {e}")
