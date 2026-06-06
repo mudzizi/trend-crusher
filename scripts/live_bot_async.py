@@ -648,20 +648,21 @@ class SymbolBotAsync:
             if self.active_retest_order_id: await self.check_retest_fill()
             
             # 3. Check StopLoss status
-            # [NEW] Adoption Logic: If we don't have an ID, try to find an existing STOP_MARKET order on the exchange
+            # [NEW] Adoption Logic: Permissive matching for any 'STOP' or 'TAKE_PROFIT' related order
             if not self.sl_order_id and self.position != 0:
                 try:
                     open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
                     for o in open_orders:
                         o_type = str(o.get('type', '')).upper()
                         o_side = str(o.get('side', '')).lower()
-                        # Match STOP_MARKET orders intended to close the position
                         target_side = 'sell' if self.position == 1 else 'buy'
-                        if o_type == 'STOP_MARKET' and o_side == target_side:
+                        
+                        # Match any STOP or TAKE_PROFIT order intended to close the position
+                        if ('STOP' in o_type or 'TAKE_PROFIT' in o_type) and o_side == target_side:
                             self.sl_order_id = o['id']
                             self.sl_price = float(o.get('stopPrice') or o.get('price') or self.sl_price)
                             self.last_sl_sync_price = self.sl_price
-                            self.logger.info(f"🛡️ SL Adopted from Exchange: ID={self.sl_order_id}, Price={self.sl_price:,.2f}")
+                            self.logger.info(f"🛡️ SL Adopted from Exchange: ID={self.sl_order_id}, Price={self.sl_price:,.2f} ({o_type})")
                             self.persist_state()
                             break
                 except Exception as e:
@@ -808,9 +809,18 @@ class SymbolBotAsync:
         
         try:
             self.logger.info(f"🔄 Syncing SL for {self.symbol} -> {target_sl:,.2f} (Qty: {target_qty})")
-            if self.sl_order_id:
-                try: await self.cancel_trigger_order(self.sl_order_id)
-                except: pass
+            
+            # [AGGRESSIVE CLEANUP] Cancel ALL existing STOP/TP orders to prevent duplicates
+            try:
+                open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                for o in open_orders:
+                    o_type = str(o.get('type', '')).upper()
+                    if 'STOP' in o_type or 'TAKE_PROFIT' in o_type:
+                        self.logger.info(f"🧹 Pre-cleaning order {o['id']} ({o_type})")
+                        # Use trigger: True for conditional orders
+                        await self.retry_api_call(self.exchange.cancel_order, o['id'], self.symbol, params={'trigger': True})
+            except Exception as clean_e:
+                self.logger.warning(f"⚠️ Pre-cleanup warning: {clean_e}")
             
             # Use captured local variables for the actual API call
             params = {'stopPrice': target_sl, 'reduceOnly': True}
