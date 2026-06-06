@@ -741,6 +741,19 @@ class SymbolBotAsync:
 
         # 3. Handle Exit Condition
         if is_exit_triggered:
+            # [FAIL-SAFE] 만약 현재가가 손절가에 도달했는데, 거래소 주문이 아직 예전 가격(동기화 전)에 머물러 있다면
+            # 거래소 체결을 기다리지 않고 즉시 시장가로 탈출하여 수익을 보존합니다.
+            sync_diff = abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1)
+            if sync_diff > 0.0005: # 0.05% 이상 차이날 경우 동기화 전으로 판단
+                self.logger.warning(f"🚨 {self.symbol} SL Hit ({self.last_price:,.2f}) before Exchange Sync (Diff: {sync_diff:.4f}). Emergency Market Exit!")
+                await self.execute_exit()
+                return
+
+            # 일반적인 경우(동기화 완료)에는 거래소의 SL 주문이 체결되기를 기다립니다.
+            if (self.position == 1 and self.last_price <= self.sl_price) or \
+               (self.position == -1 and self.last_price >= self.sl_price):
+                self.logger.info(f"⏳ {self.symbol} price {self.last_price:,.2f} hit SL {self.sl_price:,.2f}. Waiting for exchange FILL event...")
+                return
 
     async def sync_sl_to_exchange(self, force_create=False):
         if self.settings["DRY_RUN"] or self.position == 0 or self.quantity <= 0:
