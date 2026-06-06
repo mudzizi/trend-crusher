@@ -171,13 +171,41 @@ class SymbolBotAsync:
 
     async def on_kline_update(self, tf, kline):
         async with self.lock:
-            if tf == self.settings["SIGNAL_TIMEFRAME"]:
-                self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
-                self._update_indicators(is_live=True)
-                if kline['x']:
-                    r = self.df_indicators.iloc[-1]
-                    self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop']))
-            elif tf == self.settings["TREND_TIMEFRAME"]: self.ohlcv_4h = await self.fetch_ohlcv(tf, limit=1000)
+            try:
+                # 1. Update memory buffer instead of REST fetch for efficiency
+                k_data = {
+                    'timestamp': pd.to_datetime(kline['t'], unit='ms'),
+                    'open': float(kline['o']), 'high': float(kline['h']),
+                    'low': float(kline['l']), 'close': float(kline['c']),
+                    'volume': float(kline['v'])
+                }
+                
+                if tf == self.settings["SIGNAL_TIMEFRAME"]:
+                    if self.ohlcv_1h is not None:
+                        # Update last row or append new one
+                        if k_data['timestamp'] == self.ohlcv_1h.iloc[-1]['timestamp']:
+                            self.ohlcv_1h.iloc[-1] = k_data
+                        else:
+                            self.ohlcv_1h = pd.concat([self.ohlcv_1h, pd.DataFrame([k_data])]).tail(1000)
+                    
+                    self._update_indicators(is_live=True)
+                    
+                    # 2. Only fetch full history from REST when candle CLOSES to maintain precision
+                    if kline['x']:
+                        self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
+                        self._update_indicators(is_live=True)
+                        r = self.df_indicators.iloc[-1]
+                        self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop']))
+                
+                elif tf == self.settings["TREND_TIMEFRAME"]:
+                    if self.ohlcv_4h is not None:
+                        if k_data['timestamp'] == self.ohlcv_4h.iloc[-1]['timestamp']:
+                            self.ohlcv_4h.iloc[-1] = k_data
+                        else:
+                            self.ohlcv_4h = pd.concat([self.ohlcv_4h, pd.DataFrame([k_data])]).tail(1000)
+                    if kline['x']:
+                        self.ohlcv_4h = await self.fetch_ohlcv(tf, limit=1000)
+            except Exception as e: self.logger.error(f"Kline update error: {e}")
 
     async def on_order_update(self, o):
         async with self.lock:
