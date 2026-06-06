@@ -329,6 +329,10 @@ class SymbolBotAsync:
             
             # [CRITICAL] Record initial status to DB for dashboard visibility
             asyncio.create_task(self._record_live_status())
+            
+            # [SSOT] Mandatory initial sync with exchange to resolve any mismatches (including DB deletion case)
+            await self.sync_all_orders()
+            self._initialized = True
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize {self.symbol}: {e}")
             raise e
@@ -595,7 +599,12 @@ class SymbolBotAsync:
             if pos and float(pos['contracts']) != 0:
                 actual_qty = abs(float(pos['contracts']))
                 actual_entry = float(pos['entryPrice'])
-                actual_side = 1 if float(pos['contracts']) > 0 else -1
+                
+                # Robust side detection: Check 'side' field first, then fallback to 'contracts' sign
+                side_field = pos.get('side', '').lower()
+                if side_field == 'long': actual_side = 1
+                elif side_field == 'short': actual_side = -1
+                else: actual_side = 1 if float(pos['contracts']) > 0 else -1
                 
                 if self.position != actual_side or abs(self.entry_price - actual_entry) > 0.1 or abs(self.quantity - actual_qty) > 0.0001:
                     self.logger.info(f"🔄 State Repaired for {self.symbol}: Pos {self.position}->{actual_side}, Entry {self.entry_price:.2f}->{actual_entry:.2f}, Qty {self.quantity}->{actual_qty}")
@@ -635,18 +644,22 @@ class SymbolBotAsync:
             if self.sl_order_id and self.position != 0:
                 try:
                     order = await self.fetch_trigger_order(self.sl_order_id)
-                    if order and order['status'] == 'closed':
-                        avg_p = float(order.get('average', order.get('price', 0)))
-                        qty = float(order.get('filled', order.get('amount', 0)))
-                        self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
-                        await self.on_order_update({
-                            'i': self.sl_order_id, 
-                            's': self.symbol.replace('/', ''), 
-                            'X': 'FILLED', 
-                            'S': order['side'].upper(), 
-                            'z': qty, 
-                            'ap': avg_p
-                        })
+                    if order:
+                        # Sync last_sl_sync_price to prevent huge diff logs or emergency exits
+                        self.last_sl_sync_price = float(order.get('stopPrice') or order.get('price') or self.sl_price)
+                        
+                        if order['status'] == 'closed':
+                            avg_p = float(order.get('average', order.get('price', 0)))
+                            qty = float(order.get('filled', order.get('amount', 0)))
+                            self.logger.info(f"🛡️ SL Sync: Detected SL fill (REST) at {avg_p}")
+                            await self.on_order_update({
+                                'i': self.sl_order_id, 
+                                's': self.symbol.replace('/', ''), 
+                                'X': 'FILLED', 
+                                'S': order['side'].upper(), 
+                                'z': qty, 
+                                'ap': avg_p
+                            })
                 except:
                     self.logger.warning(f"Could not fetch SL order {self.sl_order_id}. It might have been deleted.")
                     self.sl_order_id = None
