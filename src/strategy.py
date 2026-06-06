@@ -91,23 +91,27 @@ def numba_check_exit(last_price, position, entry_price, max_price_seen, min_pric
     curr_atr_mult = atr_trail_mult
     pnl_pct = ((last_price / entry_price) - 1) * 100 * position
 
+    # 1. Break-even Guard
     if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
         be_sl = entry_price * (1 + 0.001 * position)
         if position == 1: sl_price = max(sl_price, be_sl)
         else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
 
+    # 2. Adaptive Trailing
     if use_adaptive:
         for i in range(len(adaptive_steps_arr)):
             if pnl_pct >= adaptive_steps_arr[i, 0]:
                 curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[i, 1])
 
+    # 3. Final SL Calculation & Trigger Check
     if position == 1:
         trail_sl = max_price_seen - (atr * curr_atr_mult)
-        return last_price <= trail_sl or last_price <= sl_price
-    elif position == -1:
+        new_sl = max(sl_price, trail_sl)
+        return last_price <= new_sl, new_sl
+    else:
         trail_sl = min_price_seen + (atr * curr_atr_mult)
-        return last_price >= trail_sl or (sl_price > 0 and last_price >= sl_price)
-    return False
+        new_sl = min(sl_price, trail_sl) if sl_price > 0 else trail_sl
+        return last_price >= new_sl, new_sl
 
 @njit
 def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial_max, initial_min, initial_sl,
@@ -133,7 +137,8 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
                     if pnl_pct >= adaptive_steps_arr[j, 0]:
                         curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
             trail_sl = max_p - (atr * curr_atr_mult)
-            if last_p <= trail_sl or last_p <= sl_p: return i, max_p, min_p
+            current_sl = max(sl_p, trail_sl)
+            if last_p <= current_sl: return i, max_p, min_p
         else:
             min_p = min(min_p, last_p)
             curr_atr_mult = atr_trail_mult
@@ -142,7 +147,8 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
                     if pnl_pct >= adaptive_steps_arr[j, 0]:
                         curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
             trail_sl = min_p + (atr * curr_atr_mult)
-            if last_p >= trail_sl or (sl_p > 0 and last_p >= sl_p): return i, max_p, min_p
+            current_sl = min(sl_p, trail_sl) if sl_p > 0 else trail_sl
+            if last_p >= current_sl: return i, max_p, min_p
     return -1, max_p, min_p
 
 def get_all_base_bars(df_1m, timeframe, include_incomplete=False):
@@ -201,8 +207,15 @@ class TrendCrusherV2:
         steps = config.get("ADAPTIVE_TRAIL_STEPS", []) 
         steps_arr = np.zeros((len(steps), 2))
         for i, s in enumerate(steps): steps_arr[i, 0], steps_arr[i, 1] = s['pnl_pct'], s.get('tighten_ratio', 1.0)
-        return numba_check_exit(last_price, state['position'], state['entry_price'], state['max_price_seen'], state['min_price_seen'], state['sl_price'],
-            row['atr'], config.get("TRAILING_ATR_MULT", 3.0), config.get("USE_ADAPTIVE_TRAIL", False), steps_arr, config.get("BE_GUARD_THRESHOLD", 0.0))
+        
+        triggered, new_sl = numba_check_exit(
+            last_price, state['position'], state['entry_price'], state['max_price_seen'], state['min_price_seen'], state['sl_price'],
+            row['atr'], config.get("TRAILING_ATR_MULT", 3.0), config.get("USE_ADAPTIVE_TRAIL", False), steps_arr, config.get("BE_GUARD_THRESHOLD", 0.0)
+        )
+        
+        # Update state so live bot picks up the new protected SL
+        state['sl_price'] = new_sl
+        return triggered
 
     def run_streaming_backtest(self, df_1m, **kwargs):
         config = self.c.copy()
