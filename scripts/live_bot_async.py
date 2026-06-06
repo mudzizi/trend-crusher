@@ -612,6 +612,13 @@ class SymbolBotAsync:
                     self.max_price_seen = max(self.max_price_seen, self.entry_price) if self.position == 1 else self.max_price_seen
                     self.min_price_seen = min(self.min_price_seen, self.entry_price) if self.position == -1 else self.min_price_seen
                     self.persist_state()
+                
+                # [NEW] Ensure sl_price is never 0 if in position (Prevention for 0.00 price error)
+                if self.sl_price == 0 and self.df_indicators is not None:
+                    row = self.df_indicators.iloc[-1]
+                    initial_sl_atr = self.settings.get("INITIAL_SL_ATR", 2.0)
+                    self.sl_price = self.entry_price - (row['atr'] * initial_sl_atr) if self.position == 1 else self.entry_price + (row['atr'] * initial_sl_atr)
+                    self.logger.info(f"🛡️ Initial SL Calculated: {self.sl_price:,.2f}")
             else:
                 # Exchange says no position, but bot might think we have one or have orphan orders
                 if positions is not None and len(positions) > 0:
@@ -641,6 +648,25 @@ class SymbolBotAsync:
             if self.active_retest_order_id: await self.check_retest_fill()
             
             # 3. Check StopLoss status
+            # [NEW] Adoption Logic: If we don't have an ID, try to find an existing STOP_MARKET order on the exchange
+            if not self.sl_order_id and self.position != 0:
+                try:
+                    open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                    for o in open_orders:
+                        o_type = str(o.get('type', '')).upper()
+                        o_side = str(o.get('side', '')).lower()
+                        # Match STOP_MARKET orders intended to close the position
+                        target_side = 'sell' if self.position == 1 else 'buy'
+                        if o_type == 'STOP_MARKET' and o_side == target_side:
+                            self.sl_order_id = o['id']
+                            self.sl_price = float(o.get('stopPrice') or o.get('price') or self.sl_price)
+                            self.last_sl_sync_price = self.sl_price
+                            self.logger.info(f"🛡️ SL Adopted from Exchange: ID={self.sl_order_id}, Price={self.sl_price:,.2f}")
+                            self.persist_state()
+                            break
+                except Exception as e:
+                    self.logger.warning(f"Failed to scan for existing SL orders: {e}")
+
             if self.sl_order_id and self.position != 0:
                 try:
                     order = await self.fetch_trigger_order(self.sl_order_id)
