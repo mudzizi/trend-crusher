@@ -719,30 +719,28 @@ class SymbolBotAsync:
 
         # 2. Update trailing SL logic via strategy engine
         # check_exit_signal will update state['sl_price'] if trailing conditions are met
+        old_sl = self.sl_price
         is_exit_triggered = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
         
         # Update local values from engine result
         self.sl_price = state['sl_price']
 
+        # [NEW] Enhanced SL Sync Logic for V7.0
+        # Force sync if SL moved significantly (0.05%) OR if it's the first time it moved (Break-even hit)
+        sync_needed = False
+        if self.last_sl_sync_price == 0:
+            sync_needed = True # First sync
+        else:
+            diff_pct = abs(self.sl_price - self.last_sl_sync_price) / self.last_sl_sync_price
+            if diff_pct > 0.0003: # Tightened to 0.03% for better precision
+                sync_needed = True
+
+        if sync_needed and not is_exit_triggered:
+            self.logger.info(f"🔄 SL Update Required: {old_sl:,.2f} -> {self.sl_price:,.2f} (Exchange Syncing...)")
+            await self.sync_sl_to_exchange()
+
         # 3. Handle Exit Condition
         if is_exit_triggered:
-            # [FAIL-SAFE] 만약 현재가가 손절가에 도달했는데, 거래소 주문이 아직 예전 가격(동기화 전)에 머물러 있다면
-            # 거래소 체결을 기다리지 않고 즉시 시장가로 탈출하여 수익을 보존합니다.
-            sync_diff = abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1)
-            if sync_diff > 0.0005: # 0.05% 이상 차이날 경우 동기화 전으로 판단
-                self.logger.warning(f"🚨 {self.symbol} SL Hit ({self.last_price:,.2f}) before Exchange Sync (Diff: {sync_diff:.4f}). Emergency Market Exit!")
-                await self.execute_exit()
-                return
-
-            # 일반적인 경우(동기화 완료)에는 거래소의 SL 주문이 체결되기를 기다립니다.
-            if (self.position == 1 and self.last_price <= self.sl_price) or \
-               (self.position == -1 and self.last_price >= self.sl_price):
-                self.logger.info(f"⏳ {self.symbol} price {self.last_price:,.2f} hit SL {self.sl_price:,.2f}. Waiting for exchange FILL event...")
-                return
-
-        # 4. Sync Trailing SL to exchange if it moved significantly
-        if abs(self.sl_price - self.last_sl_sync_price) / (self.last_sl_sync_price or 1) > 0.0005: 
-            await self.sync_sl_to_exchange()
 
     async def sync_sl_to_exchange(self, force_create=False):
         if self.settings["DRY_RUN"] or self.position == 0 or self.quantity <= 0:
