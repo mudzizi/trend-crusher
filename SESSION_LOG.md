@@ -1,3 +1,21 @@
+# Trading Session Log (2026-06-08) - Milestone: Unify Legacy Synchronous Bots onto Async Core (v13.7.0)
+
+## ✅ 완료된 작업
+1. **레거시 동기식 봇 개편 (`live_bot.py`, `live_bot_multi.py`)**:
+   - `scripts/live_bot.py`(단일 심볼 동기 봇) 및 `scripts/live_bot_multi.py`(멀티 심볼 동기 봇)에 존재하던 중복 마진 설정, 주문, 폴링 루프 등 약 570여 줄의 레거시 동기식 소스 코드를 전면 제거.
+   - 두 실행 파일을 모던 비동기 봇 코어(`src/bot/live_bot_async.py`)로 연동/실행되도록 얇은 Facade 래퍼 구조로 재작성 완료.
+2. **동적 심볼 수 제어 및 로깅 경로 보존**:
+   - `scripts/live_bot.py` 호출 시 `CONFIG["SYMBOL"]`만을 단일 원소 리스트로 변형하여 비동기 코어에 전달하며, `log/live_bot.log`에 로그가 쌓이도록 로깅 설정을 보존.
+   - `scripts/live_bot_multi.py` 역시 비동기 멀티 코어 실행을 하되 `log/live_bot_multi.log`에 정상 로깅되도록 매핑.
+3. **CLI 실행 호환성 검증**:
+   - `PYTHONPATH` 누락으로 인한 런타임 오류 방지를 위해, 스크립트 실행 즉시 프로젝트 루트 경로를 `sys.path`에 자동 마운트하도록 복구 가드를 추가.
+
+## 🧪 검증 결과
+- **자동화 테스트 검증**: `pytest` 전체 실행 결과 91개 테스트 케이스가 100% 모두 성공(Pass)함을 확인.
+- **수동 구동 검증**: `python scripts/live_bot.py`를 직접 구동하여 웹소켓 마운트 및 거래소 오더 동기화 상태로 정상 진입함을 로그상으로 검증 완료.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Strategy Interface Abstraction & Modular Backtest Engine (v13.6.0)
 
 ## ✅ 완료된 작업

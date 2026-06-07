@@ -2,6 +2,13 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.7.0] - 2026-06-08
+### **🤖 Unify Legacy Synchronous Bots onto Async Core**
+- **Legacy Bot Consolidation**: Refactored `scripts/live_bot.py` and `scripts/live_bot_multi.py` by removing over 570 lines of duplicate synchronous trading loops, order syncs, and config loadings.
+- **Async Execution Wrapper**: Replaced the synchronous bot cores with modern thin wrappers that delegate all execution to the asynchronous multi-symbol bot core (`src/bot/live_bot_async.py`), securing a single source of truth (SSOT) for live trading.
+- **CLI Compatibility**: Preserved command-line interface arguments and logging file targets (`log/live_bot.log` and `log/live_bot_multi.log`) to guarantee zero regression for existing automation pipelines.
+- **Robust Path Resolution**: Appended the project root path to `sys.path` in both scripts to prevent `ModuleNotFoundError` when run directly without setting `PYTHONPATH`.
+
 ## [13.6.0] - 2026-06-08
 ### **⚙️ Strategy Interface Abstraction & Modular Backtest Engine**
 - **Strategy Abstraction**: Introduced the `BaseStrategy` abstract base class in `src/strategy_base.py` to define standard interfaces for indicator calculation, entry detection, and exit signals.
