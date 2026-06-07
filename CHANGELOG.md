@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.8.0] - 2026-06-08
+### **⚡ Optimization Engine Performance Acceleration**
+- **Indicator Calculation Caching**: Optimized parameter grid search by pre-calculating and caching indicators per `EMA_TREND_PERIOD` (the only parameter affecting series operations), reducing redundant calculation operations by 16x (from 48 down to 3).
+- **Multiprocessing Grid Search**: Integrated `ProcessPoolExecutor` to run backtesting in parallel across all available CPU cores. Restructured the backtest worker function `_run_single_search` at the top level of the module for `pickle` serialization.
+- **Robust Testing Verification**: Implemented a comprehensive test suite in `tests/test_optimizer_engine.py` using mocked data sources to guarantee accurate parameter optimization without actual file I/O or network requests.
+
 ## [13.7.0] - 2026-06-08
 ### **🤖 Unify Legacy Synchronous Bots onto Async Core**
 - **Legacy Bot Consolidation**: Refactored `scripts/live_bot.py` and `scripts/live_bot_multi.py` by removing over 570 lines of duplicate synchronous trading loops, order syncs, and config loadings.
