@@ -4,6 +4,7 @@
 1. **거래소 포지션 및 미체결 주문 동기화 수정**:
    * CCXT 심볼 명명 규칙(예: `SUI/USDT:USDT`)과 봇 내부 심볼 매칭 로직의 불일치를 개선하여, 시작 시 거래소의 활성 포지션을 정확히 인식하도록 수정.
    * 포지션이 없을 때(`IDLE` 상태) 거래소에 남겨진 Sniper 대기 주문 및 Retest Limit 주문을 감지하여 봇 상태와 동기화하는 로직 추가.
+   * **기존 SL 주문의 확실한 청산(Targeted SL Cancel)**: `cancel_all_orders`가 일부 STOP_MARKET 주문을 제대로 취소하지 못하거나 다른 무관한 주문(Limit Maker 등)까지 전부 취소해 버릴 수 있는 문제를 방지하기 위해, 기존 `self.sl_order_id` 취소 시도 후 거래소의 해당 심볼 STOP 주문을 개별 ID로 조회하여 타겟 취소하는 방식으로 보완.
 2. **상태 표시 및 드라이런 시뮬레이션 보완**:
    * Telegram `/status` 조회 시 포지션이 없더라도 Sniper 또는 Retest 주문이 활성화된 경우 `SNIPER AMBUSH` 혹은 `RETEST AMBUSH`로 상세 상태를 출력하도록 개선.
    * `DRY_RUN` 모드에서 가상 SL 주문 시뮬레이션 상태(`self.sl_order_id = "DRY_SL"`)가 할당되도록 보완하여, 테스트 및 시뮬레이션 시 발생하던 상태 검증 오류 해결.

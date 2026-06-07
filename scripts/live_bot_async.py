@@ -369,7 +369,21 @@ class SymbolBotAsync:
             return
         if self.position == 0: return
         try:
-            await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
+            if self.sl_order_id:
+                try:
+                    await self.retry_api_call(self.exchange.cancel_order, self.sl_order_id, self.symbol)
+                    self.logger.info(f"🛡️ Canceled old SL order by ID: {self.sl_order_id}")
+                except Exception as ex:
+                    pass
+            orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+            target_side = 'sell' if self.position == 1 else 'buy'
+            for o in orders:
+                if ('STOP' in str(o.get('type','')).upper()) and o.get('side','').lower() == target_side:
+                    try:
+                        await self.retry_api_call(self.exchange.cancel_order, o['id'], self.symbol)
+                        self.logger.info(f"🛡️ Canceled existing SL order: {o['id']}")
+                    except Exception as ex:
+                        self.logger.error(f"Error canceling SL order {o['id']}: {ex}")
             params = {'stopPrice': self.sl_price, 'reduceOnly': True}
             order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
             self.sl_order_id, self.last_sl_sync_price = order['id'], self.sl_price
