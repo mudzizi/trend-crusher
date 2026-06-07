@@ -2,6 +2,12 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.4.3] - 2026-06-08
+### **🤖 Telegram Auto-Menu & Comprehensive Status Command**
+- **Bot Commands Auto-Registration**: Integrated `notifier.set_commands()` inside bot startup sequences (`live_bot_async.py`, `live_bot_multi.py`, and `live_bot.py`) to automatically update the Telegram bot commands menu upon initiation.
+- **Enhanced Status Reports**: Overhauled `SymbolBotAsync.get_detailed_status` to report coin entry price, quantity, stop loss, current price, and unrealized PnL alongside current values and standards for all trading indicators (Trend EMA, Donchian Channel, Volume Burst, ADX, Choppiness Index, Chaos Index, Squeeze Score, and EMA Slope).
+- **Dashboard Test suite Fixes**: Bypassed basic authentication checks during unit tests in `tests/test_dashboard.py` to fix pre-existing 401 unauthorized test failures.
+
 ## [13.3.8] - 2026-06-06
 ### **⚡ Intelligent API Scaling & Operational Resilience**
 - **Memory-Based OHLCV Updates**: Optimized `on_kline_update` to update candles in-memory using WebSocket data. Full REST API fetches (1,000 bars) now only occur when a candle actually closes (`kline['x']`). This completely eliminates "API Rate Limit" warnings and OS-level process kills (Exit -9).

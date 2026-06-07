@@ -301,6 +301,7 @@ def main():
     db = DBManager()
     pm = PortfolioManager(exchange, CONFIG)
     notifier = TelegramNotifier()
+    notifier.set_commands()
     viz = TradingVisualizer()
     
     symbols = CONFIG["SYMBOLS_LIST"]

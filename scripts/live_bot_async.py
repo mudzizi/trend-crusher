@@ -502,15 +502,82 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Persist error: {e}")
 
     def get_detailed_status(self):
+        if self.df_indicators is None or self.df_indicators.empty:
+            indicators_str = "  - Indicator Data: N/A"
+        else:
+            row = self.df_indicators.iloc[-1]
+            cur_p = self.last_price
+            ema_h = row.get('ema_h', 0)
+            upper = row.get('upper', 0)
+            lower = row.get('lower', 0)
+            volume = row.get('volume', 0)
+            avg_vol = row.get('avg_vol', 0)
+            adx = row.get('adx', 0)
+            adx_4h = row.get('adx_4h', 0)
+            chop = row.get('chop', 0)
+            chaos = row.get('chaos', 0)
+            squeeze = row.get('squeeze', 0)
+            ema_slope = row.get('ema_slope', 0)
+
+            vol_mult = self.settings.get("VOL_MULTIPLIER", 2.2)
+            adx_threshold = self.settings.get("ADX_FILTER_LEVEL", 20.0)
+            adx_4h_threshold = self.settings.get("ADX_4H_THRESHOLD", 15.0)
+            chaos_threshold = self.settings.get("CHAOS_THRESHOLD", 20.0)
+
+            trend_status = "BULL 🚀" if cur_p > ema_h else "BEAR 📉"
+            vol_status = "Burst 🔥" if volume > (avg_vol * vol_mult) else "Normal 💤"
+            adx_status = "Trending 📈" if adx > adx_threshold else "Weak 📉"
+            adx_4h_status = "Strong 📈" if adx_4h > adx_4h_threshold else "Weak 📉"
+            chop_status = "Consolidating 🌀" if chop > 61.8 else ("Trending ⚡" if chop < 38.2 else "Normal ⚖️")
+            chaos_status = "High 🌀" if chaos >= chaos_threshold else "Normal 💤"
+            slope_status = "Positive 📈" if ema_slope > 0 else "Negative 📉"
+
+            indicators_str = (
+                f"  - Trend: {trend_status} (Price: {cur_p:,.4f} vs EMA: {ema_h:,.4f})\n"
+                f"  - Donchian: Upper: {upper:,.4f} / Lower: {lower:,.4f}\n"
+                f"  - Volume (1h): {volume:,.1f} (Target: {avg_vol * vol_mult:,.1f}, {vol_mult}x) -> {vol_status}\n"
+                f"  - ADX (1h): {adx:.1f} (Target: {adx_threshold:.1f}) -> {adx_status}\n"
+                f"  - ADX (4h): {adx_4h:.1f} (Target: {adx_4h_threshold:.1f}) -> {adx_4h_status}\n"
+                f"  - Choppiness: {chop:.1f} (Target: 38.2-61.8) -> {chop_status}\n"
+                f"  - Chaos Index: {chaos:.1f} (Target: {chaos_threshold:.1f}) -> {chaos_status}\n"
+                f"  - Squeeze Score: {squeeze:.2f}\n"
+                f"  - EMA Slope: {ema_slope:+.4f} -> {slope_status}"
+            )
+
         if self.position != 0:
             pnl = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.entry_price != 0 else 0
-            return f"• {self.symbol}: {'LONG' if self.position==1 else 'SHORT'} ({pnl:+.2f}%) | SL: {self.sl_price:,.2f}\n"
+            pos_name = "LONG 🟢" if self.position == 1 else "SHORT 🔴"
+            return (
+                f"• *{self.symbol}*: {pos_name}\n"
+                f"  - 진입가: {self.entry_price:,.4f}\n"
+                f"  - 수량: {self.quantity:.4f}\n"
+                f"  - 손절가: {self.sl_price:,.4f}\n"
+                f"  - 현재가: {self.last_price:,.4f}\n"
+                f"  - 현재 PnL: {pnl:+.2f}%\n"
+                f"{indicators_str}\n"
+            )
         elif self.active_sniper_order_id:
-            return f"• {self.symbol}: SNIPER AMBUSH (OrderID: {self.active_sniper_order_id}) | SL: {self.sl_price:,.2f}\n"
+            return (
+                f"• *{self.symbol}*: SNIPER AMBUSH 🏹\n"
+                f"  - 주문 ID: {self.active_sniper_order_id}\n"
+                f"  - 손절가: {self.sl_price:,.4f}\n"
+                f"  - 현재가: {self.last_price:,.4f}\n"
+                f"{indicators_str}\n"
+            )
         elif self.active_retest_order_id:
-            return f"• {self.symbol}: RETEST AMBUSH (OrderID: {self.active_retest_order_id}) | SL: {self.sl_price:,.2f}\n"
+            return (
+                f"• *{self.symbol}*: RETEST AMBUSH 🎣\n"
+                f"  - 주문 ID: {self.active_retest_order_id}\n"
+                f"  - 손절가: {self.sl_price:,.4f}\n"
+                f"  - 현재가: {self.last_price:,.4f}\n"
+                f"{indicators_str}\n"
+            )
         else:
-            return f"• {self.symbol}: IDLE\n"
+            return (
+                f"• *{self.symbol}*: IDLE 💤\n"
+                f"  - 현재가: {self.last_price:,.4f}\n"
+                f"{indicators_str}\n"
+            )
 
 async def handle_commands(bots, notifier):
     offset = None
@@ -533,6 +600,7 @@ async def handle_commands(bots, notifier):
 
 async def main():
     db, notifier = DBManager(), TelegramNotifier()
+    notifier.set_commands()
     exchange = getattr(ccxt, CONFIG["EXCHANGE"])({'apiKey': CONFIG["BINANCE_API_KEY"], 'secret': CONFIG["BINANCE_SECRET"], 'options': {'defaultType': 'future'}})
     pm = PortfolioManagerAsync(exchange, CONFIG)
     await exchange.load_markets()

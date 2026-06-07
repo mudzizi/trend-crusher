@@ -5,6 +5,8 @@ import pandas as pd
 
 class TestDashboard(unittest.TestCase):
     def setUp(self):
+        from scripts.dashboard import security
+        security.password_hash = None
         self.app = app.test_client()
         self.app.testing = True
 

@@ -31,6 +31,7 @@ class TrendCrusherLive:
             'enableRateLimit': True
         })
         self.notifier = TelegramNotifier()
+        self.notifier.set_commands()
         self.db = DBManager()
         self.viz = TradingVisualizer()
         self.symbol = CONFIG["SYMBOL"]
