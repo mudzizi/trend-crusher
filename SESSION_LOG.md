@@ -1,3 +1,16 @@
+# Trading Session Log (2026-06-08) - Milestone: Stop Loss Sync & Duplicate Order Prevention (v13.4.1)
+
+## ✅ 완료된 작업
+1. **손절 주문(Stop Loss) 중복 감지 및 자동 클린업 보완**:
+   * 바이낸스 및 CCXT API에서 손절(Stop Loss) 주문이 일반 type 명칭(`STOP_MARKET` 등) 외에 `stopPrice` 또는 `triggerPrice` 파라미터만 포함된 상태로 반환될 때도 감지할 수 있도록 조건 강화.
+   * `sync_all_orders` 및 `sync_sl_to_exchange` 내 stop order 판별 로직을 개선하여 거래소에 남겨진 기존 손절 주문을 완벽하게 취소한 뒤 새로운 손절을 접수하도록 보완.
+   * 이로써 손절가 상향/하향 조정 시 기존 주문이 취소되지 않고 새로운 주문이 계속해서 중복으로 쌓이던 현상을 완전히 예방.
+
+## 🧪 검증 결과
+- **테스트 통과**: `test_sl_robustness.py`, `test_sync_open_orders.py` 등을 포함한 전체 82개 유닛/통합 테스트가 100% 통과(Pass)됨을 확인.
+
+---
+
 # Trading Session Log (2026-06-07) - Milestone: Dashboard Security Audit & Performance Optimization (v13.4.0)
 
 ## ✅ 완료된 작업

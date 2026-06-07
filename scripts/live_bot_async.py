@@ -344,22 +344,44 @@ class SymbolBotAsync:
                     self.sl_price = self.entry_price + (row['atr']*2.0)*(-self.position)
             else:
                 if self.position != 0: self.position = 0; await self.exchange.cancel_all_orders(self.symbol)
-            if not self.sl_order_id and self.position != 0:
+            if self.position != 0:
                 orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
                 target_side = 'sell' if self.position == 1 else 'buy'
+                found_sl = None
                 for o in orders:
-                    if ('STOP' in str(o.get('type','')).upper()) and o.get('side','').lower()==target_side:
-                        self.sl_order_id, self.sl_price = o['id'], float(o.get('stopPrice', o.get('price', self.sl_price)))
-                        self.last_sl_sync_price = self.sl_price; break
+                    is_stop = 'STOP' in str(o.get('type','')).upper() or o.get('stopPrice') or o.get('triggerPrice')
+                    if is_stop and o.get('side','').lower()==target_side:
+                        found_sl = o
+                        break
+                if found_sl:
+                    self.sl_order_id = found_sl['id']
+                    self.sl_price = float(found_sl.get('stopPrice', found_sl.get('price', self.sl_price)))
+                    self.last_sl_sync_price = self.sl_price
+                else:
+                    self.sl_order_id = None
+                    self.last_sl_sync_price = 0
+            else:
+                self.sl_order_id = None
+                self.last_sl_sync_price = 0
             if self.position == 0:
                 orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                found_sniper = None
+                found_retest = None
                 for o in orders:
-                    if 'STOP' in str(o.get('type', '')).upper() or o.get('stopPrice'):
-                        self.active_sniper_order_id = o['id']
-                        self.quantity = float(o.get('amount', self.quantity))
+                    if 'STOP' in str(o.get('type', '')).upper() or o.get('stopPrice') or o.get('triggerPrice'):
+                        found_sniper = o
                     elif str(o.get('type', '')).upper() == 'LIMIT':
-                        self.active_retest_order_id = o['id']
-                        self.quantity = float(o.get('amount', self.quantity))
+                        found_retest = o
+                if found_sniper:
+                    self.active_sniper_order_id = found_sniper['id']
+                    self.quantity = float(found_sniper.get('amount', self.quantity))
+                else:
+                    self.active_sniper_order_id = None
+                if found_retest:
+                    self.active_retest_order_id = found_retest['id']
+                    self.quantity = float(found_retest.get('amount', self.quantity))
+                else:
+                    self.active_retest_order_id = None
             self.persist_state()
         except Exception as e: self.logger.error(f"Sync error: {e}")
 
@@ -378,7 +400,8 @@ class SymbolBotAsync:
             orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
             target_side = 'sell' if self.position == 1 else 'buy'
             for o in orders:
-                if ('STOP' in str(o.get('type','')).upper()) and o.get('side','').lower() == target_side:
+                is_stop = 'STOP' in str(o.get('type','')).upper() or o.get('stopPrice') or o.get('triggerPrice')
+                if is_stop and o.get('side','').lower() == target_side:
                     try:
                         await self.retry_api_call(self.exchange.cancel_order, o['id'], self.symbol)
                         self.logger.info(f"🛡️ Canceled existing SL order: {o['id']}")
@@ -389,7 +412,14 @@ class SymbolBotAsync:
             self.sl_order_id, self.last_sl_sync_price = order['id'], self.sl_price
             self.persist_state()
             self.notifier.send_message(f"🛡️ SL Sync: {self.symbol} -> {self.sl_price:,.2f}")
-        except Exception as e: self.logger.error(f"SL Sync error: {e}")
+        except Exception as e:
+            if "-2022" in str(e) or "ReduceOnly" in str(e):
+                self.logger.warning(f"⚠️ ReduceOnly SL Sync rejected for {self.symbol}. Position may not exist on exchange. Syncing...")
+                self.position = 0
+                self.persist_state()
+                await self.sync_all_orders()
+                return
+            self.logger.error(f"SL Sync error: {e}")
 
     async def execute_entry(self, direction, atr):
         try:
