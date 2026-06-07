@@ -1,3 +1,19 @@
+# Trading Session Log (2026-06-08) - Milestone: Binance Futures Conditional Order Fetch Fix (v13.4.2)
+
+## ✅ 완료된 작업
+1. **조건부 주문(Stop/Trigger Orders) API 호출 정밀 튜닝**:
+   * 바이낸스 Futures API의 독특한 스펙으로 인해, 기본 `fetch_open_orders` 호출 시 일반 Limit 주문만 반환되고 Stop Market(손절/스나이퍼) 주문은 반환되지 않는 문제를 규명.
+   * `get_all_open_orders` 헬퍼 메서드를 추가하여 standard open orders(limit)와 `params={'stop': True}`를 추가한 conditional orders(stop)를 각각 호출한 뒤, ID 기준으로 병합(Deduplication)하여 반환하도록 설계.
+   * `_is_over_safety_limit`, `sync_all_orders`, `sync_sl_to_exchange`가 모두 이 새 헬퍼 메서드를 사용하여 정상적으로 손절 주문을 100% 인식 및 자동 청산/관리하도록 보완.
+2. **동적 주문 동기화 상세 로그(Verbose Logging) 보강**:
+   * `sync_all_orders` 및 `sync_sl_to_exchange` 내부에서 현재 감지한 포지션 정보, 조회한 손절 주문 리스트와 매칭 결과, 구 손절 주문의 취소 여부 등을 상세 로그(`self.logger.info`)로 출력하도록 조치하여 진단 효율성 강화.
+
+## 🧪 검증 결과
+- **테스트 통과**: 수정된 비동기 결합 주문 패치 상태에서 전체 82개 유닛/통합/e2e 테스트의 성공적 통과 확인.
+- **실전 검증**: 로컬 임시 스크립트를 통한 실제 바이낸스 거래소 포지션 및 Open Orders(Limit + Stop) 동기화 검증 성공.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Stop Loss Sync & Duplicate Order Prevention (v13.4.1)
 
 ## ✅ 완료된 작업
