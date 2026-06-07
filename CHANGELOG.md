@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.8.1] - 2026-06-08
+### **⚡ Align Mega Optimizer with Strategy V7.0 Indicators**
+- **Unified Indicator Engine**: Refactored `scripts/mega_overnight_optimizer.py` to calculate indicators via `TrendCrusherV2.calculate_indicators` instead of duplicating math logic locally, guaranteeing full compatibility with newer Momentum V7.0 filters (`chop`, `chaos`, `squeeze`, `ema_slope`, `adx_4h`).
+- **Robust Optimization Testing**: Confirmed compatibility with full verification tests and successfully pushed the patch to the remote repository.
+
 ## [13.8.0] - 2026-06-08
 ### **⚡ Optimization Engine Performance Acceleration**
 - **Indicator Calculation Caching**: Optimized parameter grid search by pre-calculating and caching indicators per `EMA_TREND_PERIOD` (the only parameter affecting series operations), reducing redundant calculation operations by 16x (from 48 down to 3).
