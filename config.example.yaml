@@ -6,6 +6,8 @@ VERSION = "13.2.0"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.
+# Default hash for 'admin' (werkzeug default)
+DASHBOARD_PASSWORD_HASH: "scrypt:32768:8:1$7f5mNqE5I8J2X4G1$d6499808945695027589d81395804369e80a0680650954084569850243690"
 EXCHANGE: "binance"
 BINANCE_API_KEY: "YOUR_BINANCE_API_KEY"
 BINANCE_SECRET: "YOUR_BINANCE_SECRET"

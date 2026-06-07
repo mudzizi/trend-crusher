@@ -1,5 +1,6 @@
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, send_from_directory, request, abort
 from src.db_manager import DBManager
+from src.security import SecuritySentinel
 from src.visualizer import TradingVisualizer
 from src.config import CONFIG
 from src.indicators import calculate_donchian, calculate_ema, calculate_avg_vol, calculate_adx
@@ -24,8 +25,28 @@ reports_dir = os.path.join(project_root, 'reports')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 db = DBManager()
+security = SecuritySentinel(db)
+
+def log_security_stats():
+    """Periodically logs the number of blocked IPs."""
+    while True:
+        try:
+            count = db.get_blocked_ip_count()
+            if count > 0:
+                logger.info(f"SECURITY STATUS: {count} IPs currently blocked (24h Whitelist Defense)")
+        except Exception as e:
+            logger.error(f"Error logging security stats: {e}")
+        time.sleep(3600) # Log every hour
+
+# Start periodic logging thread
+threading.Thread(target=log_security_stats, daemon=True).start()
+
 viz = TradingVisualizer()
 exchange = ccxt.binance({'options': {'defaultType': 'future'}})
+
+@app.before_request
+def secure_access():
+    return security.check_request()
 
 @app.route('/')
 def index():
@@ -221,8 +242,15 @@ def index():
                            backtest_reports=backtest_reports,
                            live_monitors=live_monitors)
 
-@app.route('/static/<filename>')
+@app.route('/static/<path:filename>')
 def serve_static(filename):
+    # Security: Normalize path and prevent Path Traversal
+    target_path = os.path.abspath(os.path.join(static_dir, filename))
+    base_path = os.path.abspath(static_dir)
+    
+    if not target_path.startswith(base_path):
+        return "Access Denied: Invalid Path", 403
+        
     return send_from_directory(static_dir, filename)
 
 @app.route('/reports/<path:filename>')

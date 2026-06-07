@@ -119,9 +119,44 @@ class DBManager:
                     conn.execute(f"ALTER TABLE history_1h ADD COLUMN {col} REAL DEFAULT 0")
                 except: pass
             
+            # [NEW] Table for Security: Blocked IPs (Temporary)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS blocked_ips (
+                    ip TEXT PRIMARY KEY,
+                    reason TEXT,
+                    blocked_at DATETIME DEFAULT (datetime('now','localtime')),
+                    expires_at DATETIME
+                )
+            """)
+
             # Indexes for performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_live_indicators_symbol ON live_indicators(symbol)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_history_1h_symbol ON history_1h(symbol)")
+
+    def block_ip(self, ip, reason, duration_hours=24):
+        """Blocks an IP address for a specified duration."""
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT OR REPLACE INTO blocked_ips (ip, reason, blocked_at, expires_at) 
+                VALUES (?, ?, datetime('now','localtime'), datetime('now','localtime', ? || ' hours'))
+            """, (ip, reason, f"{duration_hours:+}"))
+
+    def is_ip_blocked(self, ip):
+        """Checks if an IP is in the blacklist and not expired."""
+        with self._get_connection() as conn:
+            # First, cleanup expired blocks to keep the table lean
+            conn.execute("DELETE FROM blocked_ips WHERE expires_at <= datetime('now','localtime')")
+            
+            df = pd.read_sql_query("SELECT ip FROM blocked_ips WHERE ip = ?", conn, params=(ip,))
+            return not df.empty
+
+    def get_blocked_ip_count(self):
+        """Returns the number of currently blocked IPs."""
+        with self._get_connection() as conn:
+            # Cleanup first
+            conn.execute("DELETE FROM blocked_ips WHERE expires_at <= datetime('now','localtime')")
+            df = pd.read_sql_query("SELECT COUNT(*) as count FROM blocked_ips", conn)
+            return int(df.iloc[0]['count'])
 
     def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos=0, squeeze=0, slope=0, chop=0):
         """Logs 1h technical snapshot. timestamp can be explicit or None for 'now'."""

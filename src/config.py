@@ -36,7 +36,8 @@ def load_config():
         "TELEGRAM_CHAT_ID": "TELEGRAM_CHAT_ID",
         "DRY_RUN": "DRY_RUN",
         "SYMBOL": "SYMBOL",
-        "SEED": "SEED"
+        "SEED": "SEED",
+        "DASHBOARD_PASSWORD_HASH": "DASHBOARD_PASSWORD_HASH"
     }
 
     for config_key, env_key in env_mappings.items():
