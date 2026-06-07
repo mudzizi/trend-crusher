@@ -1,7 +1,11 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from scripts.dashboard import app
 import pandas as pd
+import pytest
+from scripts.live_bot_async import SymbolBotAsync
+from src.db_manager import DBManager
+from src.config import CONFIG
 
 class TestDashboard(unittest.TestCase):
     def setUp(self):
@@ -92,6 +96,68 @@ class TestDashboard(unittest.TestCase):
         response = self.app.get('/')
         # Even with API error, the page should load (graceful degradation)
         self.assertEqual(response.status_code, 200)
+
+@pytest.fixture
+def db_manager(tmp_path):
+    # Use a temporary database for testing
+    db_file = tmp_path / "test_trading.db"
+    return DBManager(str(db_file))
+
+@pytest.fixture
+def mock_bot(db_manager):
+    config = CONFIG.copy()
+    config["DRY_RUN"] = True
+    config["SYMBOL"] = "ETH/USDT"
+    
+    mock_exchange = AsyncMock()
+    mock_pm = AsyncMock()
+    mock_notifier = MagicMock()
+    
+    with patch('scripts.live_bot_async.TrendCrusherV2'):
+        bot = SymbolBotAsync("ETH/USDT", mock_exchange, mock_pm, mock_notifier, db_manager)
+        bot.last_price = 2500.0
+        # Setup dummy indicators
+        bot.df_indicators = pd.DataFrame([{
+            'timestamp': pd.Timestamp.now(),
+            'upper': 2600.0,
+            'lower': 2400.0,
+            'avg_vol': 100.0,
+            'volume': 150.0, # 1.5x avg_vol
+            'adx': 20.0,
+            'ema_h': 2450.0, # Price is above EMA (Long bias)
+            'chaos': 20.0,
+            'squeeze': 0.0,
+            'ema_slope': 1.0,
+            'chop': 50.0
+        }])
+        return bot
+
+@pytest.mark.asyncio
+async def test_record_live_status_updates_db(mock_bot, db_manager):
+    # 1. Execute status recording
+    await mock_bot._record_live_status()
+    
+    # 2. Verify DB storage
+    status_df = db_manager.get_all_live_status()
+    assert not status_df.empty
+    assert status_df.iloc[0]['symbol'] == "ETH/USDT"
+    
+    # 3. Check specific calculation logic
+    assert status_df.iloc[0]['prox_ratio'] >= 0
+    assert status_df.iloc[0]['signal_score'] > 0
+
+@pytest.mark.asyncio
+async def test_dashboard_backend_fetches_correct_data(mock_bot, db_manager):
+    # Mocking the setup similar to what dashboard.py does
+    await mock_bot._record_live_status()
+    
+    # Simulate dashboard.py fetching
+    live_status_df = db_manager.get_all_live_status()
+    row = live_status_df.iloc[0]
+    
+    assert row['symbol'] == "ETH/USDT"
+    assert row['trend_ok'] == 1
+    assert row['last_price'] == 2500.0
 
 if __name__ == '__main__':
     unittest.main()

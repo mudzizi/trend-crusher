@@ -27,7 +27,7 @@ class SentinelTrendCrusher(TrendCrusherV2):
         
         return self.run_streaming_backtest(df_1m, pre_calculated_ind=df_1h_ind, sentinel=sentinel, **kwargs)
 
-def test_xrp_with_sentinel():
+def run_xrp_with_sentinel():
     symbol = "XRP/USDT"
     data_path = "data/XRP_USDT_2024_1m.csv"
     if not os.path.exists(data_path):

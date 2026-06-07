@@ -1,3 +1,33 @@
+# Trading Session Log (2026-06-08) - Milestone: Test Suite Consolidation & Simplification (v13.5.0)
+
+## ✅ 완료된 작업
+1. **테스트 슈트 통합 및 간소화**:
+   - 기존 `tests/` 폴더 내에 흩어져 있던 28개의 테스트 파일들을 기능 및 모듈 단위로 결합하여 **17개 파일**로 통합 완료.
+   - 데이터베이스 테스트(`test_async_db_manager.py` -> `test_db_manager.py`), 대시보드 테스트(`test_dashboard_live_sync.py` -> `test_dashboard.py`), 지표 테스트(`test_ema_fix.py` -> `test_indicators.py`), 전략 테스트(`test_strategy_v2.py` / `test_strategy_v7.py` -> `test_strategy.py`), 텔레그램 테스트(`test_telegram_buttons.py` / `test_telegram_status.py` -> `test_telegram.py`), 리스크 테스트(`test_risk_manager.py` / `test_risk_safety.py` -> `test_risk.py`), 감시자 테스트(`test_sentinel.py` / `test_security_sentinel.py` -> `test_sentinels.py`), 주문 동기화 테스트(`test_sl_robustness.py` / `test_sync_open_orders.py` -> `test_order_sync.py`), 비동기 봇 코어 테스트(`test_async_realtime.py` / `test_live_bot_initialization.py` / `test_live_optimizations.py` / `test_live_sync_pnl.py` -> `test_bot_async.py`) 통합 및 정리 완료.
+   - 통합이 완료된 기존 개별 테스트 파일들(총 11개 파일)은 저장소에서 완전히 제거하여 소스 코드를 깔끔하게 정돈.
+
+## 🧪 검증 결과
+- **테스트 전체 통과**: `PYTHONPATH=. ./venv/bin/pytest -v` 명령을 통해 통합된 17개 파일에 담긴 총 **88개 테스트 케이스가 100% 통과(Pass)**함을 확인.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Test Suite Refactoring & Dummy Test Elimination (v13.4.4)
+
+## ✅ 완료된 작업
+1. **더미/플레이스홀더 테스트 케이스 전면 교체**:
+   - `tests/test_risk_safety.py`: 기존에 단순 Mock 리턴값 자체를 검증하거나 단순 수학 비교(`0.05 < 0.1`)만 수행하던 무의미한 테스트 케이스들을 제거하고, `PortfolioManagerAsync.calculate_order_qty`의 실제 레버리지 제한 가동 로직과 `SymbolBotAsync._is_over_safety_limit`이 `RiskManager` 차단 설정을 준수하는지를 검증하는 실질적인 통합/유닛 테스트로 재구현.
+   - `tests/test_strategy_v2.py`: 로컬 테스트 바디 안에 가상 함수를 선언해 단언하던 `test_adaptive_trailing_stop_logic_blackbox` 및 단순 부등호 계산만 검사하던 `test_adx_filter_logic_check`를 폐기하고, 실제 `TrendCrusherV2`의 `check_exit_signal` (수익률 단계별 트레일링 배율 조정) 및 `check_entry_signal` (ADX 임계치 도달 여부) 메서드를 프로덕션 객체 대상으로 정밀 검증하도록 개선.
+   - `tests/test_live_optimizations.py`: 기존에 단순 변동률 공식 산식만을 검증하던 `test_sl_sync_detection`을 `SymbolBotAsync.check_exit` 호출 시 트레일링 스탑의 변동률이 0.03% 임계치를 넘길 때만 실제 거래소 주문 갱신(`sync_sl_to_exchange`)이 격발되는지를 추적하는 시나리오 테스트로 고도화.
+   - `tests/test_sentinel.py`: 모킹된 봇의 딕셔너리 변경 시뮬레이션에 불과했던 테스트를 제거하고, 프로덕션의 `MarketSentinel` 클래스를 대상으로 일일 손실률 제한(Kill Switch)과 Choppiness Index 횡보 필터 기능이 실제 작동하는지 직접 유닛 테스트하도록 재작성.
+2. **테스트 분리 및 중복 정리**:
+   - `tests/test_async_realtime.py`: 로컬 모킹 테스트였던 `test_per_symbol_toggle_sim` 및 `test_config_loading.py`와 완벽히 중복되던 `test_config_structure_consistency`를 제거하여 테스트 슈트를 슬림화.
+   - `scripts/test_sentinel_logic.py`: 어설션이 없고 실제 데이터 CSV가 없을 시 그대로 리턴되던 더미 스크립트 함수 `test_xrp_with_sentinel`을 `run_xrp_with_sentinel`로 이름을 변경하여 pytest의 자동 실행 대상(test_*)에서 제외.
+
+## 🧪 검증 결과
+- **테스트 무결성**: 위와 같이 의미 없는 테스트를 정밀 프로덕션 검증 테스트로 교체한 결과, 중복 및 더미 코드가 소멸하고 **전체 88개 핵심 테스트 케이스가 100% 통과(Pass)**함을 확인.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Telegram Auto-Menu & Comprehensive Status Command (v13.4.3)
 
 ## ✅ 완료된 작업

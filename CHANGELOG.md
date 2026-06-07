@@ -2,6 +2,13 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.5.0] - 2026-06-08
+### **🧹 Test Suite Consolidation & Simplification**
+- **Unified Test Architecture**: Consolidated 28 standalone test files down to exactly 17 clean, modular test files, removing redundant and overlapping test definitions.
+- **Async Bot Core Consolidation**: Created `tests/test_bot_async.py` as a single source of truth for the async bot lifecycle, merging `test_async_realtime.py`, `test_live_bot_initialization.py`, `test_live_optimizations.py`, and `test_live_sync_pnl.py`.
+- **Cleaned Up Test Files**: Removed 11 deprecated, consolidated standalone test files from the workspace.
+- **Zero-Regression Verification**: Ran the full test suite and verified that all 88 consolidated tests pass successfully.
+
 ## [13.4.3] - 2026-06-08
 ### **🤖 Telegram Auto-Menu & Comprehensive Status Command**
 - **Bot Commands Auto-Registration**: Integrated `notifier.set_commands()` inside bot startup sequences (`live_bot_async.py`, `live_bot_multi.py`, and `live_bot.py`) to automatically update the Telegram bot commands menu upon initiation.
