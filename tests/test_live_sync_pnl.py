@@ -66,7 +66,7 @@ async def test_execute_exit_calculates_real_pnl(mock_bot):
     mock_bot.last_price = 55000.0
     
     # Mock exchange response
-    mock_bot.exchange.create_market_order.return_value = {
+    mock_bot.exchange.create_order.return_value = {
         'average': 55000.0,
         'filled': 0.1,
         'fee': {'cost': 2.75}
@@ -87,13 +87,14 @@ async def test_force_exit_logic(mock_bot):
     mock_bot.exchange.fetch_positions.return_value = [
         {'symbol': 'BTC/USDT', 'contracts': '0.05'}
     ]
-    mock_bot.exchange.create_market_order.return_value = {
+    mock_bot.exchange.create_order.return_value = {
         'average': 50000.0, 
         'filled': 0.05,
         'fee': {'cost': 1.25}
     }
     mock_bot.entry_price = 49000.0
     mock_bot.position = 1
+    mock_bot.quantity = 0.05
     
     # Execute Force Exit
     await mock_bot.force_exit()

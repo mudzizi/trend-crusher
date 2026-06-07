@@ -108,9 +108,10 @@ async def test_command_flushing_on_startup():
     mock_bots = {}
     
     with patch('src.optimizer_engine.OptimizerEngine', MagicMock()), \
+         patch('os._exit', MagicMock()), \
          patch('asyncio.sleep', AsyncMock()):
         try:
-            await handle_commands(mock_bots, mock_notifier, mock_pm)
+            await handle_commands(mock_bots, mock_notifier)
         except StopLoop:
             pass # Expected break
             

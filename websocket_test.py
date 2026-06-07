@@ -17,9 +17,10 @@ def connect():
     )
     ws.run_forever(ping_interval=20, ping_timeout=10)
 
-while True:
-    try:
-        connect()
-    except Exception as e:
-        print("reconnect...", e)
-        time.sleep(3)
+if __name__ == "__main__":
+    while True:
+        try:
+            connect()
+        except Exception as e:
+            print("reconnect...", e)
+            time.sleep(3)

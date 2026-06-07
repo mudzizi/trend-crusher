@@ -102,7 +102,7 @@ class SymbolBotAsync:
         limit = float(self.settings.get("MAX_POSITION_VALUE_USDT", 1000.0))
         try:
             positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
-            pos = next((p for p in positions if p['symbol'].replace(':USDT','') == self.symbol.replace('/','')), None)
+            pos = next((p for p in positions if p['symbol'].replace('/', '').split(':')[0] == self.symbol.replace('/', '')), None)
             current_pos_value = abs(float(pos['notional'])) if pos and pos.get('notional') else 0
             open_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
             pending_value = 0
@@ -210,10 +210,10 @@ class SymbolBotAsync:
     async def on_order_update(self, o):
         async with self.lock:
             try:
-                oid, status, side, qty, avg_p = o['i'], o['X'], o['S'].lower(), float(o['z']), float(o['ap'])
+                oid, status, side, qty, avg_p = o['i'], o['X'], o['S'].lower(), float(o['z']), float(o.get('ap') or o.get('L') or 0)
                 if status == 'FILLED':
-                    if oid == self.sl_order_id:
-                        self.logger.info(f"🛡️ SL FILLED for {self.symbol}")
+                    if oid == self.sl_order_id or (self.position != 0 and side == ('sell' if self.position == 1 else 'buy')):
+                        self.logger.info(f"🛡️ SL/Exit FILLED for {self.symbol}")
                         await self._on_fill_success(-1 if side == 'buy' else 1, is_exit=True, price=avg_p)
                     elif oid == self.active_sniper_order_id:
                         self.logger.info(f"🎯 Sniper FILLED for {self.symbol}")
@@ -258,12 +258,22 @@ class SymbolBotAsync:
 
     async def check_exit(self):
         if self.df_indicators is None or self.position == 0: return
+        if not self.sl_order_id and not self.settings["DRY_RUN"]:
+            self.logger.warning(f"⚠️ {self.symbol} in position but NO SL order ID found. Attempting to recover...")
+            await self.sync_all_orders()
+            if not self.sl_order_id and self.position != 0:
+                self.logger.info(f"🛡️ Creating missing SL order for {self.symbol}...")
+                await self.sync_sl_to_exchange(force_create=True)
+                if not self.sl_order_id:
+                    self.logger.warning(f"⚠️ Failed to create SL order for {self.symbol}. Will retry in next loop. Monitor manually!")
+                    self.notifier.send_message(f"⚠️ **SL Creation Failed: {self.symbol}**\n봇이 다음 루프에서 재시도를 진행합니다. 확인이 필요합니다.")
+                    return
         row = self.df_indicators.iloc[-1]
         if self.position == 1: self.max_price_seen = max(self.max_price_seen, self.last_price)
         else: self.min_price_seen = min(self.min_price_seen, self.last_price)
         state = {'position': self.position, 'entry_price': self.entry_price, 'max_price_seen': self.max_price_seen, 'min_price_seen': self.min_price_seen, 'sl_price': self.sl_price}
-        triggered, new_sl = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
-        self.sl_price = new_sl
+        triggered = self.engine.check_exit_signal(row, self.last_price, state, self.settings)
+        self.sl_price = state['sl_price']
         if (self.last_sl_sync_price == 0 or abs(self.sl_price - self.last_sl_sync_price)/self.last_sl_sync_price > 0.0003) and not triggered:
             await self.sync_sl_to_exchange()
         if triggered:
@@ -325,7 +335,7 @@ class SymbolBotAsync:
         if self.settings["DRY_RUN"]: return
         try:
             positions = await self.retry_api_call(self.exchange.fetch_positions)
-            pos = next((p for p in positions if p['symbol'].replace(':USDT','') == self.symbol.replace('/','')), None)
+            pos = next((p for p in positions if p['symbol'].replace('/', '').split(':')[0] == self.symbol.replace('/', '')), None)
             if pos and float(pos['contracts']) != 0:
                 self.position = -1 if pos.get('side','').lower()=='short' or float(pos['contracts'])<0 else 1
                 self.entry_price, self.quantity = float(pos['entryPrice']), abs(float(pos['contracts']))
@@ -341,11 +351,23 @@ class SymbolBotAsync:
                     if ('STOP' in str(o.get('type','')).upper()) and o.get('side','').lower()==target_side:
                         self.sl_order_id, self.sl_price = o['id'], float(o.get('stopPrice', o.get('price', self.sl_price)))
                         self.last_sl_sync_price = self.sl_price; break
+            if self.position == 0:
+                orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
+                for o in orders:
+                    if 'STOP' in str(o.get('type', '')).upper() or o.get('stopPrice'):
+                        self.active_sniper_order_id = o['id']
+                        self.quantity = float(o.get('amount', self.quantity))
+                    elif str(o.get('type', '')).upper() == 'LIMIT':
+                        self.active_retest_order_id = o['id']
+                        self.quantity = float(o.get('amount', self.quantity))
             self.persist_state()
         except Exception as e: self.logger.error(f"Sync error: {e}")
 
     async def sync_sl_to_exchange(self, force_create=False):
-        if self.settings["DRY_RUN"] or self.position == 0: return
+        if self.settings["DRY_RUN"]:
+            self.sl_order_id = "DRY_SL"
+            return
+        if self.position == 0: return
         try:
             await self.retry_api_call(self.exchange.cancel_all_orders, self.symbol)
             params = {'stopPrice': self.sl_price, 'reduceOnly': True}
@@ -361,15 +383,23 @@ class SymbolBotAsync:
             qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
             if not qty or qty <= 0: return
             self.quantity = float(qty)
+            if self.settings["DRY_RUN"]:
+                self.entry_price = self.last_price
+                await self._on_fill_success(direction, price=self.entry_price)
+                return
             order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, 'buy' if direction == 1 else 'sell', self.quantity)
-            self.entry_price = float(order.get('average', self.last_price))
+            self.entry_price = float(order.get('average', self.last_price)) if isinstance(order, dict) else self.last_price
             await self._on_fill_success(direction, price=self.entry_price)
         except Exception as e: self.logger.error(f"Entry error: {e}")
 
     async def execute_exit(self):
         try:
-            await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
-            await self._on_fill_success(0, is_exit=True)
+            if self.settings["DRY_RUN"]:
+                await self._on_fill_success(0, is_exit=True, price=self.last_price)
+                return
+            order = await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
+            exit_price = float(order.get('average') or order.get('price') or self.last_price) if isinstance(order, dict) else self.last_price
+            await self._on_fill_success(0, is_exit=True, price=exit_price)
         except Exception as e:
             if "-2022" in str(e): self.position = 0; self.persist_state(); await self.sync_all_orders(); return
             self.logger.error(f"Exit error: {e}")
@@ -383,8 +413,15 @@ class SymbolBotAsync:
         except Exception as e: self.logger.error(f"Persist error: {e}")
 
     def get_detailed_status(self):
-        pnl = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.position != 0 and self.entry_price != 0 else 0
-        return f"• {self.symbol}: {'LONG' if self.position==1 else ('SHORT' if self.position==-1 else 'IDLE')} ({pnl:+.2f}%) | SL: {self.sl_price:,.2f}\n"
+        if self.position != 0:
+            pnl = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.entry_price != 0 else 0
+            return f"• {self.symbol}: {'LONG' if self.position==1 else 'SHORT'} ({pnl:+.2f}%) | SL: {self.sl_price:,.2f}\n"
+        elif self.active_sniper_order_id:
+            return f"• {self.symbol}: SNIPER AMBUSH (OrderID: {self.active_sniper_order_id}) | SL: {self.sl_price:,.2f}\n"
+        elif self.active_retest_order_id:
+            return f"• {self.symbol}: RETEST AMBUSH (OrderID: {self.active_retest_order_id}) | SL: {self.sl_price:,.2f}\n"
+        else:
+            return f"• {self.symbol}: IDLE\n"
 
 async def handle_commands(bots, notifier):
     offset = None

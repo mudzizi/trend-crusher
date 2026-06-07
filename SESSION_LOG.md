@@ -1,3 +1,21 @@
+# Trading Session Log (2026-06-07) - Milestone: Startup Sync & Resilience Optimization (v13.3.9)
+
+## ✅ 완료된 작업
+1. **거래소 포지션 및 미체결 주문 동기화 수정**:
+   * CCXT 심볼 명명 규칙(예: `SUI/USDT:USDT`)과 봇 내부 심볼 매칭 로직의 불일치를 개선하여, 시작 시 거래소의 활성 포지션을 정확히 인식하도록 수정.
+   * 포지션이 없을 때(`IDLE` 상태) 거래소에 남겨진 Sniper 대기 주문 및 Retest Limit 주문을 감지하여 봇 상태와 동기화하는 로직 추가.
+2. **상태 표시 및 드라이런 시뮬레이션 보완**:
+   * Telegram `/status` 조회 시 포지션이 없더라도 Sniper 또는 Retest 주문이 활성화된 경우 `SNIPER AMBUSH` 혹은 `RETEST AMBUSH`로 상세 상태를 출력하도록 개선.
+   * `DRY_RUN` 모드에서 가상 SL 주문 시뮬레이션 상태(`self.sl_order_id = "DRY_SL"`)가 할당되도록 보완하여, 테스트 및 시뮬레이션 시 발생하던 상태 검증 오류 해결.
+3. **테스트 가속 및 안정화 (회복력 테스트)**:
+   * 이전 Telegram `/close_all` 테스트 도중 `os._exit(0)` 호출로 인해 pytest 프로세스가 즉시 강제 종료되어 테스트 결과가 누락되던 문제를 `os._exit` 모킹을 통해 해결.
+
+## 🧪 검증 결과
+- **정확성**: `test_live_optimizations.py`를 포함한 모든 타겟 테스트가 성공적으로 통과(100% Pass)됨을 확인.
+- **안정성**: `pytest` 프로세스 비정상 종료 없이 전체 테스트 정상 수집 및 검증 완료.
+
+---
+
 # Trading Session Log (2026-06-06) - Milestone: Operational Resilience & Profit Protection (v13.3.8)
 
 ## ✅ 완료된 작업

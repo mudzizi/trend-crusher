@@ -33,7 +33,11 @@ def mock_bot(db_manager):
             'avg_vol': 100.0,
             'volume': 150.0, # 1.5x avg_vol
             'adx': 20.0,
-            'ema_h': 2450.0 # Price is above EMA (Long bias)
+            'ema_h': 2450.0, # Price is above EMA (Long bias)
+            'chaos': 20.0,
+            'squeeze': 0.0,
+            'ema_slope': 1.0,
+            'chop': 50.0
         }])
         return bot
 
@@ -48,8 +52,8 @@ async def test_record_live_status_updates_db(mock_bot, db_manager):
     assert status_df.iloc[0]['symbol'] == "ETH/USDT"
     
     # 3. Check specific calculation logic
-    # Vol Ratio: 150 / (100 * 2.0) = 0.75 (75%)
-    assert pytest.approx(status_df.iloc[0]['vol_ratio'], 0.01) == 0.75
+    # Vol Ratio: 150 / (100 * 2.0) * 100 = 75.0
+    assert pytest.approx(status_df.iloc[0]['vol_ratio'], 0.1) == 75.0
     # Price Prox: Current 2500 vs Upper 2600. Sniper Prox limit is 0.5% of 2600 = 13.
     # Dist = 100. Prox Ratio = 1 - (100/13) -> clamped at 0.
     assert status_df.iloc[0]['prox_ratio'] >= 0

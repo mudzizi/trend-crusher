@@ -92,6 +92,7 @@ async def test_no_market_order_on_sl_hit(mock_bot):
 async def test_emergency_sync_when_sl_missing(mock_bot):
     """Scenario: Position exists but SL order ID is missing. Trigger sync/exit."""
     mock_bot.position = -1 # SHORT
+    mock_bot.entry_price = 50000.0
     mock_bot.sl_order_id = None # CRITICAL MISSING ID
     
     with patch.object(mock_bot, 'sync_all_orders', new_callable=AsyncMock) as mock_sync:
