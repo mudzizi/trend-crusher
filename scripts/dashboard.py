@@ -270,7 +270,12 @@ def serve_report(filename):
         
     return send_from_directory(os.path.dirname(target_path), os.path.basename(target_path))
 
+from waitress import serve
+
 if __name__ == '__main__':
-    # Security: Disable debug mode and restrict to localhost in production
-    # Use SSH Tunneling (L 5000:localhost:5000) to access remotely
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    # Security: Use Waitress for production-grade serving with low memory overhead
+    # Bind to 127.0.0.1 for maximum security (access via SSH Tunneling)
+    logger.info("Starting TrendCrusher Dashboard with Waitress (Production)")
+    logger.info("Access locally via SSH Tunnel: ssh -L 5000:localhost:5000 user@gcp-ip")
+    
+    serve(app, host='127.0.0.1', port=5000, threads=4)
