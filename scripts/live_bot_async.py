@@ -387,7 +387,7 @@ class SymbolBotAsync:
                         self.logger.warning(f"⚠️ [{self.symbol}] Found {len(all_sl_orders)} duplicate SL orders on exchange. Cleaning up duplicates...")
                         for dup_order in all_sl_orders[1:]:
                             try:
-                                await self.retry_api_call(self.exchange.cancel_order, dup_order['id'], self.symbol)
+                                await self.cancel_trigger_order(dup_order['id'])
                                 self.logger.info(f"🛡️ [{self.symbol}] Canceled duplicate SL order: {dup_order['id']}")
                             except Exception as ex:
                                 self.logger.error(f"❌ [{self.symbol}] Failed to cancel duplicate SL order {dup_order['id']}: {ex}")
@@ -436,7 +436,7 @@ class SymbolBotAsync:
             self.logger.info(f"🔄 [{self.symbol}] Starting sync_sl_to_exchange (force={force_create})...")
             if self.sl_order_id:
                 try:
-                    await self.retry_api_call(self.exchange.cancel_order, self.sl_order_id, self.symbol)
+                    await self.cancel_trigger_order(self.sl_order_id)
                     self.logger.info(f"🛡️ [{self.symbol}] Canceled old SL order by ID: {self.sl_order_id}")
                 except Exception as ex:
                     self.logger.warning(f"⚠️ [{self.symbol}] Could not cancel old SL ID {self.sl_order_id}: {ex}")
@@ -446,7 +446,7 @@ class SymbolBotAsync:
                 is_stop = 'STOP' in str(o.get('type','')).upper() or o.get('stopPrice') or o.get('triggerPrice')
                 if is_stop and o.get('side','').lower() == target_side:
                     try:
-                        await self.retry_api_call(self.exchange.cancel_order, o['id'], self.symbol)
+                        await self.cancel_trigger_order(o['id'])
                         self.logger.info(f"🛡️ [{self.symbol}] Canceled duplicate/existing SL order: {o['id']}")
                     except Exception as ex:
                         self.logger.error(f"❌ [{self.symbol}] Error canceling SL order {o['id']}: {ex}")
