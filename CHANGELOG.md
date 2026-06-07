@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.6.0] - 2026-06-08
+### **⚙️ Strategy Interface Abstraction & Modular Backtest Engine**
+- **Strategy Abstraction**: Introduced the `BaseStrategy` abstract base class in `src/strategy_base.py` to define standard interfaces for indicator calculation, entry detection, and exit signals.
+- **Numba Logic Isolation**: Extracted high-performance JIT-compiled mathematical logic (`numba_check_entry`, `numba_check_exit`, `numba_find_first_exit`) from the strategy core into `src/strategy_numba.py` to achieve clear separation of concerns (SRP).
+- **Decoupled Backtester Engine**: Separated the 1m streaming simulation loop into `BacktestEngine` in `src/backtest_engine.py` which dynamically accepts any strategy conforming to `BaseStrategy`.
+- **Facade Compatibility**: Refactored `TrendCrusherV2.run_streaming_backtest` as a thin wrapper that delegates computation to the new `BacktestEngine`, preserving full backward compatibility with over 20 pre-existing optimization and analysis scripts.
+- **Comprehensive Refactored Tests**: Added `tests/test_strategy_refactored.py` to directly verify individual Numba functions and BacktestEngine execution, scaling the verified test suite count to 91 successful tests.
+
 ## [13.5.0] - 2026-06-08
 ### **🧹 Test Suite Consolidation & Simplification**
 - **Unified Test Architecture**: Consolidated 28 standalone test files down to exactly 17 clean, modular test files, removing redundant and overlapping test definitions.

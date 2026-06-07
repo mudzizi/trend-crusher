@@ -1,3 +1,22 @@
+# Trading Session Log (2026-06-08) - Milestone: Strategy Interface Abstraction & Modular Backtest Engine (v13.6.0)
+
+## ✅ 완료된 작업
+1. **전략 인터페이스 추상화 (`BaseStrategy`)**:
+   - `src/strategy_base.py`에 `BaseStrategy` 추상 베이스 클래스를 선언하여 지표 계산, 진입/청산 검증의 규격을 표준화.
+   - `TrendCrusherV2`가 `BaseStrategy`를 상속하도록 구조 개편.
+2. **Numba 가속 함수 모듈화 (`strategy_numba.py`)**:
+   - `src/strategy.py`에 혼재되어 있던 `@njit` 가속 연산 함수군(`numba_check_entry`, `numba_check_exit`, `numba_find_first_exit`)을 `src/strategy_numba.py`로 격리 이관.
+3. **독립 백테스터 엔진 분리 (`backtest_engine.py`)**:
+   - `TrendCrusherV2` 내부의 1분 단위 시뮬레이션 알고리즘을 `BacktestEngine` 클래스로 독립화하여 관심사 분리(SRP) 구현.
+   - 기존 분석 및 최적화 스크립트와의 하위 호환성을 100% 보장하기 위해 `TrendCrusherV2.run_streaming_backtest`는 `BacktestEngine`에 처리를 위임하는 Facade(래퍼) 메서드로 유지.
+4. **신규 리팩토링 검증 테스트 추가**:
+   - `tests/test_strategy_refactored.py`를 신설하여 분리된 Numba 함수들과 `BacktestEngine`을 직접 검증하는 테스트 케이스 확보.
+
+## 🧪 검증 결과
+- **테스트 무결성 증명**: `pytest`를 실행하여 새로 추가된 3개의 테스트를 포함한 총 **91개 핵심 테스트 케이스가 100% 정상 통과(Pass)**함을 검증 완료.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Test Suite Consolidation & Simplification (v13.5.0)
 
 ## ✅ 완료된 작업
