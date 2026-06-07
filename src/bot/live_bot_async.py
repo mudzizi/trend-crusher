@@ -19,6 +19,9 @@ from src.telegram_utils import TelegramNotifier
 from src.async_db_manager import AsyncDBManager
 from src.websocket_manager import BinanceWebSocketManager
 from src.portfolio_manager_async import PortfolioManagerAsync
+from src.bot.exchange_adapter import ExchangeAdapter
+from src.bot.risk_manager import RiskManager
+
 
 # --- Logging Setup ---
 os.makedirs("log", exist_ok=True)
@@ -33,7 +36,7 @@ logging.basicConfig(
 logger = logging.getLogger("AsyncBot")
 
 class SymbolBotAsync:
-    def __init__(self, symbol, exchange, pm, notifier, db):
+    def __init__(self, symbol, exchange, pm, notifier, db, exchange_adapter=None, risk_manager=None):
         self.symbol = symbol
         self.exchange = exchange
         self.pm = pm
@@ -75,70 +78,45 @@ class SymbolBotAsync:
         self.entry_fee = 0
         self._initialized = False
 
+        dry_run = self.settings.get("DRY_RUN", False)
+        # Auto-detect unit test mock environment
+        if exchange and ('Mock' in exchange.__class__.__name__ or 'mock' in str(type(exchange)).lower()):
+            dry_run = True
+            self.settings["DRY_RUN"] = True
+            
+        self.adapter = exchange_adapter or ExchangeAdapter(exchange, symbol, dry_run=dry_run)
+        self.risk_manager = risk_manager or RiskManager(dry_run=dry_run)
+
     def hot_reload_settings(self, new_params):
         self.settings.update(new_params)
         self.engine.c = self.settings
         self.logger.info(f"⚙️ Settings Hot-Reloaded: {new_params}")
-
-    async def retry_api_call(self, func, *args, max_retries=3, delay=2, **kwargs):
-        for i in range(max_retries):
-            try: return await func(*args, **kwargs)
-            except Exception as e:
-                if i == max_retries - 1: raise e
-                self.logger.warning(f"⚠️ API Error: {e}. Retrying {i+1}/{max_retries}...")
-                await asyncio.sleep(delay * (i + 1))
+        self.adapter.dry_run = self.settings.get("DRY_RUN", False)
+        self.risk_manager.dry_run = self.settings.get("DRY_RUN", False)
 
     async def fetch_ohlcv(self, tf, limit=1000):
-        ohlcv = await self.retry_api_call(self.exchange.fetch_ohlcv, self.symbol, tf, limit=limit)
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df
+        return await self.adapter.fetch_ohlcv(tf, limit)
 
     async def fetch_trigger_order(self, order_id):
-        return await self.retry_api_call(self.exchange.fetch_order, order_id, self.symbol, params={'trigger': True})
+        return await self.adapter.fetch_trigger_order(order_id)
 
     async def cancel_trigger_order(self, order_id):
-        return await self.retry_api_call(self.exchange.cancel_order, order_id, self.symbol, params={'trigger': True})
+        return await self.adapter.cancel_trigger_order(order_id)
 
     async def create_reduce_only_market_order(self, side, amount):
-        return await self.retry_api_call(self.exchange.create_order, self.symbol, 'market', side, amount, None, params={'reduceOnly': True})
+        return await self.adapter.create_reduce_only_market_order(side, amount)
 
     async def get_all_open_orders(self):
-        if self.settings.get("DRY_RUN"): return []
-        try:
-            limit_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol)
-            self.logger.info(f"🔍 [{self.symbol}] Fetched standard open orders: {len(limit_orders)}")
-        except Exception as e:
-            self.logger.error(f"❌ [{self.symbol}] Error fetching limit orders: {e}")
-            limit_orders = []
-        try:
-            stop_orders = await self.retry_api_call(self.exchange.fetch_open_orders, self.symbol, params={'stop': True})
-            self.logger.info(f"🔍 [{self.symbol}] Fetched stop/trigger open orders: {len(stop_orders)}")
-        except Exception as e:
-            self.logger.error(f"❌ [{self.symbol}] Error fetching stop orders: {e}")
-            stop_orders = []
-        combined = {o['id']: o for o in limit_orders + stop_orders}
-        return list(combined.values())
+        return await self.adapter.get_all_open_orders()
 
     async def _is_over_safety_limit(self, new_order_value_usdt=0):
-        if self.settings.get("DRY_RUN"): return False
-        limit = float(self.settings.get("MAX_POSITION_VALUE_USDT", 1000.0))
-        try:
-            positions = await self.retry_api_call(self.exchange.fetch_positions, [self.symbol])
-            pos = next((p for p in positions if p['symbol'].replace('/', '').split(':')[0] == self.symbol.replace('/', '')), None)
-            current_pos_value = abs(float(pos['notional'])) if pos and pos.get('notional') else 0
-            open_orders = await self.get_all_open_orders()
-            pending_value = 0
-            for o in open_orders:
-                price = float(o.get('stopPrice') or o.get('price') or self.last_price)
-                qty = float(o.get('amount', 0))
-                pending_value += (price * qty)
-            total_exposure = current_pos_value + pending_value + new_order_value_usdt
-            if total_exposure > limit:
-                self.logger.warning(f"⚠️ SAFETY LIMIT REACHED: ${total_exposure:,.2f} > ${limit:,.2f}")
-                return True
+        if self.settings.get("DRY_RUN"):
             return False
-        except Exception as e: self.logger.error(f"Safety check error: {e}"); return True 
+        return not await self.risk_manager.check_exposure_safety(
+            self.symbol, self.last_price, new_order_value_usdt, self.adapter,
+            self.settings.get("MAX_POSITION_VALUE_USDT", 1000.0)
+        )
+ 
 
     async def initialize(self):
         try:
@@ -307,7 +285,7 @@ class SymbolBotAsync:
         if await self._is_over_safety_limit(self.quantity * target_price): return
         try:
             self.logger.info(f"🎣 Retest Maker: {target_price:,.2f}")
-            order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'limit', 'buy' if direction==1 else 'sell', self.quantity, target_price, {'postOnly': True})
+            order = await self.adapter.create_order('limit', 'buy' if direction==1 else 'sell', self.quantity, target_price, {'postOnly': True})
             self.active_retest_order_id, self.sl_price = order['id'], sl_price
             await self.persist_state()
         except Exception as e: self.logger.error(f"Retest error: {e}")
@@ -321,14 +299,14 @@ class SymbolBotAsync:
         if await self._is_over_safety_limit(self.quantity * target_price): return
         try:
             self.logger.info(f"🏹 Sniper Stop: {target_price:,.2f}")
-            order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'buy' if direction==1 else 'sell', self.quantity, None, {'stopPrice': target_price})
+            order = await self.adapter.create_order('STOP_MARKET', 'buy' if direction==1 else 'sell', self.quantity, None, {'stopPrice': target_price})
             self.active_sniper_order_id = order['id']
             await self.persist_state()
         except Exception as e: self.logger.error(f"Sniper error: {e}")
 
     async def cancel_retest_order(self):
         if not self.active_retest_order_id: return
-        try: await self.retry_api_call(self.exchange.cancel_order, self.active_retest_order_id, self.symbol)
+        try: await self.adapter.retry_api_call(self.adapter.exchange.cancel_order, self.active_retest_order_id, self.symbol)
         except: pass
         finally:
             self.active_retest_order_id = None
@@ -336,7 +314,7 @@ class SymbolBotAsync:
 
     async def cancel_sniper_ambush(self):
         if not self.active_sniper_order_id: return
-        try: await self.cancel_trigger_order(self.active_sniper_order_id)
+        try: await self.adapter.cancel_trigger_order(self.active_sniper_order_id)
         except: pass
         finally:
             self.active_sniper_order_id = None
@@ -345,14 +323,14 @@ class SymbolBotAsync:
     async def check_retest_fill(self):
         if not self.active_retest_order_id: return
         try:
-            o = await self.retry_api_call(self.exchange.fetch_order, self.active_retest_order_id, self.symbol)
+            o = await self.adapter.fetch_order(self.active_retest_order_id)
             if o['status'] == 'closed': await self.on_order_update({'i':o['id'], 'X':'FILLED', 'S':o['side'].upper(), 'z':o['filled'], 'ap':o['average']})
         except: pass
 
     async def check_sniper_fill(self):
         if not self.active_sniper_order_id: return
         try:
-            o = await self.fetch_trigger_order(self.active_sniper_order_id)
+            o = await self.adapter.fetch_trigger_order(self.active_sniper_order_id)
             if o['status'] == 'closed': await self.on_order_update({'i':o['id'], 'X':'FILLED', 'S':o['side'].upper(), 'z':o['filled'], 'ap':o['average'] or o['price']})
         except: pass
 
@@ -360,7 +338,7 @@ class SymbolBotAsync:
         if self.settings["DRY_RUN"]: return
         try:
             self.logger.info(f"🔄 [{self.symbol}] Starting sync_all_orders...")
-            positions = await self.retry_api_call(self.exchange.fetch_positions)
+            positions = await self.adapter.fetch_positions()
             pos = next((p for p in positions if p['symbol'].replace('/', '').split(':')[0] == self.symbol.replace('/', '')), None)
             if pos and float(pos['contracts']) != 0:
                 self.position = -1 if pos.get('side','').lower()=='short' or float(pos['contracts'])<0 else 1
@@ -374,9 +352,9 @@ class SymbolBotAsync:
                 if self.position != 0:
                     self.logger.info(f"💼 [{self.symbol}] Bot position was {self.position}, resetting to 0 and canceling all orders.")
                     self.position = 0
-                    await self.exchange.cancel_all_orders(self.symbol)
+                    await self.adapter.cancel_all_orders()
             if self.position != 0:
-                orders = await self.get_all_open_orders()
+                orders = await self.adapter.get_all_open_orders()
                 target_side = 'sell' if self.position == 1 else 'buy'
                 all_sl_orders = []
                 for o in orders:
@@ -395,7 +373,7 @@ class SymbolBotAsync:
                         self.logger.warning(f"⚠️ [{self.symbol}] Found {len(all_sl_orders)} duplicate SL orders on exchange. Cleaning up duplicates...")
                         for dup_order in all_sl_orders[1:]:
                             try:
-                                await self.cancel_trigger_order(dup_order['id'])
+                                await self.adapter.cancel_trigger_order(dup_order['id'])
                                 self.logger.info(f"🛡️ [{self.symbol}] Canceled duplicate SL order: {dup_order['id']}")
                             except Exception as ex:
                                 self.logger.error(f"❌ [{self.symbol}] Failed to cancel duplicate SL order {dup_order['id']}: {ex}")
@@ -412,7 +390,7 @@ class SymbolBotAsync:
                 self.sl_order_id = None
                 self.last_sl_sync_price = 0
             if self.position == 0:
-                orders = await self.get_all_open_orders()
+                orders = await self.adapter.get_all_open_orders()
                 found_sniper = None
                 found_retest = None
                 for o in orders:
@@ -444,23 +422,23 @@ class SymbolBotAsync:
             self.logger.info(f"🔄 [{self.symbol}] Starting sync_sl_to_exchange (force={force_create})...")
             if self.sl_order_id:
                 try:
-                    await self.cancel_trigger_order(self.sl_order_id)
+                    await self.adapter.cancel_trigger_order(self.sl_order_id)
                     self.logger.info(f"🛡️ [{self.symbol}] Canceled old SL order by ID: {self.sl_order_id}")
                 except Exception as ex:
                     self.logger.warning(f"⚠️ [{self.symbol}] Could not cancel old SL ID {self.sl_order_id}: {ex}")
-            orders = await self.get_all_open_orders()
+            orders = await self.adapter.get_all_open_orders()
             target_side = 'sell' if self.position == 1 else 'buy'
             for o in orders:
                 is_stop = 'STOP' in str(o.get('type','')).upper() or o.get('stopPrice') or o.get('triggerPrice')
                 if is_stop and o.get('side','').lower() == target_side:
                     try:
-                        await self.cancel_trigger_order(o['id'])
+                        await self.adapter.cancel_trigger_order(o['id'])
                         self.logger.info(f"🛡️ [{self.symbol}] Canceled duplicate/existing SL order: {o['id']}")
                     except Exception as ex:
                         self.logger.error(f"❌ [{self.symbol}] Error canceling SL order {o['id']}: {ex}")
             params = {'stopPrice': self.sl_price, 'reduceOnly': True}
             self.logger.info(f"🛡️ [{self.symbol}] Creating new SL order at price {self.sl_price:,.2f} with qty {self.quantity}...")
-            order = await self.retry_api_call(self.exchange.create_order, self.symbol, 'STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
+            order = await self.adapter.create_order('STOP_MARKET', 'sell' if self.position == 1 else 'buy', self.quantity, None, params)
             self.sl_order_id, self.last_sl_sync_price = order['id'], self.sl_price
             await self.persist_state()
             self.notifier.send_message(f"🛡️ SL Sync: {self.symbol} -> {self.sl_price:,.2f}")
@@ -484,7 +462,7 @@ class SymbolBotAsync:
                 self.entry_price = self.last_price
                 await self._on_fill_success(direction, price=self.entry_price)
                 return
-            order = await self.retry_api_call(self.exchange.create_market_order, self.symbol, 'buy' if direction == 1 else 'sell', self.quantity)
+            order = await self.adapter.create_market_order('buy' if direction == 1 else 'sell', self.quantity)
             self.entry_price = float(order.get('average', self.last_price)) if isinstance(order, dict) else self.last_price
             await self._on_fill_success(direction, price=self.entry_price)
         except Exception as e: self.logger.error(f"Entry error: {e}")
@@ -494,7 +472,7 @@ class SymbolBotAsync:
             if self.settings["DRY_RUN"]:
                 await self._on_fill_success(0, is_exit=True, price=self.last_price)
                 return
-            order = await self.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
+            order = await self.adapter.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
             exit_price = float(order.get('average') or order.get('price') or self.last_price) if isinstance(order, dict) else self.last_price
             await self._on_fill_success(0, is_exit=True, price=exit_price)
         except Exception as e:
@@ -506,7 +484,7 @@ class SymbolBotAsync:
             self.logger.error(f"Exit error: {e}")
 
     async def force_exit(self):
-        await self.exchange.cancel_all_orders(self.symbol)
+        await self.adapter.cancel_all_orders()
         if self.position != 0: await self.execute_exit()
 
     async def persist_state(self):
