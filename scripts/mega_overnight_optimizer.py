@@ -88,26 +88,23 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     df_1h_base = get_all_base_bars(data_1m_filtered, "1h")
     df_4h_base = get_all_base_bars(data_1m_filtered, "4h")
     
-    # Adaptive EMA Period
-    ema_period = 200
-    if len(df_4h_base) < ema_period:
-        ema_period = max(10, len(df_4h_base) // 2)
+    # Adaptive EMA Period (calculate_indicators multiplies EMA_TREND_PERIOD by 4, so 50 -> 200)
+    ema_period = 50
+    if len(df_4h_base) < (ema_period * 4):
+        ema_period = max(3, len(df_4h_base) // 8)
     
-    ema_values = calculate_ema(df_4h_base, ema_period)
-    ema_s = pd.Series(ema_values.values, index=df_4h_base['timestamp'])
-    ema_h = ema_s.reindex(df_1h_base['timestamp']).ffill().values
-    
-    atr = calculate_atr(df_1h_base, 14)
-    avg_vol = calculate_avg_vol(df_1h_base, 20)
-    adx = calculate_adx(df_1h_base, 14)
+    strategy = TrendCrusherV2(config=CONFIG)
     
     ind_cache = {}
     for dp in donchian_periods:
-        df_ind = df_1h_base.copy()
-        df_ind['upper'], df_ind['lower'] = calculate_donchian(df_ind, dp)
-        df_ind['ema_h'], df_ind['atr'], df_ind['avg_vol'], df_ind['adx'] = ema_h, atr, avg_vol, adx
-        # Drop only essential NaNs
-        ind_cache[dp] = df_ind.dropna(subset=['upper', 'lower', 'atr', 'avg_vol', 'adx'])
+        test_cfg = CONFIG.copy()
+        test_cfg.update({
+            "DONCHIAN_PERIOD": dp,
+            "EMA_TREND_PERIOD": ema_period
+        })
+        df_ind = strategy.calculate_indicators(df_1h_base, df_4h_base, test_cfg)
+        # Drop essential NaNs for indicator stability, incorporating new v7 indicators
+        ind_cache[dp] = df_ind.dropna(subset=['upper', 'lower', 'atr', 'avg_vol', 'adx', 'chop', 'chaos', 'squeeze', 'ema_h'])
 
     # 2. Tasks
     all_combos = list(itertools.product(vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, risk_pcts, modes, adaptive_options))
