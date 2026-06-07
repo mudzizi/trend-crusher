@@ -1,3 +1,20 @@
+# Trading Session Log (2026-06-07) - Milestone: Dashboard Security Audit & Performance Optimization (v13.4.0)
+
+## ✅ 완료된 작업
+1. **대시보드 보안 감사 및 강화**:
+   * **Hashed Authentication 도입**: 평문 비밀번호 대신 `werkzeug.security`를 이용한 해시 기반 인증(`Basic Auth`)을 구현하여 보안성 강화.
+   * **보안 화이트리스트 및 차단 로직 개선**: 로컬 주소(`127.0.0.1`)는 차단 대상에서 제외(Self-DoS 방지)하고, 비정상 경로 접근 시 IP 차단(24h) 로직 적용.
+   * **경로 탐색(Path Traversal) 방지**: `/static`, `/reports` 경로 서빙 시 절대 경로 검증 로직 추가.
+2. **저사양 서버 메모리 최적화**:
+   * **Waitress WSGI Server 도입**: Flask 내장 개발 서버를 대체하여 메모리 점유율을 최소화하면서 안정적인 프로덕션급 서빙 환경 구축 (GCP e2-micro 최적화).
+   * **스레드 제한**: `threads=4` 설정을 통해 동시 요청 처리 성능을 확보하면서도 메모리 폭주를 방지.
+3. **보안 유틸리티 추가**:
+   * `scripts/generate_hash.py`: 사용자가 안전하게 비밀번호 해시를 생성할 수 있는 도구 제공.
+
+## 🧪 검증 결과
+- **보안 검토**: `src/security.py`의 해시 검증 및 IP 차단 예외 로직 구문 검사 통과.
+- **가용성**: Waitress 연동 및 Flask 앱 실행 구조 정상 작동 확인.
+
 # Trading Session Log (2026-06-07) - Milestone: Startup Sync & Resilience Optimization (v13.3.9)
 
 ## ✅ 완료된 작업
