@@ -370,21 +370,36 @@ class SymbolBotAsync:
             if self.position != 0:
                 orders = await self.get_all_open_orders()
                 target_side = 'sell' if self.position == 1 else 'buy'
-                found_sl = None
+                all_sl_orders = []
                 for o in orders:
                     is_stop = 'STOP' in str(o.get('type','')).upper() or o.get('stopPrice') or o.get('triggerPrice')
                     if is_stop and o.get('side','').lower()==target_side:
-                        found_sl = o
-                        break
-                if found_sl:
-                    self.sl_order_id = found_sl['id']
-                    self.sl_price = float(found_sl.get('stopPrice', found_sl.get('price', self.sl_price)))
+                        all_sl_orders.append(o)
+                
+                if all_sl_orders:
+                    primary_sl = all_sl_orders[0]
+                    self.sl_order_id = primary_sl['id']
+                    self.sl_price = float(primary_sl.get('stopPrice', primary_sl.get('price', self.sl_price)))
                     self.last_sl_sync_price = self.sl_price
-                    self.logger.info(f"🛡️ [{self.symbol}] Found matching SL order on exchange: ID={self.sl_order_id}, Price={self.sl_price}")
+                    self.logger.info(f"🛡️ [{self.symbol}] Primary SL order matched on exchange: ID={self.sl_order_id}, Price={self.sl_price}")
+                    
+                    if len(all_sl_orders) > 1:
+                        self.logger.warning(f"⚠️ [{self.symbol}] Found {len(all_sl_orders)} duplicate SL orders on exchange. Cleaning up duplicates...")
+                        for dup_order in all_sl_orders[1:]:
+                            try:
+                                await self.retry_api_call(self.exchange.cancel_order, dup_order['id'], self.symbol)
+                                self.logger.info(f"🛡️ [{self.symbol}] Canceled duplicate SL order: {dup_order['id']}")
+                            except Exception as ex:
+                                self.logger.error(f"❌ [{self.symbol}] Failed to cancel duplicate SL order {dup_order['id']}: {ex}")
                 else:
                     self.sl_order_id = None
                     self.last_sl_sync_price = 0
-                    self.logger.info(f"🛡️ [{self.symbol}] No matching SL order found on exchange.")
+                    self.logger.warning(f"🛡️ [{self.symbol}] No matching SL order found on exchange.")
+                    if self.sl_price > 0:
+                        self.logger.info(f"🛡️ [{self.symbol}] Triggering SL creation/sync because SL price is valid ({self.sl_price:,.2f})...")
+                        await self.sync_sl_to_exchange(force_create=True)
+                    else:
+                        self.logger.warning(f"⚠️ [{self.symbol}] Cannot create SL order on startup because SL price is 0.")
             else:
                 self.sl_order_id = None
                 self.last_sl_sync_price = 0
