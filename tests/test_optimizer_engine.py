@@ -9,8 +9,8 @@ def mock_config():
     return {
         "SEED": 10000.0,
         "RISK_PER_TRADE": 0.02,
-        "VOL_MULTIPLIER": 2.0,
-        "ADX_FILTER_LEVEL": 20.0,
+        "VOL_MULTIPLIER": 0.1,
+        "ADX_FILTER_LEVEL": 1.0,
         "EMA_TREND_PERIOD": 5,  # Small value for testing
         "DONCHIAN_PERIOD": 5,   # Small value for testing
         "SIGNAL_TIMEFRAME": "1h",
@@ -50,8 +50,8 @@ async def test_optimizer_engine_find_best_params(mock_config, mock_ohlcv_data):
     
     # Shrink the parameter grid for rapid test execution
     engine.param_grid = {
-        "VOL_MULTIPLIER": [1.5, 2.0],
-        "ADX_FILTER_LEVEL": [15, 20],
+        "VOL_MULTIPLIER": [0.1, 0.2],
+        "ADX_FILTER_LEVEL": [1, 2],
         "EMA_TREND_PERIOD": [5, 10]
     }
     
