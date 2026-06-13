@@ -11,8 +11,21 @@ from src.strategy import TrendCrusherV2, get_all_base_bars
 from src.indicators import calculate_donchian, calculate_ema, calculate_atr, calculate_avg_vol, calculate_adx
 from src.config import CONFIG
 
+def get_adapt_name(adapt):
+    if not adapt:
+        return "No"
+    try:
+        steps = []
+        for step in adapt:
+            pnl = step.get("pnl_pct", 0)
+            ratio = step.get("tighten_ratio", 0)
+            steps.append(f"P{pnl}T{ratio}")
+        return "|".join(steps)
+    except:
+        return "Yes"
+
 # --- [USER CONFIGURATION] ---
-SYMBOLS = ["BTC_USDT", "SOL_USDT", "XRP_USDT", "TRUMP_USDT", "XAU_USDT"]
+SYMBOLS = ["XRP_USDT", "TRUMP_USDT", "SUI_USDT"]
 #SYMBOLS = ["ETH_USDT"]
 QUARTERS = 4
 # ----------------------------
@@ -30,10 +43,11 @@ def load_completed_combos(base_dir):
     for log_file in csv_files:
         try:
             df = pd.read_csv(log_file)
-            if 'Adapt' in df.columns and 'Symbol' in df.columns:
+            if 'Adapt' in df.columns and 'Symbol' in df.columns and 'SL_ATR' in df.columns:
                 for _, row in df.iterrows():
                     key = (str(row['Symbol']), str(row['Quarter']), str(row['Mode']), float(row['Risk']), 
-                           float(row['Vol']), float(row['Trail']), float(row['ADX']), int(row['Don']), str(row['Adapt']))
+                           float(row['Vol']), float(row['Trail']), float(row['ADX']), int(row['Don']), 
+                           str(row['Adapt']), float(row['SL_ATR']), float(row['BE_Guard']), float(row['Chaos_Th']), int(row['EMA_P']))
                     completed.add(key)
         except: continue
     return completed
@@ -41,7 +55,7 @@ def load_completed_combos(base_dir):
 def worker_task(task_args):
     try:
         data_1m, df_ind, combo, sym, quarter_name = task_args
-        vol, trail, adx, don, risk, (m_name, sniper, retest), adapt = combo
+        vol, trail, adx, don, risk, (m_name, sniper, retest), adapt, sl_atr, be_guard, chaos, ema_p = combo
         
         strategy = TrendCrusherV2(config=CONFIG)
         trades, equity_curve, _ = strategy.run_streaming_backtest(
@@ -50,6 +64,8 @@ def worker_task(task_args):
             adx_threshold=adx, donchian_period=don,
             use_sniper=sniper, retest_maker=retest,
             use_adaptive=len(adapt) > 0, adaptive_steps=adapt,
+            initial_sl_atr=sl_atr, be_guard_threshold=be_guard,
+            chaos_threshold=chaos, ema_period=ema_p,
             pre_calculated_ind=df_ind
         )
         
@@ -60,7 +76,8 @@ def worker_task(task_args):
         
         return {
             "Symbol": sym, "Quarter": quarter_name, "Mode": m_name, "Risk": risk,
-            "Vol": vol, "Trail": trail, "ADX": adx, "Don": don, "Adapt": "Yes" if len(adapt) > 0 else "No",
+            "Vol": vol, "Trail": trail, "ADX": adx, "Don": don, "Adapt": get_adapt_name(adapt),
+            "SL_ATR": sl_atr, "BE_Guard": be_guard, "Chaos_Th": chaos, "EMA_P": ema_p,
             "Return": round(ret, 2), "MDD": round(mdd, 2), "Eff": round(efficiency, 2), "Trades": len(trades)
         }
     except: return None
@@ -73,50 +90,108 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     print(f"🚀 [{q_name}] Optimizing {sym} | {start_date.date()} ~ {end_date.date()}")
 
     # Grids
-    vol_multipliers = [1.5, 2.2, 2.8]
-    trailing_mults = [3.5, 4.5]
-    adx_thresholds = [20, 30]
-    donchian_periods = [10, 20]
-    risk_pcts = [0.03, 0.05, 0.08, 0.10]
-    modes = [('Market', False, False), ('Sniper', True, False), ('Retest', False, True)]
-    adaptive_options = [[], 
-                        [{"pnl_pct": 2.0, "tighten_ratio": 0.5},{"pnl_pct": 2.0, "tighten_ratio":0.3}],
-                        [{"pnl_pct": 5.0, "tighten_ratio": 0.5},{"pnl_pct": 8.0, "tighten_ratio":0.3}]
-                        ]
+    if sym == "XRP_USDT":
+        # 필수 파라미터 고정 (이전 최상위 분석 반영)
+        vol_multipliers = [2.2]
+        be_guard_thresholds = [3.0]
+        donchian_periods = [20]
+        risk_pcts = [0.08]
+        modes = [('Sniper', True, False)]  # Sniper 모드 고정
+        adaptive_options = [[]]            # Adapt=No 고정
+        initial_sl_atrs = [2.0]            # 가속을 위해 중간값 고정
+        chaos_thresholds = [20.0]          # 중간값 고정
+        
+        # 경계값 추가 범위 확장
+        adx_thresholds = [10, 15, 20]      # 하향 확장 (20 -> 10, 15 추가)
+        trailing_mults = [2.5, 3.0, 3.5]   # 하향 확장 (3.5 -> 2.5, 3.0 추가)
+        ema_trend_periods = [150, 200, 250] # 상향 확장 (150 -> 200, 250 추가)
+        
+    elif sym == "TRUMP_USDT":
+        # 필수 파라미터 고정 (이전 최상위 분석 반영)
+        donchian_periods = [20]
+        risk_pcts = [0.10]
+        modes = [('Market', False, False), ('Retest', False, True)] # Market, Retest 유효
+        adaptive_options = [
+            [{"pnl_pct": 2.0, "tighten_ratio": 0.5}, {"pnl_pct": 2.0, "tighten_ratio": 0.3}],
+            [{"pnl_pct": 5.0, "tighten_ratio": 0.5}, {"pnl_pct": 8.0, "tighten_ratio": 0.3}]
+        ]  # Adapt=Yes 고정 (두 가지 옵션 제공)
+        initial_sl_atrs = [2.0]            # 가속을 위해 중간값 고정
+        
+        # 경계값 추가 범위 확장
+        vol_multipliers = [1.0, 1.2, 1.5]  # 하향 확장 (1.5 -> 1.0, 1.2 추가)
+        trailing_mults = [4.5, 5.0, 5.5]   # 상향 확장 (4.5 -> 5.0, 5.5 추가)
+        adx_thresholds = [30, 35, 40]      # 상향 확장 (30 -> 35, 40 추가)
+        be_guard_thresholds = [1.0, 1.5, 2.0] # 하향 확장 (2.0 -> 1.0, 1.5 추가)
+        chaos_thresholds = [5.0, 10.0, 15.0] # 하향 확장 (15.0 -> 5.0, 10.0 추가)
+        ema_trend_periods = [150, 200, 250] # 상향 확장 (150 -> 200, 250 추가)
+        
+    elif sym == "SUI_USDT":
+        # 필수 파라미터 고정 (이전 Q1 최상위 분석 반영)
+        modes = [('Market', False, False)]  # Market 모드 고정
+        risk_pcts = [0.10]                  # Risk=0.10 고정
+        donchian_periods = [20]             # Don=20 고정
+        adaptive_options = [[]]            # Adapt=No 고정
+        initial_sl_atrs = [1.5]            # SL_ATR=1.5 고정
+        be_guard_thresholds = [3.0]        # BE_Guard=3.0 고정
+        chaos_thresholds = [20.0]          # 중간값 고정
+
+        # 경계값 추가 범위 확장
+        vol_multipliers = [2.8, 3.2, 3.6]  # 상향 확장 (2.8 -> 3.2, 3.6 추가)
+        trailing_mults = [4.5, 5.0, 5.5]   # 상향 확장 (4.5 -> 5.0, 5.5 추가)
+        adx_thresholds = [30, 35, 40]      # 상향 확장 (30 -> 35, 40 추가)
+        ema_trend_periods = [25, 50, 75]   # 하향 확장 (50 -> 25, 75 추가)
+
+    else:
+        vol_multipliers = [1.5, 2.2, 2.8]
+        trailing_mults = [3.5, 4.5]
+        adx_thresholds = [20, 30]
+        donchian_periods = [10, 20]
+        risk_pcts = [0.03, 0.05, 0.08, 0.10]
+        modes = [('Market', False, False), ('Sniper', True, False), ('Retest', False, True)]
+        adaptive_options = [[], 
+                            [{"pnl_pct": 2.0, "tighten_ratio": 0.5},{"pnl_pct": 2.0, "tighten_ratio":0.3}],
+                            [{"pnl_pct": 5.0, "tighten_ratio": 0.5},{"pnl_pct": 8.0, "tighten_ratio":0.3}]
+                            ]
+        initial_sl_atrs = [1.5, 2.0, 2.5]
+        be_guard_thresholds = [2.0, 3.0, 4.0]
+        chaos_thresholds = [15.0, 20.0, 25.0]
+        ema_trend_periods = [50, 100, 150]
     
     # 1. Pre-calculation (Robust to short data)
     df_1h_base = get_all_base_bars(data_1m_filtered, "1h")
     df_4h_base = get_all_base_bars(data_1m_filtered, "4h")
     
-    # Adaptive EMA Period
-    ema_period = 200
-    if len(df_4h_base) < ema_period:
-        ema_period = max(10, len(df_4h_base) // 2)
-    
-    ema_values = calculate_ema(df_4h_base, ema_period)
-    ema_s = pd.Series(ema_values.values, index=df_4h_base['timestamp'])
-    ema_h = ema_s.reindex(df_1h_base['timestamp']).ffill().values
-    
-    atr = calculate_atr(df_1h_base, 14)
-    avg_vol = calculate_avg_vol(df_1h_base, 20)
-    adx = calculate_adx(df_1h_base, 14)
+    strategy = TrendCrusherV2(config=CONFIG)
     
     ind_cache = {}
     for dp in donchian_periods:
-        df_ind = df_1h_base.copy()
-        df_ind['upper'], df_ind['lower'] = calculate_donchian(df_ind, dp)
-        df_ind['ema_h'], df_ind['atr'], df_ind['avg_vol'], df_ind['adx'] = ema_h, atr, avg_vol, adx
-        # Drop only essential NaNs
-        ind_cache[dp] = df_ind.dropna(subset=['upper', 'lower', 'atr', 'avg_vol', 'adx'])
+        for ep in ema_trend_periods:
+            cur_ep = ep
+            if len(df_4h_base) < (cur_ep * 4):
+                cur_ep = max(3, len(df_4h_base) // 8)
+                
+            test_cfg = CONFIG.copy()
+            test_cfg.update({
+                "DONCHIAN_PERIOD": dp,
+                "EMA_TREND_PERIOD": cur_ep
+            })
+            df_ind = strategy.calculate_indicators(df_1h_base, df_4h_base, test_cfg)
+            # Drop essential NaNs for indicator stability
+            ind_cache[(dp, ep)] = df_ind.dropna(subset=['upper', 'lower', 'atr', 'avg_vol', 'adx', 'chop', 'chaos', 'squeeze', 'ema_h'])
 
     # 2. Tasks
-    all_combos = list(itertools.product(vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, risk_pcts, modes, adaptive_options))
+    all_combos = list(itertools.product(
+        vol_multipliers, trailing_mults, adx_thresholds, donchian_periods, 
+        risk_pcts, modes, adaptive_options, initial_sl_atrs, be_guard_thresholds, 
+        chaos_thresholds, ema_trend_periods
+    ))
     tasks = []
     for combo in all_combos:
-        vol, trail, adx_val, don, risk, (m_name, sniper, retest), adapt = combo
-        key = (str(sym), str(q_name), str(m_name), float(risk), float(vol), float(trail), float(adx_val), int(don), "Yes" if len(adapt) > 0 else "No")
+        vol, trail, adx_val, don, risk, (m_name, sniper, retest), adapt, sl_atr, be_guard, chaos, ema_p = combo
+        key = (str(sym), str(q_name), str(m_name), float(risk), float(vol), float(trail), float(adx_val), int(don), 
+               get_adapt_name(adapt), float(sl_atr), float(be_guard), float(chaos), int(ema_p))
         if key not in completed_set:
-            tasks.append((data_1m_filtered, ind_cache[don], combo, sym, q_name))
+            tasks.append((data_1m_filtered, ind_cache[(don, ema_p)], combo, sym, q_name))
 
     if not tasks: return None
     print(f"   - Testing {len(tasks)} new combinations...")
@@ -126,23 +201,25 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
     total_tasks = len(tasks)
     q_start_time = time.time()
     
+    fields = ["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "SL_ATR", "BE_Guard", "Chaos_Th", "EMA_P", "Return", "MDD", "Eff", "Trades"]
+    
     if not os.path.exists(full_log_file):
         with open(full_log_file, 'w', newline='') as f:
-            csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"]).writeheader()
+            csv.DictWriter(f, fieldnames=fields).writeheader()
 
     with open(full_log_file, 'a', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=["Symbol", "Quarter", "Mode", "Risk", "Vol", "Trail", "ADX", "Don", "Adapt", "Return", "MDD", "Eff", "Trades"])
+        writer = csv.DictWriter(f, fieldnames=fields)
         with ProcessPoolExecutor() as executor:
             futures = {executor.submit(worker_task, t): t for t in tasks}
             for future in as_completed(futures):
                 res = future.result()
                 if res:
                     writer.writerow(res); f.flush(); os.fsync(f.fileno())
-                    if res['Eff'] > best_eff and res['Trades'] >= 1: # Lowered trade limit for XAU
+                    if res['Eff'] > best_eff and res['Trades'] >= 1:
                         best_eff, best_res = res['Eff'], res
                 
                 completed += 1
-                if completed % 50 == 0 or completed == total_tasks:
+                if completed % 100 == 0 or completed == total_tasks:
                     ts = datetime.now().strftime('%H:%M:%S')
                     elapsed = time.time() - q_start_time
                     print(f"   - [{ts}] Progress: {completed}/{total_tasks} ({completed/total_tasks*100:.1f}%) | Elapsed: {str(timedelta(seconds=int(elapsed)))}")
@@ -150,7 +227,7 @@ def optimize_symbol_quarter(sym, quarter_idx, df_1m, start_date, end_date, full_
 
 def main():
     start_time = time.time()
-    base_repo_dir = "reports/mega_optimization"
+    base_repo_dir = "reports/mega_optimization_v2"
     os.makedirs(base_repo_dir, exist_ok=True)
     completed_set = load_completed_combos(base_repo_dir)
     

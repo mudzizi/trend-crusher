@@ -1,3 +1,227 @@
+# Trading Session Log (2026-06-14) - Batch Backfill & ADX 4H Zero Value Fix (v13.8.7)
+
+## ✅ 완료된 작업
+1. **Batch Backfill 구현 및 48시간 제한 제거**:
+   - `_backfill_history_1h()`를 120시간(DB 보존 한도) 분량의 일괄 배치 입력으로 변경하여, 봇이 며칠간 오프라인 상태였다가 켜져도 데이터 공백(gap) 없이 완벽하게 복구되도록 개선.
+2. **ADX 4H 및 이전 지표 실시간 복구**:
+   - 기존 `INSERT OR IGNORE` 기반의 1시간 히스토리 저장 구조를 `INSERT OR REPLACE` 기반으로 전환.
+   - 신규 `log_history_1h_batch()` 메서드를 구현하여, 봇 재시작 시 기존에 0.0으로 비어 있던 데이터들을 계산된 지표값으로 일괄 업데이트(overwrite)하도록 보완.
+
+## 📊 테스트 결과
+- `py_compile`: src/db_manager.py, src/async_db_manager.py, src/bot/live_bot_async.py, tests/test_db_manager.py ✅
+- `pytest tests/`: 96 passed (2 new unit tests added: `test_log_history_1h_batch`, `test_async_log_history_1h_batch`) ✅
+
+---
+
+# Trading Session Log (2026-06-14) - Backfill, Dynamic Score, Tooltip Date (v13.8.6)
+
+## ✅ 완료된 작업
+1. **히스토리 Backfill 구현**:
+   - `_backfill_history_1h()` 메서드 추가: 봇 초기화 시 이미 fetch된 1000봉 OHLCV에서 최근 48시간 인디케이터 데이터를 `history_1h` 테이블에 자동 backfill.
+   - `INSERT OR IGNORE`로 중복 방지, 기존 데이터 48개 이상이면 backfill 생략.
+2. **다이나믹 시그널 점수 구현**:
+   - `score=100` 하드코딩 → `_compute_signal_score()` 동적 계산으로 변경.
+   - 6개 진입 조건 (Chaos, Slope, Chop, ADX, ADX 4H, Volume) + Squeeze 보너스 기반 0-100 점수.
+3. **차트 툴팁 날짜 표시**:
+   - 라벨 포맷: `HH:MM` → `MM/DD HH:MM`.
+   - X축 tick: `HH:MM`만 표시 (컴팩트).
+   - 마우스오버 툴팁: `MM/DD HH:MM` 전체 날짜+시간 표시.
+
+## 📊 테스트 결과
+- `py_compile`: live_bot_async.py ✅, dashboard.py ✅
+- `pytest tests/`: 94 passed, 0 failed
+
+---
+
+
+
+## ✅ 완료된 작업
+1. **대시보드 멀티패널 차트 시스템 구축**:
+   - 기존 180px 단일 차트를 4개 전용 패널로 분리: Price/EMA/Donchian (220px), ADX 1H+4H (70px), Chaos/Choppiness (70px), Volume (50px).
+   - 차트별 threshold 기준선(annotation) 표시: ADX 기준선, Chaos 기준선, Choppiness 61.8선.
+   - Donchian 채널 밴드를 Upper→Lower 사이 fill로 시각화.
+2. **ADX 4H 데이터 파이프라인 완성**:
+   - `db_manager.py`: `history_1h`와 `live_indicators` 테이블에 `adx_4h` 컬럼 추가 (마이그레이션 포함).
+   - `async_db_manager.py`: async wrapper에 `adx_4h` 파라미터 전달.
+   - `live_bot_async.py`: `_record_live_status()`와 `on_kline_update()`에서 `adx_4h` 데이터를 DB에 기록.
+   - `dashboard.py`: `adx_4h` history와 live 값을 템플릿에 전달.
+3. **Entry Readiness Checklist 추가**:
+   - 6개 진입 조건(Chaos, Slope, Chop, ADX, ADX 4H, Volume)의 실시간 Pass/Fail 체크리스트 UI.
+   - 진행률 바와 "X/6 PASS" 요약 표시.
+   - Squeeze 상태를 보너스 인디케이터로 표시.
+4. **포지션 오버레이**: 진입가/손절가 수평선을 차트 annotation으로 렌더링.
+5. **방향 지시기**: 각 심볼 카드에 ▲ LONG / ▼ SHORT 뱃지 추가.
+6. **차트 범례(Legend)**: 모든 인디케이터 라인을 색상으로 식별하는 컴팩트 범례 추가.
+7. **볼륨 색상 코딩**: 상승봉 녹색 / 하락봉 적색으로 가시성 개선.
+
+## 📊 테스트 결과
+- `py_compile`: db_manager.py ✅, async_db_manager.py ✅, live_bot_async.py ✅, dashboard.py ✅
+- `pytest tests/`: **94 passed, 0 failed** (39.25s)
+- Core method 존재 확인 (grep): 전체 메서드 보존 확인 완료
+
+---
+
+# Trading Session Log (2026-06-12) - Milestone: Fix Trailing Stop Loss Leakage in Backtest Engine (v13.8.4)
+
+## ✅ 완료된 작업
+1. **백테스트 엔진 내 Trailing SL 흘러내림(Leakage) 버그 수정**:
+   - `src/strategy_numba.py`의 `numba_find_first_exit` 루프 내에서, 매 분 봉마다 ATR 변동으로 계산된 trailing stop loss가 완화될 때 `sl_p` 변수가 업데이트되지 않아 기존 SL이 아래로(숏은 위로) Degrade 되는 현상 발견.
+   - 루프 내에서 `sl_p = max(sl_p, trail_sl)` (롱) 및 `sl_p = min(sl_p, trail_sl) if sl_p > 0 else trail_sl` (숏) 과 같이 `sl_p`를 누적 갱신하여, Trailing SL의 단방향 갱신 원칙을 강제하도록 수정.
+2. **유닛 테스트 검증 및 전체 테스트 패스**:
+   - `tests/test_strategy.py` 에 `test_numba_find_first_exit_sl_leakage` 테스트를 추가하여, 후속 봉에서 ATR이 급증하더라도 이전 시점의 높은 Trailing SL이 유지되는 것을 검증.
+   - 전체 94개 테스트 스위트(`PYTHONPATH=. ./venv/bin/pytest tests/`) 가동 결과 100% 합격 검증 완료.
+
+---
+
+# Trading Session Log (2026-06-12) - Milestone: Complete SUI Target Grid Optimization & Final Reporting (v13.8.3)
+
+## ✅ 완료된 작업
+1. **버그 수정 후 3대 자산 전면 최적화 완수 (reports/mega_optimization_v2)**:
+   - Trailing SL 흘러내림 버그가 전면 해소된 상태에서 XRP_USDT, TRUMP_USDT, SUI_USDT 4개 분기 백테스팅 최적화 재가동 완료 (총 소요 시간: 1시간 54분 33초).
+   - 버그 패치를 반영하여 트레일링 익절 고정이 정상 작동함에 따라 XRP 평균 분기 수익률 **+102.94%** (기존 대비 +41%p 상승), TRUMP 평균 분기 수익률 **+311.17%** (기존 대비 +168%p 폭등) 달성 및 최대 MDD 극적 감소 검증 완료.
+2. **SUI_USDT 타겟 그리드 최적화 완수**:
+   - SUI_USDT 전용 타겟 그리드(`scripts/mega_overnight_optimizer.py`) 설계 및 반영으로 조합 수를 81개로 축소하여 연산 효율화.
+   - 단기 대세선 `EMA_P = 25` 및 볼륨 가드 `Vol = 2.8 ~ 3.2`를 축으로 하는 최적 포트폴리오 세팅 산출 완료.
+3. **테스트 프레임워크 개선 및 Zero Regression**:
+   - Flaky 테스트였던 `tests/test_optimizer_engine.py` 유닛 테스트 보완 (데이터 규모 20,000분 및 `lookback_days` 12일로 확장).
+   - 전체 94개 테스트 케이스 100% 합격 검증 완료.
+
+## 🧪 검증 결과
+- **백테스팅 v2 요약**:
+  - XRP: 평균 +102.94% / 최악 Q4 +42.42% / 최대 MDD 27.83% (Sniper)
+  - TRUMP: 평균 +311.17% / 최악 Q4 +170.45% / 최대 MDD 28.27% (Market)
+  - SUI: 평균 +111.24% / 최악 Q4 -32.14% / 최대 MDD 37.08% (Market)
+
+---
+
+# Trading Session Log (2026-06-11) - Milestone: Apply Optimized Parameters for XRP & TRUMP (v13.8.2)
+
+
+## ✅ 완료된 작업
+1. **최적화 파라미터 적용 (`config.yaml`)**:
+   - `reports/MEGA_OPTIMIZATION/run_20260608_0242/full_details.csv` 분석 결과를 기반으로 XRP/USDT 및 TRUMP/USDT의 개별 최적 구동 파라미터를 `config.yaml` 내 `SYMBOL_SETTINGS`에 반영 완료.
+   - **XRP/USDT 설정**: `USE_SNIPER: true`, `USE_RETEST_MAKER: false` (Sniper 모드), `RISK_PER_TRADE: 0.08`, `VOL_MULTIPLIER: 2.2`, `TRAILING_ATR_MULT: 3.5`, `ADX_FILTER_LEVEL: 20`, `DONCHIAN_PERIOD: 20`, `USE_ADAPTIVE_TRAIL: false`, `INITIAL_SL_ATR: 2.0`, `BE_GUARD_THRESHOLD: 3.0`, `CHAOS_THRESHOLD: 20.0`, `EMA_TREND_PERIOD: 150`.
+   - **TRUMP/USDT 설정**: `USE_SNIPER: false`, `USE_RETEST_MAKER: false` (Market 모드), `RISK_PER_TRADE: 0.10`, `VOL_MULTIPLIER: 1.5`, `TRAILING_ATR_MULT: 4.5`, `ADX_FILTER_LEVEL: 30`, `DONCHIAN_PERIOD: 20`, `USE_ADAPTIVE_TRAIL: true`, `INITIAL_SL_ATR: 2.0`, `BE_GUARD_THRESHOLD: 2.0`, `CHAOS_THRESHOLD: 15.0`, `EMA_TREND_PERIOD: 150`.
+2. **설정 검증 테스트 추가 및 통과**:
+   - `tests/test_config_loading.py` 내에 `test_xrp_trump_config_overrides` 테스트 케이스를 추가하여 `config.yaml` 설정 파일 내 XRP/USDT 및 TRUMP/USDT 오버라이드 값이 정확히 로드되고 일치하는지 자동 검증 구현.
+   - `PYTHONPATH=. venv/bin/pytest` 명령어를 통해 신규 테스트를 포함한 전체 93개 테스트 케이스가 100% 정상 통과(Pass)함을 검증 완료.
+
+## 🧪 검증 결과
+- **테스트 전체 통과**: 93 passed
+
+---
+
+# Trading Session Log (2026-06-11) - Milestone: Parameter Optimization Analysis (run_20260608_0242)
+
+## ✅ 완료된 작업
+1. **`run_20260608_0242` 최적화 결과 데이터 분석**:
+   - `reports/MEGA_OPTIMIZATION/run_20260608_0242/full_details.csv` 파일(총 559,872행)을 대상으로 코인별 분기 편차를 배제한 로바스트(Robust) 파라미터 조합 분석 완료.
+   - 각 코인(`XRP_USDT`, `TRUMP_USDT`)에 대해 모든 분기(Q1~Q4)에서 고르게 양호한 수익을 내는 파라미터 분포 특징 추출 및 최적 조합 선별.
+   - 두 코인 모두에서 분기별 역추세/횡보 리스크를 방어하면서 장기 우상향을 기대할 수 있는 **교집합 범용 파라미터 조합(Universal Candidate)** 도출 완료.
+2. **어댑티브 옵션(Adaptive Option) 상세 로깅 구조 개선**:
+   - 기존의 단순 이진 값(`"Yes"`/`"No"`) 표시로 인해 구체적인 가변 트레일링 세부 수치를 알 수 없었던 한계 극복.
+   - `get_adapt_name()` 헬퍼를 추가하여 실제 가변 트레일링 스텝 스펙(예: `P2.0T0.5|P2.0T0.3`)을 상세 문자열로 결과 CSV(`Adapt` 열)에 기록하도록 로깅 체계 보완.
+   - 변경 사항 검증용 단위 테스트 및 구문 컴파일 검증 성공 후 최적화 태스크(Task-78) 재기동 완료.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Align Mega Optimizer with Strategy V7.0 (v13.8.1)
+
+
+## ✅ 완료된 작업
+1. **`mega_overnight_optimizer.py` 지표 연산 최신화**:
+   - 기존의 수동 지표 연산부를 `TrendCrusherV2.calculate_indicators`를 호출하는 비즈니스 구조로 리팩토링.
+   - V7.0에 신설된 핵심 모멘텀 지표들(`chop`, `chaos`, `squeeze`, `ema_slope`, `adx_4h` 등)을 연산에 포함시켜 실전 봇 거래 로직과의 정합성 100% 동기화.
+2. **테스트 및 형상관리**:
+   - `py_compile`을 통한 문법 검증 및 `pytest` 전체 통과 검증 후, 원격 저장소(`origin refactor/architecture`)에 push 완료.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Optimization Engine Performance Acceleration (v13.8.0)
+
+## ✅ 완료된 작업
+1. **보조지표 연산 캐싱 (`EMA_TREND_PERIOD` 기준)**:
+   - 그리드 변수 중 캔들 지표 계산에 영향을 주는 유일한 인자인 `EMA_TREND_PERIOD`를 기준으로 지표 계산 결과를 사전 캐싱.
+   - 반복적인 DataFrame 및 Series 연산을 제거하여 계산 빈도를 16배 단축 (48회 -> 3회).
+2. **`ProcessPoolExecutor` 멀티프로세싱 병렬화**:
+   - 그리드 탐색을 CPU 코어 수에 맞추어 병렬 수행하도록 개편.
+   - 피클 직렬화 요건을 충족하기 위해 백테스트 워커 함수 `_run_single_search`를 모듈의 최상위(top-level) 레벨로 독립 분리.
+3. **Mock 기반 비동기 단위 테스트 작성 (`test_optimizer_engine.py`)**:
+   - 외부 API 및 파일 I/O를 모킹하고, 모의 캔들 데이터를 이용해 병렬 최적화 엔진의 파라미터 도출 동작을 완벽히 검증하는 비동기 유닛 테스트 작성.
+
+## 🧪 검증 결과
+- **테스트 무결성**: `pytest`를 실행하여 신규 테스트를 포함한 총 **92개 테스트 케이스가 100% 정상 통과(Pass)**함을 검증 완료.
+- **Git 원격 동기화**: `refactor/architecture` 브랜치에 스테이징 및 푸시 완료.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Unify Legacy Synchronous Bots onto Async Core (v13.7.0)
+
+## ✅ 완료된 작업
+1. **레거시 동기식 봇 개편 (`live_bot.py`, `live_bot_multi.py`)**:
+   - `scripts/live_bot.py`(단일 심볼 동기 봇) 및 `scripts/live_bot_multi.py`(멀티 심볼 동기 봇)에 존재하던 중복 마진 설정, 주문, 폴링 루프 등 약 570여 줄의 레거시 동기식 소스 코드를 전면 제거.
+   - 두 실행 파일을 모던 비동기 봇 코어(`src/bot/live_bot_async.py`)로 연동/실행되도록 얇은 Facade 래퍼 구조로 재작성 완료.
+2. **동적 심볼 수 제어 및 로깅 경로 보존**:
+   - `scripts/live_bot.py` 호출 시 `CONFIG["SYMBOL"]`만을 단일 원소 리스트로 변형하여 비동기 코어에 전달하며, `log/live_bot.log`에 로그가 쌓이도록 로깅 설정을 보존.
+   - `scripts/live_bot_multi.py` 역시 비동기 멀티 코어 실행을 하되 `log/live_bot_multi.log`에 정상 로깅되도록 매핑.
+3. **CLI 실행 호환성 검증**:
+   - `PYTHONPATH` 누락으로 인한 런타임 오류 방지를 위해, 스크립트 실행 즉시 프로젝트 루트 경로를 `sys.path`에 자동 마운트하도록 복구 가드를 추가.
+
+## 🧪 검증 결과
+- **자동화 테스트 검증**: `pytest` 전체 실행 결과 91개 테스트 케이스가 100% 모두 성공(Pass)함을 확인.
+- **수동 구동 검증**: `python scripts/live_bot.py`를 직접 구동하여 웹소켓 마운트 및 거래소 오더 동기화 상태로 정상 진입함을 로그상으로 검증 완료.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Strategy Interface Abstraction & Modular Backtest Engine (v13.6.0)
+
+## ✅ 완료된 작업
+1. **전략 인터페이스 추상화 (`BaseStrategy`)**:
+   - `src/strategy_base.py`에 `BaseStrategy` 추상 베이스 클래스를 선언하여 지표 계산, 진입/청산 검증의 규격을 표준화.
+   - `TrendCrusherV2`가 `BaseStrategy`를 상속하도록 구조 개편.
+2. **Numba 가속 함수 모듈화 (`strategy_numba.py`)**:
+   - `src/strategy.py`에 혼재되어 있던 `@njit` 가속 연산 함수군(`numba_check_entry`, `numba_check_exit`, `numba_find_first_exit`)을 `src/strategy_numba.py`로 격리 이관.
+3. **독립 백테스터 엔진 분리 (`backtest_engine.py`)**:
+   - `TrendCrusherV2` 내부의 1분 단위 시뮬레이션 알고리즘을 `BacktestEngine` 클래스로 독립화하여 관심사 분리(SRP) 구현.
+   - 기존 분석 및 최적화 스크립트와의 하위 호환성을 100% 보장하기 위해 `TrendCrusherV2.run_streaming_backtest`는 `BacktestEngine`에 처리를 위임하는 Facade(래퍼) 메서드로 유지.
+4. **신규 리팩토링 검증 테스트 추가**:
+   - `tests/test_strategy_refactored.py`를 신설하여 분리된 Numba 함수들과 `BacktestEngine`을 직접 검증하는 테스트 케이스 확보.
+
+## 🧪 검증 결과
+- **테스트 무결성 증명**: `pytest`를 실행하여 새로 추가된 3개의 테스트를 포함한 총 **91개 핵심 테스트 케이스가 100% 정상 통과(Pass)**함을 검증 완료.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Test Suite Consolidation & Simplification (v13.5.0)
+
+## ✅ 완료된 작업
+1. **테스트 슈트 통합 및 간소화**:
+   - 기존 `tests/` 폴더 내에 흩어져 있던 28개의 테스트 파일들을 기능 및 모듈 단위로 결합하여 **17개 파일**로 통합 완료.
+   - 데이터베이스 테스트(`test_async_db_manager.py` -> `test_db_manager.py`), 대시보드 테스트(`test_dashboard_live_sync.py` -> `test_dashboard.py`), 지표 테스트(`test_ema_fix.py` -> `test_indicators.py`), 전략 테스트(`test_strategy_v2.py` / `test_strategy_v7.py` -> `test_strategy.py`), 텔레그램 테스트(`test_telegram_buttons.py` / `test_telegram_status.py` -> `test_telegram.py`), 리스크 테스트(`test_risk_manager.py` / `test_risk_safety.py` -> `test_risk.py`), 감시자 테스트(`test_sentinel.py` / `test_security_sentinel.py` -> `test_sentinels.py`), 주문 동기화 테스트(`test_sl_robustness.py` / `test_sync_open_orders.py` -> `test_order_sync.py`), 비동기 봇 코어 테스트(`test_async_realtime.py` / `test_live_bot_initialization.py` / `test_live_optimizations.py` / `test_live_sync_pnl.py` -> `test_bot_async.py`) 통합 및 정리 완료.
+   - 통합이 완료된 기존 개별 테스트 파일들(총 11개 파일)은 저장소에서 완전히 제거하여 소스 코드를 깔끔하게 정돈.
+
+## 🧪 검증 결과
+- **테스트 전체 통과**: `PYTHONPATH=. ./venv/bin/pytest -v` 명령을 통해 통합된 17개 파일에 담긴 총 **88개 테스트 케이스가 100% 통과(Pass)**함을 확인.
+
+---
+
+# Trading Session Log (2026-06-08) - Milestone: Test Suite Refactoring & Dummy Test Elimination (v13.4.4)
+
+## ✅ 완료된 작업
+1. **더미/플레이스홀더 테스트 케이스 전면 교체**:
+   - `tests/test_risk_safety.py`: 기존에 단순 Mock 리턴값 자체를 검증하거나 단순 수학 비교(`0.05 < 0.1`)만 수행하던 무의미한 테스트 케이스들을 제거하고, `PortfolioManagerAsync.calculate_order_qty`의 실제 레버리지 제한 가동 로직과 `SymbolBotAsync._is_over_safety_limit`이 `RiskManager` 차단 설정을 준수하는지를 검증하는 실질적인 통합/유닛 테스트로 재구현.
+   - `tests/test_strategy_v2.py`: 로컬 테스트 바디 안에 가상 함수를 선언해 단언하던 `test_adaptive_trailing_stop_logic_blackbox` 및 단순 부등호 계산만 검사하던 `test_adx_filter_logic_check`를 폐기하고, 실제 `TrendCrusherV2`의 `check_exit_signal` (수익률 단계별 트레일링 배율 조정) 및 `check_entry_signal` (ADX 임계치 도달 여부) 메서드를 프로덕션 객체 대상으로 정밀 검증하도록 개선.
+   - `tests/test_live_optimizations.py`: 기존에 단순 변동률 공식 산식만을 검증하던 `test_sl_sync_detection`을 `SymbolBotAsync.check_exit` 호출 시 트레일링 스탑의 변동률이 0.03% 임계치를 넘길 때만 실제 거래소 주문 갱신(`sync_sl_to_exchange`)이 격발되는지를 추적하는 시나리오 테스트로 고도화.
+   - `tests/test_sentinel.py`: 모킹된 봇의 딕셔너리 변경 시뮬레이션에 불과했던 테스트를 제거하고, 프로덕션의 `MarketSentinel` 클래스를 대상으로 일일 손실률 제한(Kill Switch)과 Choppiness Index 횡보 필터 기능이 실제 작동하는지 직접 유닛 테스트하도록 재작성.
+2. **테스트 분리 및 중복 정리**:
+   - `tests/test_async_realtime.py`: 로컬 모킹 테스트였던 `test_per_symbol_toggle_sim` 및 `test_config_loading.py`와 완벽히 중복되던 `test_config_structure_consistency`를 제거하여 테스트 슈트를 슬림화.
+   - `scripts/test_sentinel_logic.py`: 어설션이 없고 실제 데이터 CSV가 없을 시 그대로 리턴되던 더미 스크립트 함수 `test_xrp_with_sentinel`을 `run_xrp_with_sentinel`로 이름을 변경하여 pytest의 자동 실행 대상(test_*)에서 제외.
+
+## 🧪 검증 결과
+- **테스트 무결성**: 위와 같이 의미 없는 테스트를 정밀 프로덕션 검증 테스트로 교체한 결과, 중복 및 더미 코드가 소멸하고 **전체 88개 핵심 테스트 케이스가 100% 통과(Pass)**함을 확인.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Telegram Auto-Menu & Comprehensive Status Command (v13.4.3)
 
 ## ✅ 완료된 작업

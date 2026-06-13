@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TrendCrusher V{{ version }} Control Center</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <style>
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
         .card { background-color: #1e293b; border: 1px solid #334155; color: #f8fafc; border-radius: 12px; }
@@ -22,11 +24,44 @@
         .table th { color: #94a3b8; }
         .text-up { color: #10b981; }
         .text-down { color: #ef4444; }
+
+        /* Entry Readiness Checklist */
+        .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 0.78rem; }
+        .checklist-item { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+        .checklist-icon { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; }
+        .check-pass { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); }
+        .check-fail { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4); }
+        .check-neutral { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+        /* Chart Panel System */
+        .chart-panel { position: relative; }
+        .chart-main { height: 220px; }
+        .chart-sub { height: 70px; border-top: 1px solid #1e293b; }
+        .chart-vol { height: 50px; border-top: 1px solid #1e293b; }
+        .chart-label { position: absolute; top: 2px; left: 6px; font-size: 9px; color: #64748b; z-index: 10; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Direction Badge */
+        .direction-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 4px; font-weight: 700; letter-spacing: 0.5px; }
+        .direction-long { background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .direction-short { background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+        /* Position Overlay Badge */
+        .pos-overlay { background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(139, 92, 246, 0.1)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 6px 10px; font-size: 0.75rem; }
+
+        /* Indicator Legend */
+        .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 0.7rem; padding: 4px 8px; background: rgba(15, 23, 42, 0.5); border-radius: 6px; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .legend-line { width: 12px; height: 2px; flex-shrink: 0; }
+
+        /* Readiness Summary */
+        .readiness-bar { height: 4px; border-radius: 2px; background: #334155; overflow: hidden; }
+        .readiness-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
     </style>
 </head>
 <body>
     <nav class="navbar navbar-dark bg-dark mb-4 py-3 shadow">
-        <div class="container">
+        <div class="container-fluid px-4">
             <a class="navbar-brand d-flex align-items-center" href="#">
                 <span class="fs-3 fw-bold me-2">🚀 TrendCrusher</span>
                 <span class="badge bg-primary">V{{ version }}</span>
@@ -44,80 +79,133 @@
         </div>
     </nav>
 
-    <div class="container">
+    <div class="container-fluid px-4">
         <!-- Live Monitoring Section -->
         <h4 class="mb-3 d-flex align-items-center">
             <span class="me-2">🛰️</span> Live Strategy Monitoring
             <span class="ms-auto small text-secondary fw-normal">Auto-refresh every 30s</span>
         </h4>
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
+        <div class="row row-cols-1 row-cols-xl-2 g-4 mb-5">
             {% for bot in live_monitors %}
             <div class="col">
                 <div class="card h-100 shadow-sm {% if bot.score > 80 %}border-warning{% endif %}">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span class="fs-5">{{ bot.symbol }}</span>
-                        <span class="badge bg-secondary small px-2">{{ bot.mode }}</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between mb-3 align-items-center">
-                            <div>
-                                <div class="small text-secondary">Current Price</div>
-                                <div class="fs-4 fw-bold">${{ "{:,.2f}".format(bot.price) }}</div>
+                    <div class="card-header d-flex justify-content-between align-items-center py-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fs-5">{{ bot.symbol }}</span>
+                            <span class="badge bg-secondary small px-2">{{ bot.mode }}</span>
+                            <span class="direction-badge {% if bot.direction == 'LONG' %}direction-long{% else %}direction-short{% endif %}">
+                                {% if bot.direction == 'LONG' %}▲ LONG{% else %}▼ SHORT{% endif %}
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="text-end">
+                                <div class="small text-secondary" style="font-size:0.65rem;">PRICE</div>
+                                <div class="fw-bold">${{ "{:,.4f}".format(bot.price) }}</div>
                             </div>
                             <div class="score-badge {% if bot.score > 80 %}bg-warning text-dark{% elif bot.score > 50 %}bg-primary{% else %}bg-secondary{% endif %} shadow">
                                 {{ bot.score|int }}
                             </div>
                         </div>
-
-                        <!-- Individual Proximity Bars -->
+                    </div>
+                    <div class="card-body pb-2">
+                        <!-- Entry Readiness Checklist -->
                         <div class="mb-2">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span>Volume Burst ({{ bot.vol_mult }}x)</span>
-                                <span>{{ bot.vol_ratio }}%</span>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small fw-bold text-secondary" style="font-size:0.7rem;">ENTRY READINESS</span>
+                                {% set ready_count = [bot.ready_chaos, bot.ready_slope, bot.ready_chop, bot.ready_adx, bot.ready_adx_4h, bot.ready_vol]|select|list|length %}
+                                <span class="small fw-bold {% if ready_count >= 5 %}text-warning{% elif ready_count >= 3 %}text-info{% else %}text-secondary{% endif %}" style="font-size:0.7rem;">
+                                    {{ ready_count }}/6 PASS
+                                </span>
                             </div>
-                            <div class="progress">
-                                <div class="progress-bar-fill {% if bot.vol_ratio >= 100 %}bg-success{% else %}bg-info{% endif %}" style="width: {{ bot.vol_ratio }}%"></div>
+                            <div class="readiness-bar mb-2">
+                                <div class="readiness-fill {% if ready_count >= 5 %}bg-warning{% elif ready_count >= 3 %}bg-info{% else %}bg-secondary{% endif %}" style="width: {{ (ready_count / 6 * 100)|int }}%"></div>
+                            </div>
+                            <div class="checklist">
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_chaos %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_chaos %}✓{% else %}✗{% endif %}</span>
+                                    <span>Chaos ≥{{ bot.chaos_limit }} <b>({{ bot.chaos_value }})</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_slope %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_slope %}✓{% else %}✗{% endif %}</span>
+                                    <span>Slope {% if bot.direction == 'LONG' %}>0{% else %}<0{% endif %} <b>({{ bot.slope }})</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_chop %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_chop %}✓{% else %}✗{% endif %}</span>
+                                    <span>Chop <61.8 <b>({{ bot.chop_value }})</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_adx %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_adx %}✓{% else %}✗{% endif %}</span>
+                                    <span>ADX ≥{{ bot.adx_limit }} <b>({{ bot.adx_value }})</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_adx_4h %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_adx_4h %}✓{% else %}✗{% endif %}</span>
+                                    <span>ADX 4H ≥{{ bot.adx_4h_limit }} <b>({{ bot.adx_4h_value }})</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_vol %}check-pass{% else %}check-fail{% endif %}">{% if bot.ready_vol %}✓{% else %}✗{% endif %}</span>
+                                    <span>Vol ≥{{ bot.vol_mult }}x <b>({{ bot.vol_ratio }}%)</b></span>
+                                </div>
+                                <div class="checklist-item">
+                                    <span class="checklist-icon {% if bot.ready_squeeze %}check-pass{% else %}check-neutral{% endif %}">{% if bot.ready_squeeze %}★{% else %}·{% endif %}</span>
+                                    <span>Squeeze <b class="{% if bot.squeeze == 'YES' %}text-warning{% else %}text-secondary{% endif %}">{{ bot.squeeze }}</b></span>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span>ADX Strength (>{{ bot.adx_limit }})</span>
-                                <span><b>{{ bot.adx_value }}</b></span>
+                        {% if bot.position %}
+                        <!-- Active Position Overlay -->
+                        <div class="pos-overlay mb-2 d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge {% if bot.position.side=='LONG' %}bg-success{% else %}bg-danger{% endif %} me-1">{{ bot.position.side }}</span>
+                                <span class="small">Entry: ${{ "{:,.4f}".format(bot.position.entry) }}</span>
+                                <span class="small text-warning ms-2">SL: ${{ "{:,.4f}".format(bot.position.sl) }}</span>
                             </div>
-                            <div class="progress">
-                                <div class="progress-bar-fill {% if bot.adx_value >= bot.adx_limit %}bg-success{% else %}bg-info{% endif %}" style="width: {{ (bot.adx_value/bot.adx_limit)*100 if bot.adx_limit > 0 else 0 }}%"></div>
+                            <span class="fw-bold {% if bot.position.pnl > 0 %}text-up{% else %}text-down{% endif %}">{{ bot.position.pnl }}%</span>
+                        </div>
+                        {% endif %}
+
+                        <!-- Multi-Panel Chart System -->
+                        <div class="chart-panel rounded overflow-hidden" style="background: #0f172a; border: 1px solid #1e293b;">
+                            <!-- Panel 1: Price + EMA + Donchian Channels -->
+                            <div class="position-relative">
+                                <span class="chart-label">PRICE / EMA / DONCHIAN</span>
+                                <div class="chart-main">
+                                    <canvas id="chart-price-{{ bot.symbol.replace('/', '-') }}"></canvas>
+                                </div>
+                            </div>
+                            <!-- Panel 2: ADX (1H + 4H) -->
+                            <div class="position-relative">
+                                <span class="chart-label">ADX 1H / 4H</span>
+                                <div class="chart-sub">
+                                    <canvas id="chart-adx-{{ bot.symbol.replace('/', '-') }}"></canvas>
+                                </div>
+                            </div>
+                            <!-- Panel 3: Chaos + Choppiness -->
+                            <div class="position-relative">
+                                <span class="chart-label">CHAOS / CHOP</span>
+                                <div class="chart-sub">
+                                    <canvas id="chart-chaos-{{ bot.symbol.replace('/', '-') }}"></canvas>
+                                </div>
+                            </div>
+                            <!-- Panel 4: Volume -->
+                            <div class="position-relative">
+                                <span class="chart-label">VOLUME</span>
+                                <div class="chart-vol">
+                                    <canvas id="chart-vol-{{ bot.symbol.replace('/', '-') }}"></canvas>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="mb-2">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span>Chaos Index (>20)</span>
-                                <span><b>{{ bot.chaos_value }}</b></span>
-                            </div>
-                            <div class="progress">
-                                <div class="progress-bar-fill {% if bot.chaos_value >= 20 %}bg-warning{% else %}bg-secondary{% endif %}" style="width: {{ (bot.chaos_value/40)*100 }}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span>Choppiness Index (<61)</span>
-                                <span class="{% if bot.chop_value > 61.8 %}text-danger{% else %}text-up{% endif %}"><b>{{ bot.chop_value }}</b></span>
-                            </div>
-                            <div class="progress">
-                                <div class="progress-bar-fill {% if bot.chop_value > 61.8 %}bg-danger{% else %}bg-success{% endif %}" style="width: {{ bot.chop_value }}%"></div>
-                            </div>
-                        </div>
-
-                        <!-- Technical Indicator Chart (Hourly Snapshot) -->
-                        <div class="mb-3" style="height: 180px;">
-                            <canvas id="chart-{{ bot.symbol.replace('/', '-') }}"></canvas>
-                        </div>
-
-                        <div class="d-flex justify-content-between small pt-2 border-top border-secondary">
-                            <span>Squeeze: <b class="{% if bot.squeeze == 'YES' %}text-warning{% else %}text-secondary{% endif %}">{{ bot.squeeze }}</b></span>
-                            <span>Slope: <b class="{% if bot.slope > 0 %}text-up{% else %}text-down{% endif %}">{{ bot.slope }}</b></span>
+                        <!-- Chart Legend -->
+                        <div class="chart-legend mt-1">
+                            <div class="legend-item"><span class="legend-dot" style="background:#fff;"></span> Price</div>
+                            <div class="legend-item"><span class="legend-line" style="background:#f59e0b;"></span> EMA</div>
+                            <div class="legend-item"><span class="legend-dot" style="background:rgba(239,68,68,0.6);"></span> DC Upper</div>
+                            <div class="legend-item"><span class="legend-dot" style="background:rgba(16,185,129,0.6);"></span> DC Lower</div>
+                            <div class="legend-item"><span class="legend-line" style="background:#38bdf8;"></span> ADX</div>
+                            <div class="legend-item"><span class="legend-line" style="background:#fbbf24;"></span> ADX 4H</div>
+                            <div class="legend-item"><span class="legend-line" style="background:#f472b6;"></span> Chaos</div>
+                            <div class="legend-item"><span class="legend-line" style="background:#a78bfa;"></span> Chop</div>
                         </div>
                     </div>
                 </div>
@@ -244,138 +332,195 @@
         // Auto-refresh page every 30 seconds
         setTimeout(() => { location.reload(); }, 30000);
 
-        // --- Per-Symbol Indicator Charts (v13.1.0 Rich Charts) ---
+        // --- Shared Chart.js Defaults ---
+        const gridColor = 'rgba(51, 65, 85, 0.3)';
+        const tickColor = '#64748b';
+        const tickFont = { size: 8 };
+
+        // --- Per-Symbol Multi-Panel Charts ---
         {% for bot in live_monitors %}
         (function() {
-            const ctx = document.getElementById('chart-{{ bot.symbol.replace('/', '-') }}').getContext('2d');
-            const data = {{ bot.history|tojson if bot.history else '{"labels":[], "prices":[], "ema":[], "upper":[], "lower":[], "volume":[], "adx":[]}' }};
-            
+            const data = {{ bot.history|tojson if bot.history else '{"labels":[], "prices":[], "ema":[], "upper":[], "lower":[], "volume":[], "adx":[], "adx_4h":[], "chaos":[], "chop":[]}' }};
             if (data.labels.length === 0) return;
 
-            new Chart(ctx, {
+            const symId = '{{ bot.symbol.replace("/", "-") }}';
+            const adxLimit = {{ bot.adx_limit }};
+            const adx4hLimit = {{ bot.adx_4h_limit }};
+            const chaosLimit = {{ bot.chaos_limit }};
+
+            // Position data for chart annotations
+            {% if bot.position %}
+            const posEntry = {{ bot.position.entry }};
+            const posSL = {{ bot.position.sl }};
+            const posSide = '{{ bot.position.side }}';
+            {% else %}
+            const posEntry = null;
+            const posSL = null;
+            const posSide = null;
+            {% endif %}
+
+            // Shared X-axis config
+            const xAxisConfig = {
+                display: true,
+                grid: { display: false },
+                ticks: { color: tickColor, font: tickFont, maxTicksLimit: 10,
+                    callback: function(val) {
+                        const lbl = this.getLabelForValue(val);
+                        const parts = lbl.split(' ');
+                        return parts.length > 1 ? parts[1] : parts[0];
+                    }
+                }
+            };
+            const xAxisHidden = { display: false, grid: { display: false } };
+            const tooltipTitle = function(items) { return items[0] ? items[0].label : ''; };
+
+            // =========================================
+            // PANEL 1: Price + EMA + Donchian Channels
+            // =========================================
+            const priceAnnotations = {};
+            if (posEntry !== null) {
+                priceAnnotations['entryLine'] = {
+                    type: 'line', yMin: posEntry, yMax: posEntry, borderColor: '#38bdf8',
+                    borderWidth: 1.5, borderDash: [4, 4],
+                    label: { display: true, content: 'Entry $' + posEntry.toLocaleString(), position: 'start',
+                             backgroundColor: 'rgba(56,189,248,0.8)', color: '#fff', font: { size: 9 } }
+                };
+                priceAnnotations['slLine'] = {
+                    type: 'line', yMin: posSL, yMax: posSL, borderColor: '#ef4444',
+                    borderWidth: 1.5, borderDash: [4, 4],
+                    label: { display: true, content: 'SL $' + posSL.toLocaleString(), position: 'end',
+                             backgroundColor: 'rgba(239,68,68,0.8)', color: '#fff', font: { size: 9 } }
+                };
+            }
+
+            new Chart(document.getElementById('chart-price-' + symId).getContext('2d'), {
                 data: {
                     labels: data.labels,
                     datasets: [
-                        {
-                            type: 'line',
-                            label: 'Price',
-                            data: data.prices,
-                            borderColor: '#ffffff',
-                            borderWidth: 2,
-                            pointRadius: 0,
-                            tension: 0.1,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'EMA',
-                            data: data.ema,
-                            borderColor: '#f59e0b', // Orange
-                            borderWidth: 1.5,
-                            borderDash: [2, 2],
-                            pointRadius: 0,
-                            fill: false,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Donchian Upper',
-                            data: data.upper,
-                            borderColor: 'rgba(239, 68, 68, 0.4)', // Red
-                            borderWidth: 1,
-                            pointRadius: 0,
-                            fill: false,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Donchian Lower',
-                            data: data.lower,
-                            borderColor: 'rgba(16, 185, 129, 0.4)', // Green
-                            borderWidth: 1,
-                            pointRadius: 0,
-                            fill: false,
-                            yAxisID: 'y'
-                        },
-                        {
-                            type: 'line',
-                            label: 'ADX',
-                            data: data.adx,
-                            borderColor: '#38bdf8', // Blue
-                            borderWidth: 1.5,
-                            pointRadius: 0,
-                            yAxisID: 'y_adx'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Chaos',
-                            data: data.chaos,
-                            borderColor: '#f472b6', // Pink
-                            borderWidth: 1.5,
-                            pointRadius: 0,
-                            yAxisID: 'y_adx'
-                        },
-                        {
-                            type: 'line',
-                            label: 'Choppiness',
-                            data: data.chop,
-                            borderColor: '#a78bfa', // Purple
-                            borderWidth: 1,
-                            pointRadius: 0,
-                            yAxisID: 'y_adx'
-                        },
-                        {
-                            type: 'bar',
-                            label: 'Volume',
-                            data: data.volume,
-                            backgroundColor: 'rgba(148, 163, 184, 0.15)',
-                            yAxisID: 'y_vol'
-                        }
+                        { type: 'line', label: 'Price', data: data.prices, borderColor: '#ffffff', borderWidth: 2, pointRadius: 0, tension: 0.1, yAxisID: 'y' },
+                        { type: 'line', label: 'EMA', data: data.ema, borderColor: '#f59e0b', borderWidth: 1.5, borderDash: [3, 3], pointRadius: 0, fill: false, yAxisID: 'y' },
+                        { type: 'line', label: 'DC Upper', data: data.upper, borderColor: 'rgba(239, 68, 68, 0.6)', borderWidth: 1.5, pointRadius: 0, fill: '+1', backgroundColor: 'rgba(148, 163, 184, 0.04)', yAxisID: 'y' },
+                        { type: 'line', label: 'DC Lower', data: data.lower, borderColor: 'rgba(16, 185, 129, 0.6)', borderWidth: 1.5, pointRadius: 0, fill: false, yAxisID: 'y' }
                     ]
                 },
                 options: {
-                    animation: false,
-                    responsive: true,
-                    maintainAspectRatio: false,
+                    animation: false, responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
-                    plugins: { 
+                    plugins: {
                         legend: { display: false },
-                        tooltip: { enabled: true }
+                        tooltip: { enabled: true, callbacks: {
+                            title: tooltipTitle,
+                            label: function(ctx) { return ctx.dataset.label + ': $' + ctx.parsed.y.toLocaleString(); }
+                        }},
+                        annotation: { annotations: priceAnnotations }
                     },
                     scales: {
-                        x: { 
-                            display: true, 
-                            grid: { display: false },
-                            ticks: { 
-                                color: '#64748b', 
-                                font: { size: 8 }, 
-                                maxTicksLimit: 8,
-                                callback: function(val, index) {
-                                    return this.getLabelForValue(val).split(' ')[1]; // Show only HH:MM
+                        x: xAxisHidden,
+                        y: { display: true, position: 'right', grid: { color: gridColor },
+                             ticks: { color: '#94a3b8', font: { size: 9 }, callback: function(v) { return '$' + v.toLocaleString(); } } }
+                    }
+                }
+            });
+
+            // =========================================
+            // PANEL 2: ADX (1H) + ADX (4H) with Threshold Lines
+            // =========================================
+            new Chart(document.getElementById('chart-adx-' + symId).getContext('2d'), {
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { type: 'line', label: 'ADX 1H', data: data.adx, borderColor: '#38bdf8', borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { type: 'line', label: 'ADX 4H', data: data.adx_4h, borderColor: '#fbbf24', borderWidth: 1.5, pointRadius: 0, borderDash: [3, 2], fill: false }
+                    ]
+                },
+                options: {
+                    animation: false, responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: true, callbacks: { title: tooltipTitle } },
+                        annotation: {
+                            annotations: {
+                                adxThreshold: { type: 'line', yMin: adxLimit, yMax: adxLimit, borderColor: 'rgba(56,189,248,0.4)', borderWidth: 1, borderDash: [3,3] },
+                                adx4hThreshold: { type: 'line', yMin: adx4hLimit, yMax: adx4hLimit, borderColor: 'rgba(251,191,36,0.4)', borderWidth: 1, borderDash: [3,3] }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: xAxisHidden,
+                        y: { display: true, position: 'right', min: 0, max: 60,
+                             grid: { color: gridColor },
+                             ticks: { color: tickColor, font: tickFont, stepSize: 20 } }
+                    }
+                }
+            });
+
+            // =========================================
+            // PANEL 3: Chaos Index + Choppiness Index
+            // =========================================
+            new Chart(document.getElementById('chart-chaos-' + symId).getContext('2d'), {
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { type: 'line', label: 'Chaos', data: data.chaos, borderColor: '#f472b6', borderWidth: 1.5, pointRadius: 0, fill: false },
+                        { type: 'line', label: 'Choppiness', data: data.chop, borderColor: '#a78bfa', borderWidth: 1.5, pointRadius: 0, fill: false }
+                    ]
+                },
+                options: {
+                    animation: false, responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: true, callbacks: { title: tooltipTitle } },
+                        annotation: {
+                            annotations: {
+                                chaosThreshold: { type: 'line', yMin: chaosLimit, yMax: chaosLimit, borderColor: 'rgba(244,114,182,0.5)', borderWidth: 1, borderDash: [3,3],
+                                    label: { display: true, content: 'Chaos ' + chaosLimit, position: 'start', backgroundColor: 'rgba(244,114,182,0.3)', color: '#f472b6', font: { size: 8 } }
+                                },
+                                chopThreshold: { type: 'line', yMin: 61.8, yMax: 61.8, borderColor: 'rgba(167,139,250,0.5)', borderWidth: 1, borderDash: [3,3],
+                                    label: { display: true, content: 'Chop 61.8', position: 'end', backgroundColor: 'rgba(167,139,250,0.3)', color: '#a78bfa', font: { size: 8 } }
                                 }
                             }
-                        },
-                        y: { 
-                            display: true, 
-                            position: 'left',
-                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
-                            ticks: { 
-                                color: '#94a3b8', 
-                                font: { size: 9 },
-                                callback: function(value) { return '$' + value.toLocaleString(); }
-                            }
-                        },
-                        y_adx: {
-                            display: false,
-                            min: 0,
-                            max: 100,
-                            position: 'right'
-                        },
-                        y_vol: {
-                            display: false,
-                            min: 0,
-                            position: 'right'
                         }
+                    },
+                    scales: {
+                        x: xAxisHidden,
+                        y: { display: true, position: 'right', min: 0, max: 80,
+                             grid: { color: gridColor },
+                             ticks: { color: tickColor, font: tickFont, stepSize: 20 } }
+                    }
+                }
+            });
+
+            // =========================================
+            // PANEL 4: Volume Bars
+            // =========================================
+            const volColors = data.volume.map((v, i) => {
+                if (i > 0 && data.prices[i] >= data.prices[i-1]) return 'rgba(16, 185, 129, 0.5)';
+                return 'rgba(239, 68, 68, 0.4)';
+            });
+            new Chart(document.getElementById('chart-vol-' + symId).getContext('2d'), {
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { type: 'bar', label: 'Volume', data: data.volume, backgroundColor: volColors }
+                    ]
+                },
+                options: {
+                    animation: false, responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { display: false }, tooltip: { enabled: true, callbacks: { title: tooltipTitle } } },
+                    scales: {
+                        x: { display: true, grid: { display: false },
+                             ticks: { color: tickColor, font: tickFont, maxTicksLimit: 10,
+                                 callback: function(val) {
+                                     const lbl = this.getLabelForValue(val);
+                                     const parts = lbl.split(' ');
+                                     return parts.length > 1 ? parts[1] : parts[0];
+                                 }
+                             }
+                        },
+                        y: { display: false, beginAtZero: true }
                     }
                 }
             });

@@ -1,0 +1,146 @@
+# TrendCrusher Configuration (v13.8.7)
+# Copy this file to config.yaml and update your settings.
+
+# --- VERSION ---
+VERSION: "13.8.7"
+
+# --- API KEYS ---
+# OVERRIDE: Environment variables will override these values if they exist.
+EXCHANGE: "binance"
+BINANCE_API_KEY: "YOUR_BINANCE_API_KEY"
+BINANCE_SECRET: "YOUR_BINANCE_SECRET"
+TELEGRAM_TOKEN: "YOUR_TELEGRAM_BOT_TOKEN"
+TELEGRAM_CHAT_ID: "YOUR_TELEGRAM_CHAT_ID"
+
+# --- OPERATIONAL SETTINGS ---
+DRY_RUN: false
+SEED: 300.0
+SYMBOLS_LIST:
+  - "XRP/USDT"
+  - "TRUMP/USDT"
+  - "SUI/USDT"
+MAX_CONCURRENT_TRADES: 3
+MARGIN_MODE: "ISOLATED"
+MAX_LEVERAGE: 5
+
+# --- GLOBAL MODE DEFAULTS ---
+# These apply to all symbols unless overridden in SYMBOL_SETTINGS.
+USE_SNIPER: true          # Pre-emptive Limit Entry (Maker)
+USE_RETEST_MAKER: false   # Post-breakout Pullback Entry (Maker)
+# If both are false, the bot uses Market Entry (Taker) on signal close.
+
+# --- GLOBAL STRATEGY PARAMETERS ---
+VOL_MULTIPLIER: 2.2
+ADX_FILTER_LEVEL: 20.0
+ADX_4H_THRESHOLD: 15.0
+CHAOS_THRESHOLD: 20.0
+EMA_TREND_PERIOD: 50
+DONCHIAN_PERIOD: 10
+
+
+# --- 4. Risk & Money Management ---
+RISK_PER_TRADE: 0.08
+MAX_POSITION_VALUE_USDT: 100.0
+INITIAL_SL_ATR: 2.0
+INITIAL_SL_PCT: 0.0
+BE_GUARD_THRESHOLD: 3.0
+
+TRAILING_ATR_MULT: 5.0  
+ADAPTIVE_TRAIL_STEPS:
+   - {pnl_pct: 15.0, tighten_ratio: 0.6}
+   - {pnl_pct: 30.0, tighten_ratio: 0.3}
+
+SNIPER_PROXIMITY_PCT: 0.01 # 1% proximity to trigger Sniper ambush
+
+# --- SYMBOL SPECIFIC OVERRIDES (RECOMMENDED DEFAULTS) ---
+# You can customize ANY parameter for specific coins here.
+# These values are based on 1-year historical backtest optimizations.
+SYMBOL_SETTINGS:
+  "BTC/USDT":
+    USE_SNIPER: false
+    USE_RETEST_MAKER: true # Wait for retest on BTC for safer, zero-slippage entry
+    ALLOCATED_SEED: 100.0
+    VOL_MULTIPLIER: 1.5    # BTC has high baseline volume, lower multiplier is okay
+    EMA_TREND_PERIOD: 200  # Conservative macro filter
+    TRAILING_ATR_MULT: 4.5
+  
+  "ETH/USDT":
+    USE_SNIPER: true       # Sniper ambush works well for ETH breakouts
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    VOL_MULTIPLIER: 2.0
+    EMA_TREND_PERIOD: 100
+    TRAILING_ATR_MULT: 4.0 # Slightly tighter exit for ETH
+  
+  "SOL/USDT":
+    USE_SNIPER: true
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    VOL_MULTIPLIER: 2.5    # Requires stronger momentum
+    ADX_FILTER_LEVEL: 20   # Filter out choppy SOL movements
+    TRAILING_ATR_MULT: 4.5
+  
+  "XRP/USDT":
+    USE_SNIPER: true
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.08
+    VOL_MULTIPLIER: 2.2
+    TRAILING_ATR_MULT: 3.0
+    ADX_FILTER_LEVEL: 18
+    DONCHIAN_PERIOD: 20
+    USE_ADAPTIVE_TRAIL: false
+    INITIAL_SL_ATR: 2.0
+    BE_GUARD_THRESHOLD: 3.0
+    CHAOS_THRESHOLD: 20.0
+    EMA_TREND_PERIOD: 150
+  
+  "TRUMP/USDT":
+    USE_SNIPER: false
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.10
+    VOL_MULTIPLIER: 1.3
+    TRAILING_ATR_MULT: 5.0
+    ADX_FILTER_LEVEL: 35
+    DONCHIAN_PERIOD: 20
+    USE_ADAPTIVE_TRAIL: true
+    ADAPTIVE_STEPS:
+      - { pnl_pct: 5.0, tighten_ratio: 0.5 }
+      - { pnl_pct: 8.0, tighten_ratio: 0.3 }
+    INITIAL_SL_ATR: 2.0
+    BE_GUARD_THRESHOLD: 1.5
+    CHAOS_THRESHOLD: 10.0
+    EMA_TREND_PERIOD: 150
+  
+  "SUI/USDT":
+    USE_SNIPER: false
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.10
+    VOL_MULTIPLIER: 3.0
+    TRAILING_ATR_MULT: 5.0
+    ADX_FILTER_LEVEL: 35
+    DONCHIAN_PERIOD: 20
+    USE_ADAPTIVE_TRAIL: false
+    INITIAL_SL_ATR: 1.5
+    BE_GUARD_THRESHOLD: 3.0
+    CHAOS_THRESHOLD: 20.0
+    EMA_TREND_PERIOD: 25
+
+# --- MISC ---
+SIGNAL_TIMEFRAME: "1h"
+TREND_TIMEFRAME: "4h"
+CHECK_TIMEFRAME: "1m"
+DATA_DIR: "data"
+
+# --- Telegram Notifier ---
+NOTIFY_EVERY_TICK: false
+NOTIFY_INDICATOR_UPDATE: true
+
+# --- Operational Guardrails (v13.3.0) ---
+SELF_HEALING_WS: true
+GHOST_ORDER_CLEANUP: true
+
+
+DASHBOARD_PASSWORD_HASH: "scrypt:32768:8:1$rwJZH9WMttqnpKiN$db86f52c833c836f5e6726e875bd66d4a951b35ea8b43004d0e6a22af18738905b973b0a4c92001ced29875b6c441ff14b9310250ea64dff2b2fdc510cc4edad"

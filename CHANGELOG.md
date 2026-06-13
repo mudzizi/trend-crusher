@@ -2,6 +2,69 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.8.7] - 2026-06-14
+### **📊 Batch Backfill and ADX 4H Zero Value Resolution**
+- **Batch Backfill**: Modified `_backfill_history_1h()` to batch-upload the last 120 hours of indicator calculations (matching the DB's 5-day retention limit) to the database on bot startup. This fills any chronological gaps that occur when the bot is offline.
+- **ADX 4H Zero Value Fix**: Added `log_history_1h_batch()` and upgraded database insertion from `INSERT OR IGNORE` to `INSERT OR REPLACE`. This replaces any legacy zero-value ADX 4H records in the database with correctly calculated values calculated from the full OHLCV series.
+- **Robust Verification**: Added new test cases `test_log_history_1h_batch` and `test_async_log_history_1h_batch` to `tests/test_db_manager.py`. All 96 tests pass cleanly.
+
+## [13.8.6] - 2026-06-14
+### **📊 Backfill, Dynamic Score, and Tooltip Date Enhancement**
+- **History Backfill**: Added `_backfill_history_1h()` method to `SymbolBotAsync`. On bot initialization, backfills last 48h of indicator data from the already-fetched 1000-bar OHLCV, ensuring all coins start with consistent chart history regardless of when they were added.
+- **Dynamic Signal Score**: Replaced hardcoded `score=100` with `_compute_signal_score()` that evaluates 6 entry conditions (Chaos, Slope, Chop, ADX, ADX 4H, Volume) + Squeeze bonus, producing a meaningful 0-100 score.
+- **Tooltip Date Display**: Chart labels now include date (`MM/DD HH:MM`). X-axis ticks show only `HH:MM` for compactness, but mouse-over tooltip title shows the full date+time.
+
+
+### **🖥️ Dashboard Indicator Enhancement for Entry/Exit Decision Support**
+- **Multi-Panel Chart System**: Replaced single cramped 180px chart with 4 dedicated panels per symbol: Price/EMA/Donchian (220px), ADX 1H+4H (70px), Chaos/Choppiness (70px), Volume (50px).
+- **ADX 4H Pipeline**: Added `adx_4h` column to `history_1h` and `live_indicators` DB tables. Updated `db_manager.py`, `async_db_manager.py`, `live_bot_async.py`, and `dashboard.py` to log, pass, and display the previously-missing 4H ADX indicator.
+- **Entry Readiness Checklist**: Added real-time 6-condition pass/fail checklist (Chaos, Slope, Chop, ADX, ADX 4H, Volume) with progress bar, showing exact current values vs thresholds.
+- **Position Overlay**: Entry price and Stop-Loss lines rendered as chart annotations on the price panel when in position.
+- **Chart Annotations**: Added threshold reference lines with labels on ADX and Chaos/Chop panels for instant pass/fail visual assessment.
+- **Direction Badge**: Each symbol card now shows ▲ LONG or ▼ SHORT bias indicator.
+- **Chart Legend**: Added compact legend strip identifying all indicator lines by color.
+- **Volume Color-Coding**: Volume bars are now green (up candle) / red (down candle) with improved visibility.
+- **Wider Layout**: Cards use 2-column layout (was 3) for more chart real estate.
+- **Zero Regression**: All 94 tests pass with no failures.
+
+## [13.8.4] - 2026-06-12
+### **⚡ Fix Trailing Stop Loss Degradation in Backtest Engine**
+- **Trailing SL Degradation Fix**: Updated `numba_find_first_exit` in `src/strategy_numba.py` to continuously persist and update `sl_p` in the minute-by-minute evaluation loop. This ensures that the active Stop Loss never degrades even when the ATR value increases on subsequent bars, matching the live trading bot execution logic.
+- **Added Regression Test**: Created `test_numba_find_first_exit_sl_leakage` in `tests/test_strategy.py` to verify the fix, simulating volatile ATR expansions and proving that the correct trailing SL holds.
+
+## [13.8.1] - 2026-06-08
+### **⚡ Align Mega Optimizer with Strategy V7.0 Indicators**
+- **Unified Indicator Engine**: Refactored `scripts/mega_overnight_optimizer.py` to calculate indicators via `TrendCrusherV2.calculate_indicators` instead of duplicating math logic locally, guaranteeing full compatibility with newer Momentum V7.0 filters (`chop`, `chaos`, `squeeze`, `ema_slope`, `adx_4h`).
+- **Robust Optimization Testing**: Confirmed compatibility with full verification tests and successfully pushed the patch to the remote repository.
+
+## [13.8.0] - 2026-06-08
+### **⚡ Optimization Engine Performance Acceleration**
+- **Indicator Calculation Caching**: Optimized parameter grid search by pre-calculating and caching indicators per `EMA_TREND_PERIOD` (the only parameter affecting series operations), reducing redundant calculation operations by 16x (from 48 down to 3).
+- **Multiprocessing Grid Search**: Integrated `ProcessPoolExecutor` to run backtesting in parallel across all available CPU cores. Restructured the backtest worker function `_run_single_search` at the top level of the module for `pickle` serialization.
+- **Robust Testing Verification**: Implemented a comprehensive test suite in `tests/test_optimizer_engine.py` using mocked data sources to guarantee accurate parameter optimization without actual file I/O or network requests.
+
+## [13.7.0] - 2026-06-08
+### **🤖 Unify Legacy Synchronous Bots onto Async Core**
+- **Legacy Bot Consolidation**: Refactored `scripts/live_bot.py` and `scripts/live_bot_multi.py` by removing over 570 lines of duplicate synchronous trading loops, order syncs, and config loadings.
+- **Async Execution Wrapper**: Replaced the synchronous bot cores with modern thin wrappers that delegate all execution to the asynchronous multi-symbol bot core (`src/bot/live_bot_async.py`), securing a single source of truth (SSOT) for live trading.
+- **CLI Compatibility**: Preserved command-line interface arguments and logging file targets (`log/live_bot.log` and `log/live_bot_multi.log`) to guarantee zero regression for existing automation pipelines.
+- **Robust Path Resolution**: Appended the project root path to `sys.path` in both scripts to prevent `ModuleNotFoundError` when run directly without setting `PYTHONPATH`.
+
+## [13.6.0] - 2026-06-08
+### **⚙️ Strategy Interface Abstraction & Modular Backtest Engine**
+- **Strategy Abstraction**: Introduced the `BaseStrategy` abstract base class in `src/strategy_base.py` to define standard interfaces for indicator calculation, entry detection, and exit signals.
+- **Numba Logic Isolation**: Extracted high-performance JIT-compiled mathematical logic (`numba_check_entry`, `numba_check_exit`, `numba_find_first_exit`) from the strategy core into `src/strategy_numba.py` to achieve clear separation of concerns (SRP).
+- **Decoupled Backtester Engine**: Separated the 1m streaming simulation loop into `BacktestEngine` in `src/backtest_engine.py` which dynamically accepts any strategy conforming to `BaseStrategy`.
+- **Facade Compatibility**: Refactored `TrendCrusherV2.run_streaming_backtest` as a thin wrapper that delegates computation to the new `BacktestEngine`, preserving full backward compatibility with over 20 pre-existing optimization and analysis scripts.
+- **Comprehensive Refactored Tests**: Added `tests/test_strategy_refactored.py` to directly verify individual Numba functions and BacktestEngine execution, scaling the verified test suite count to 91 successful tests.
+
+## [13.5.0] - 2026-06-08
+### **🧹 Test Suite Consolidation & Simplification**
+- **Unified Test Architecture**: Consolidated 28 standalone test files down to exactly 17 clean, modular test files, removing redundant and overlapping test definitions.
+- **Async Bot Core Consolidation**: Created `tests/test_bot_async.py` as a single source of truth for the async bot lifecycle, merging `test_async_realtime.py`, `test_live_bot_initialization.py`, `test_live_optimizations.py`, and `test_live_sync_pnl.py`.
+- **Cleaned Up Test Files**: Removed 11 deprecated, consolidated standalone test files from the workspace.
+- **Zero-Regression Verification**: Ran the full test suite and verified that all 88 consolidated tests pass successfully.
+
 ## [13.4.3] - 2026-06-08
 ### **🤖 Telegram Auto-Menu & Comprehensive Status Command**
 - **Bot Commands Auto-Registration**: Integrated `notifier.set_commands()` inside bot startup sequences (`live_bot_async.py`, `live_bot_multi.py`, and `live_bot.py`) to automatically update the Telegram bot commands menu upon initiation.

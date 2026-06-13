@@ -115,7 +115,8 @@ def index():
                 adx_values = hist_df['adx'].tolist()
                 chaos_values = hist_df['chaos'].tolist() if 'chaos' in hist_df.columns else [0]*len(prices)
                 chop_values = hist_df['chop'].tolist() if 'chop' in hist_df.columns else [0]*len(prices)
-                labels = [t.strftime('%H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
+                adx_4h_values = hist_df['adx_4h'].tolist() if 'adx_4h' in hist_df.columns else [0]*len(prices)
+                labels = [t.strftime('%m/%d %H:%M') for t in hist_df['timestamp']] if not hist_df.empty else []
 
                 # Add the very latest live data point
                 prices.append(row['last_price'])
@@ -129,26 +130,70 @@ def index():
                 adx_values.append(row['adx_value'])
                 chaos_values.append(row.get('chaos_value', 0))
                 chop_values.append(row.get('chop_value', 0))
+                adx_4h_values.append(row.get('adx_4h_value', 0))
                 
                 current_kst = datetime.now()
-                labels.append(current_kst.strftime('%H:%M') + " (Now)")
+                labels.append(current_kst.strftime('%m/%d %H:%M') + " (Now)")
+
+                # Per-symbol thresholds for entry readiness checklist
+                adx_limit = sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 20.0))
+                adx_4h_limit = sym_settings.get("ADX_4H_THRESHOLD", CONFIG.get("ADX_4H_THRESHOLD", 15.0))
+                chaos_limit = sym_settings.get("CHAOS_THRESHOLD", CONFIG.get("CHAOS_THRESHOLD", 20.0))
+                vol_mult = sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.2))
+                
+                # Compute entry readiness checklist
+                cur_adx = row['adx_value']
+                cur_adx_4h = row.get('adx_4h_value', 0)
+                cur_chaos = row.get('chaos_value', 0)
+                cur_chop = row.get('chop_value', 50)
+                cur_slope = row.get('slope_value', 0)
+                cur_squeeze = row.get('squeeze_value', 0)
+                cur_vol_ratio = row['vol_ratio']
+                cur_price = row['last_price']
+                cur_ema = ema_val
+                cur_upper = row['upper_band']
+                cur_lower = row['lower_column']
+                
+                is_long = cur_price > cur_ema
+                slope_ok = (cur_slope > 0 and is_long) or (cur_slope < 0 and not is_long) if chaos_limit > 0 else True
+                
+                # Position overlay data
+                pos_data = None
+                for pos in active_positions:
+                    if pos['symbol'] == sym:
+                        pos_data = pos
+                        break
 
                 live_monitors.append({
                     "symbol": sym,
                     "vol_ratio": round(row['vol_ratio'] * 100, 1),
                     "adx_value": round(row['adx_value'], 1),
-                    "chaos_value": round(row.get('chaos_value', 0), 1),
-                    "chop_value": round(row.get('chop_value', 0), 1),
-                    "squeeze": "YES" if row.get('squeeze_value', 0) > 0 else "NO",
-                    "slope": round(row.get('slope_value', 0), 4),
+                    "adx_4h_value": round(cur_adx_4h, 1),
+                    "chaos_value": round(cur_chaos, 1),
+                    "chop_value": round(cur_chop, 1),
+                    "squeeze": "YES" if cur_squeeze > 0 else "NO",
+                    "slope": round(cur_slope, 4),
                     "trend_ok": bool(row['trend_ok']),
                     "score": round(row['signal_score'], 1),
-                    "price": row['last_price'],
-                    "upper": row['upper_band'],
-                    "lower": row['lower_column'],
+                    "price": cur_price,
+                    "upper": cur_upper,
+                    "lower": cur_lower,
                     "mode": "Sniper" if sym_settings.get("USE_SNIPER", CONFIG.get("USE_SNIPER")) else ("Retest" if sym_settings.get("USE_RETEST_MAKER", CONFIG.get("USE_RETEST_MAKER")) else "Market"),
-                    "vol_mult": sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.2)),
-                    "adx_limit": sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 20.0)),
+                    "vol_mult": vol_mult,
+                    "adx_limit": adx_limit,
+                    "adx_4h_limit": adx_4h_limit,
+                    "chaos_limit": chaos_limit,
+                    "direction": "LONG" if is_long else "SHORT",
+                    # Entry Readiness Checklist
+                    "ready_chaos": cur_chaos >= chaos_limit if chaos_limit > 0 else True,
+                    "ready_slope": slope_ok,
+                    "ready_chop": cur_chop < 61.8,
+                    "ready_adx": cur_adx >= adx_limit,
+                    "ready_adx_4h": cur_adx_4h >= adx_4h_limit,
+                    "ready_vol": cur_vol_ratio >= 100,
+                    "ready_squeeze": cur_squeeze > 0,
+                    # Position overlay
+                    "position": pos_data,
                     "history": {
                         "prices": prices,
                         "ema": ema_values,
@@ -156,6 +201,7 @@ def index():
                         "lower": lower_bands,
                         "volume": volumes,
                         "adx": adx_values,
+                        "adx_4h": adx_4h_values,
                         "chaos": chaos_values,
                         "chop": chop_values,
                         "labels": labels
