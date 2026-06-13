@@ -1,3 +1,66 @@
+# Trading Session Log (2026-06-14) - Batch Backfill & ADX 4H Zero Value Fix (v13.8.7)
+
+## ✅ 완료된 작업
+1. **Batch Backfill 구현 및 48시간 제한 제거**:
+   - `_backfill_history_1h()`를 120시간(DB 보존 한도) 분량의 일괄 배치 입력으로 변경하여, 봇이 며칠간 오프라인 상태였다가 켜져도 데이터 공백(gap) 없이 완벽하게 복구되도록 개선.
+2. **ADX 4H 및 이전 지표 실시간 복구**:
+   - 기존 `INSERT OR IGNORE` 기반의 1시간 히스토리 저장 구조를 `INSERT OR REPLACE` 기반으로 전환.
+   - 신규 `log_history_1h_batch()` 메서드를 구현하여, 봇 재시작 시 기존에 0.0으로 비어 있던 데이터들을 계산된 지표값으로 일괄 업데이트(overwrite)하도록 보완.
+
+## 📊 테스트 결과
+- `py_compile`: src/db_manager.py, src/async_db_manager.py, src/bot/live_bot_async.py, tests/test_db_manager.py ✅
+- `pytest tests/`: 96 passed (2 new unit tests added: `test_log_history_1h_batch`, `test_async_log_history_1h_batch`) ✅
+
+---
+
+# Trading Session Log (2026-06-14) - Backfill, Dynamic Score, Tooltip Date (v13.8.6)
+
+## ✅ 완료된 작업
+1. **히스토리 Backfill 구현**:
+   - `_backfill_history_1h()` 메서드 추가: 봇 초기화 시 이미 fetch된 1000봉 OHLCV에서 최근 48시간 인디케이터 데이터를 `history_1h` 테이블에 자동 backfill.
+   - `INSERT OR IGNORE`로 중복 방지, 기존 데이터 48개 이상이면 backfill 생략.
+2. **다이나믹 시그널 점수 구현**:
+   - `score=100` 하드코딩 → `_compute_signal_score()` 동적 계산으로 변경.
+   - 6개 진입 조건 (Chaos, Slope, Chop, ADX, ADX 4H, Volume) + Squeeze 보너스 기반 0-100 점수.
+3. **차트 툴팁 날짜 표시**:
+   - 라벨 포맷: `HH:MM` → `MM/DD HH:MM`.
+   - X축 tick: `HH:MM`만 표시 (컴팩트).
+   - 마우스오버 툴팁: `MM/DD HH:MM` 전체 날짜+시간 표시.
+
+## 📊 테스트 결과
+- `py_compile`: live_bot_async.py ✅, dashboard.py ✅
+- `pytest tests/`: 94 passed, 0 failed
+
+---
+
+
+
+## ✅ 완료된 작업
+1. **대시보드 멀티패널 차트 시스템 구축**:
+   - 기존 180px 단일 차트를 4개 전용 패널로 분리: Price/EMA/Donchian (220px), ADX 1H+4H (70px), Chaos/Choppiness (70px), Volume (50px).
+   - 차트별 threshold 기준선(annotation) 표시: ADX 기준선, Chaos 기준선, Choppiness 61.8선.
+   - Donchian 채널 밴드를 Upper→Lower 사이 fill로 시각화.
+2. **ADX 4H 데이터 파이프라인 완성**:
+   - `db_manager.py`: `history_1h`와 `live_indicators` 테이블에 `adx_4h` 컬럼 추가 (마이그레이션 포함).
+   - `async_db_manager.py`: async wrapper에 `adx_4h` 파라미터 전달.
+   - `live_bot_async.py`: `_record_live_status()`와 `on_kline_update()`에서 `adx_4h` 데이터를 DB에 기록.
+   - `dashboard.py`: `adx_4h` history와 live 값을 템플릿에 전달.
+3. **Entry Readiness Checklist 추가**:
+   - 6개 진입 조건(Chaos, Slope, Chop, ADX, ADX 4H, Volume)의 실시간 Pass/Fail 체크리스트 UI.
+   - 진행률 바와 "X/6 PASS" 요약 표시.
+   - Squeeze 상태를 보너스 인디케이터로 표시.
+4. **포지션 오버레이**: 진입가/손절가 수평선을 차트 annotation으로 렌더링.
+5. **방향 지시기**: 각 심볼 카드에 ▲ LONG / ▼ SHORT 뱃지 추가.
+6. **차트 범례(Legend)**: 모든 인디케이터 라인을 색상으로 식별하는 컴팩트 범례 추가.
+7. **볼륨 색상 코딩**: 상승봉 녹색 / 하락봉 적색으로 가시성 개선.
+
+## 📊 테스트 결과
+- `py_compile`: db_manager.py ✅, async_db_manager.py ✅, live_bot_async.py ✅, dashboard.py ✅
+- `pytest tests/`: **94 passed, 0 failed** (39.25s)
+- Core method 존재 확인 (grep): 전체 메서드 보존 확인 완료
+
+---
+
 # Trading Session Log (2026-06-12) - Milestone: Fix Trailing Stop Loss Leakage in Backtest Engine (v13.8.4)
 
 ## ✅ 완료된 작업

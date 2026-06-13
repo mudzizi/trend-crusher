@@ -2,6 +2,31 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.8.7] - 2026-06-14
+### **📊 Batch Backfill and ADX 4H Zero Value Resolution**
+- **Batch Backfill**: Modified `_backfill_history_1h()` to batch-upload the last 120 hours of indicator calculations (matching the DB's 5-day retention limit) to the database on bot startup. This fills any chronological gaps that occur when the bot is offline.
+- **ADX 4H Zero Value Fix**: Added `log_history_1h_batch()` and upgraded database insertion from `INSERT OR IGNORE` to `INSERT OR REPLACE`. This replaces any legacy zero-value ADX 4H records in the database with correctly calculated values calculated from the full OHLCV series.
+- **Robust Verification**: Added new test cases `test_log_history_1h_batch` and `test_async_log_history_1h_batch` to `tests/test_db_manager.py`. All 96 tests pass cleanly.
+
+## [13.8.6] - 2026-06-14
+### **📊 Backfill, Dynamic Score, and Tooltip Date Enhancement**
+- **History Backfill**: Added `_backfill_history_1h()` method to `SymbolBotAsync`. On bot initialization, backfills last 48h of indicator data from the already-fetched 1000-bar OHLCV, ensuring all coins start with consistent chart history regardless of when they were added.
+- **Dynamic Signal Score**: Replaced hardcoded `score=100` with `_compute_signal_score()` that evaluates 6 entry conditions (Chaos, Slope, Chop, ADX, ADX 4H, Volume) + Squeeze bonus, producing a meaningful 0-100 score.
+- **Tooltip Date Display**: Chart labels now include date (`MM/DD HH:MM`). X-axis ticks show only `HH:MM` for compactness, but mouse-over tooltip title shows the full date+time.
+
+
+### **🖥️ Dashboard Indicator Enhancement for Entry/Exit Decision Support**
+- **Multi-Panel Chart System**: Replaced single cramped 180px chart with 4 dedicated panels per symbol: Price/EMA/Donchian (220px), ADX 1H+4H (70px), Chaos/Choppiness (70px), Volume (50px).
+- **ADX 4H Pipeline**: Added `adx_4h` column to `history_1h` and `live_indicators` DB tables. Updated `db_manager.py`, `async_db_manager.py`, `live_bot_async.py`, and `dashboard.py` to log, pass, and display the previously-missing 4H ADX indicator.
+- **Entry Readiness Checklist**: Added real-time 6-condition pass/fail checklist (Chaos, Slope, Chop, ADX, ADX 4H, Volume) with progress bar, showing exact current values vs thresholds.
+- **Position Overlay**: Entry price and Stop-Loss lines rendered as chart annotations on the price panel when in position.
+- **Chart Annotations**: Added threshold reference lines with labels on ADX and Chaos/Chop panels for instant pass/fail visual assessment.
+- **Direction Badge**: Each symbol card now shows ▲ LONG or ▼ SHORT bias indicator.
+- **Chart Legend**: Added compact legend strip identifying all indicator lines by color.
+- **Volume Color-Coding**: Volume bars are now green (up candle) / red (down candle) with improved visibility.
+- **Wider Layout**: Cards use 2-column layout (was 3) for more chart real estate.
+- **Zero Regression**: All 94 tests pass with no failures.
+
 ## [13.8.4] - 2026-06-12
 ### **⚡ Fix Trailing Stop Loss Degradation in Backtest Engine**
 - **Trailing SL Degradation Fix**: Updated `numba_find_first_exit` in `src/strategy_numba.py` to continuously persist and update `sl_p` in the minute-by-minute evaluation loop. This ensures that the active Stop Loss never degrades even when the ATR value increases on subsequent bars, matching the live trading bot execution logic.

@@ -134,6 +134,7 @@ class SymbolBotAsync:
             self.ohlcv_1h = await self.fetch_ohlcv(self.settings["SIGNAL_TIMEFRAME"], limit=1000)
             self.ohlcv_4h = await self.fetch_ohlcv(self.settings["TREND_TIMEFRAME"], limit=1000)
             self._update_indicators()
+            await self._backfill_history_1h()
             asyncio.create_task(self._record_live_status())
             await self.sync_all_orders()
             self._initialized = True
@@ -142,6 +143,75 @@ class SymbolBotAsync:
     def _update_indicators(self, is_live=False):
         if self.ohlcv_1h is not None and self.ohlcv_4h is not None:
             self.df_indicators = self.engine.calculate_indicators(self.ohlcv_1h, self.ohlcv_4h, self.settings, is_live=is_live)
+
+    async def _backfill_history_1h(self):
+        """Backfill and update last 120h of indicator data to history_1h table."""
+        if self.df_indicators is None or self.df_indicators.empty:
+            return
+        try:
+            df = self.df_indicators
+            backfill_rows = df.tail(120)
+            records = []
+            for ts, r in backfill_rows.iterrows():
+                ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, 'strftime') else str(ts)
+                records.append({
+                    'timestamp': ts_str,
+                    'close': float(r['close']),
+                    'ema': float(r['ema_h']),
+                    'd_upper': float(r['upper']),
+                    'd_lower': float(r['lower']),
+                    'volume': float(r['volume']),
+                    'adx': float(r['adx']),
+                    'chaos': float(r.get('chaos', 0)),
+                    'squeeze': float(r.get('squeeze', 0)),
+                    'slope': float(r.get('ema_slope', 0)),
+                    'chop': float(r.get('chop', 0)),
+                    'adx_4h': float(r.get('adx_4h', 0))
+                })
+            await _maybe_await(self.db.log_history_1h_batch(self.symbol, records))
+            self.logger.info(f"📊 [{self.symbol}] Backfilled/Updated {len(records)} history_1h records via batch insertion.")
+        except Exception as e:
+            self.logger.error(f"Backfill error for {self.symbol}: {e}")
+
+    def _compute_signal_score(self, row):
+        """Compute a dynamic 0-100 signal score based on entry readiness conditions."""
+        c = self.settings
+        checks = 0
+        total = 6
+        chaos_threshold = c.get('CHAOS_THRESHOLD', 20.0)
+        adx_threshold = c.get('ADX_FILTER_LEVEL', 20.0)
+        adx_4h_threshold = c.get('ADX_4H_THRESHOLD', 15.0)
+        vol_mult = c.get('VOL_MULTIPLIER', 2.0)
+        vol_target = row['avg_vol'] * vol_mult
+        cur_price = self.last_price if self.last_price > 0 else row['close']
+        is_long = cur_price > row['ema_h']
+        slope = row.get('ema_slope', 0)
+
+        # 1. Chaos gate
+        if chaos_threshold > 0 and row.get('chaos', 0) >= chaos_threshold:
+            checks += 1
+        elif chaos_threshold <= 0:
+            checks += 1
+        # 2. Slope alignment
+        if (is_long and slope > 0) or (not is_long and slope < 0):
+            checks += 1
+        # 3. Choppiness
+        if row.get('chop', 50) < 61.8:
+            checks += 1
+        # 4. ADX 1H
+        if row['adx'] >= adx_threshold:
+            checks += 1
+        # 5. ADX 4H
+        if row.get('adx_4h', 0) >= adx_4h_threshold:
+            checks += 1
+        # 6. Volume
+        if vol_target > 0 and row['volume'] >= vol_target:
+            checks += 1
+        # Squeeze bonus (adds up to ~14 points)
+        if row.get('squeeze', 0) > 0:
+            checks += 1
+            total += 1
+        return round(checks / total * 100, 1)
 
     async def _record_live_status(self):
         if self.df_indicators is None or self.df_indicators.empty: return
@@ -153,8 +223,8 @@ class SymbolBotAsync:
             ema, upper, lower = row['ema_h'], row['upper'], row['lower']
             dist = abs((upper if self.last_price > ema else lower) - self.last_price)
             prox = max(0, 1.0 - (dist / ((upper if self.last_price > ema else lower) * self.settings.get('SNIPER_PROXIMITY_PCT', 0.005)))) * 100
-            pnl_pct = ((self.last_price / self.entry_price) - 1) * 100 * self.position if self.position != 0 and self.entry_price != 0 else 0
-            await _maybe_await(self.db.update_live_status(self.symbol, v_r, a_r, prox, True, 100, self.last_price, upper, lower, row['adx'], ema, row['chaos'], row['squeeze'], row['ema_slope'], row['chop']))
+            score = self._compute_signal_score(row)
+            await _maybe_await(self.db.update_live_status(self.symbol, v_r, a_r, prox, True, score, self.last_price, upper, lower, row['adx'], ema, row['chaos'], row['squeeze'], row['ema_slope'], row['chop'], row.get('adx_4h', 0)))
         except Exception as e: self.logger.error(f"DB log error: {e}")
 
     async def on_mark_price_update(self, price):
@@ -192,7 +262,7 @@ class SymbolBotAsync:
                         self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
                         self._update_indicators(is_live=True)
                         r = self.df_indicators.iloc[-1]
-                        await _maybe_await(self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop'])))
+                        await _maybe_await(self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop']), float(r.get('adx_4h', 0))))
                 
                 elif tf == self.settings["TREND_TIMEFRAME"]:
                     if self.ohlcv_4h is not None:

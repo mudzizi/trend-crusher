@@ -1,8 +1,8 @@
-# TrendCrusher Configuration Example (v12.8.4)
+# TrendCrusher Configuration (v13.8.7)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "13.4.3"
+VERSION: "13.8.7"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.
@@ -14,11 +14,12 @@ TELEGRAM_CHAT_ID: "YOUR_TELEGRAM_CHAT_ID"
 
 # --- OPERATIONAL SETTINGS ---
 DRY_RUN: false
-SEED: 200.0
+SEED: 300.0
 SYMBOLS_LIST:
   - "XRP/USDT"
   - "TRUMP/USDT"
-MAX_CONCURRENT_TRADES: 2
+  - "SUI/USDT"
+MAX_CONCURRENT_TRADES: 3
 MARGIN_MODE: "ISOLATED"
 MAX_LEVERAGE: 5
 

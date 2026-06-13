@@ -19,21 +19,24 @@ class AsyncDBManager:
     async def get_blocked_ip_count(self):
         return await asyncio.to_thread(self.db.get_blocked_ip_count)
 
-    async def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos=0, squeeze=0, slope=0, chop=0):
+    async def log_history_1h(self, symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos=0, squeeze=0, slope=0, chop=0, adx_4h=0):
         return await asyncio.to_thread(
             self.db.log_history_1h,
-            symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos, squeeze, slope, chop
+            symbol, timestamp, close, ema, d_upper, d_lower, vol, adx, chaos, squeeze, slope, chop, adx_4h
         )
+
+    async def log_history_1h_batch(self, symbol, records):
+        return await asyncio.to_thread(self.db.log_history_1h_batch, symbol, records)
 
     async def get_history_1h(self, symbol, limit=48):
         return await asyncio.to_thread(self.db.get_history_1h, symbol, limit)
 
     async def update_live_status(self, symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower, 
-                                 adx_value=0, ema_value=0, chaos_value=0, squeeze_value=0, slope_value=0, chop_value=0):
+                                 adx_value=0, ema_value=0, chaos_value=0, squeeze_value=0, slope_value=0, chop_value=0, adx_4h_value=0):
         return await asyncio.to_thread(
             self.db.update_live_status,
             symbol, vol_ratio, adx_ratio, prox_ratio, trend_ok, score, last_price, upper, lower,
-            adx_value, ema_value, chaos_value, squeeze_value, slope_value, chop_value
+            adx_value, ema_value, chaos_value, squeeze_value, slope_value, chop_value, adx_4h_value
         )
 
     async def get_all_live_status(self):
