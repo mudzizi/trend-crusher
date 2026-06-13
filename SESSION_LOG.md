@@ -1,4 +1,69 @@
+# Trading Session Log (2026-06-12) - Milestone: Fix Trailing Stop Loss Leakage in Backtest Engine (v13.8.4)
+
+## ✅ 완료된 작업
+1. **백테스트 엔진 내 Trailing SL 흘러내림(Leakage) 버그 수정**:
+   - `src/strategy_numba.py`의 `numba_find_first_exit` 루프 내에서, 매 분 봉마다 ATR 변동으로 계산된 trailing stop loss가 완화될 때 `sl_p` 변수가 업데이트되지 않아 기존 SL이 아래로(숏은 위로) Degrade 되는 현상 발견.
+   - 루프 내에서 `sl_p = max(sl_p, trail_sl)` (롱) 및 `sl_p = min(sl_p, trail_sl) if sl_p > 0 else trail_sl` (숏) 과 같이 `sl_p`를 누적 갱신하여, Trailing SL의 단방향 갱신 원칙을 강제하도록 수정.
+2. **유닛 테스트 검증 및 전체 테스트 패스**:
+   - `tests/test_strategy.py` 에 `test_numba_find_first_exit_sl_leakage` 테스트를 추가하여, 후속 봉에서 ATR이 급증하더라도 이전 시점의 높은 Trailing SL이 유지되는 것을 검증.
+   - 전체 94개 테스트 스위트(`PYTHONPATH=. ./venv/bin/pytest tests/`) 가동 결과 100% 합격 검증 완료.
+
+---
+
+# Trading Session Log (2026-06-12) - Milestone: Complete SUI Target Grid Optimization & Final Reporting (v13.8.3)
+
+## ✅ 완료된 작업
+1. **버그 수정 후 3대 자산 전면 최적화 완수 (reports/mega_optimization_v2)**:
+   - Trailing SL 흘러내림 버그가 전면 해소된 상태에서 XRP_USDT, TRUMP_USDT, SUI_USDT 4개 분기 백테스팅 최적화 재가동 완료 (총 소요 시간: 1시간 54분 33초).
+   - 버그 패치를 반영하여 트레일링 익절 고정이 정상 작동함에 따라 XRP 평균 분기 수익률 **+102.94%** (기존 대비 +41%p 상승), TRUMP 평균 분기 수익률 **+311.17%** (기존 대비 +168%p 폭등) 달성 및 최대 MDD 극적 감소 검증 완료.
+2. **SUI_USDT 타겟 그리드 최적화 완수**:
+   - SUI_USDT 전용 타겟 그리드(`scripts/mega_overnight_optimizer.py`) 설계 및 반영으로 조합 수를 81개로 축소하여 연산 효율화.
+   - 단기 대세선 `EMA_P = 25` 및 볼륨 가드 `Vol = 2.8 ~ 3.2`를 축으로 하는 최적 포트폴리오 세팅 산출 완료.
+3. **테스트 프레임워크 개선 및 Zero Regression**:
+   - Flaky 테스트였던 `tests/test_optimizer_engine.py` 유닛 테스트 보완 (데이터 규모 20,000분 및 `lookback_days` 12일로 확장).
+   - 전체 94개 테스트 케이스 100% 합격 검증 완료.
+
+## 🧪 검증 결과
+- **백테스팅 v2 요약**:
+  - XRP: 평균 +102.94% / 최악 Q4 +42.42% / 최대 MDD 27.83% (Sniper)
+  - TRUMP: 평균 +311.17% / 최악 Q4 +170.45% / 최대 MDD 28.27% (Market)
+  - SUI: 평균 +111.24% / 최악 Q4 -32.14% / 최대 MDD 37.08% (Market)
+
+---
+
+# Trading Session Log (2026-06-11) - Milestone: Apply Optimized Parameters for XRP & TRUMP (v13.8.2)
+
+
+## ✅ 완료된 작업
+1. **최적화 파라미터 적용 (`config.yaml`)**:
+   - `reports/MEGA_OPTIMIZATION/run_20260608_0242/full_details.csv` 분석 결과를 기반으로 XRP/USDT 및 TRUMP/USDT의 개별 최적 구동 파라미터를 `config.yaml` 내 `SYMBOL_SETTINGS`에 반영 완료.
+   - **XRP/USDT 설정**: `USE_SNIPER: true`, `USE_RETEST_MAKER: false` (Sniper 모드), `RISK_PER_TRADE: 0.08`, `VOL_MULTIPLIER: 2.2`, `TRAILING_ATR_MULT: 3.5`, `ADX_FILTER_LEVEL: 20`, `DONCHIAN_PERIOD: 20`, `USE_ADAPTIVE_TRAIL: false`, `INITIAL_SL_ATR: 2.0`, `BE_GUARD_THRESHOLD: 3.0`, `CHAOS_THRESHOLD: 20.0`, `EMA_TREND_PERIOD: 150`.
+   - **TRUMP/USDT 설정**: `USE_SNIPER: false`, `USE_RETEST_MAKER: false` (Market 모드), `RISK_PER_TRADE: 0.10`, `VOL_MULTIPLIER: 1.5`, `TRAILING_ATR_MULT: 4.5`, `ADX_FILTER_LEVEL: 30`, `DONCHIAN_PERIOD: 20`, `USE_ADAPTIVE_TRAIL: true`, `INITIAL_SL_ATR: 2.0`, `BE_GUARD_THRESHOLD: 2.0`, `CHAOS_THRESHOLD: 15.0`, `EMA_TREND_PERIOD: 150`.
+2. **설정 검증 테스트 추가 및 통과**:
+   - `tests/test_config_loading.py` 내에 `test_xrp_trump_config_overrides` 테스트 케이스를 추가하여 `config.yaml` 설정 파일 내 XRP/USDT 및 TRUMP/USDT 오버라이드 값이 정확히 로드되고 일치하는지 자동 검증 구현.
+   - `PYTHONPATH=. venv/bin/pytest` 명령어를 통해 신규 테스트를 포함한 전체 93개 테스트 케이스가 100% 정상 통과(Pass)함을 검증 완료.
+
+## 🧪 검증 결과
+- **테스트 전체 통과**: 93 passed
+
+---
+
+# Trading Session Log (2026-06-11) - Milestone: Parameter Optimization Analysis (run_20260608_0242)
+
+## ✅ 완료된 작업
+1. **`run_20260608_0242` 최적화 결과 데이터 분석**:
+   - `reports/MEGA_OPTIMIZATION/run_20260608_0242/full_details.csv` 파일(총 559,872행)을 대상으로 코인별 분기 편차를 배제한 로바스트(Robust) 파라미터 조합 분석 완료.
+   - 각 코인(`XRP_USDT`, `TRUMP_USDT`)에 대해 모든 분기(Q1~Q4)에서 고르게 양호한 수익을 내는 파라미터 분포 특징 추출 및 최적 조합 선별.
+   - 두 코인 모두에서 분기별 역추세/횡보 리스크를 방어하면서 장기 우상향을 기대할 수 있는 **교집합 범용 파라미터 조합(Universal Candidate)** 도출 완료.
+2. **어댑티브 옵션(Adaptive Option) 상세 로깅 구조 개선**:
+   - 기존의 단순 이진 값(`"Yes"`/`"No"`) 표시로 인해 구체적인 가변 트레일링 세부 수치를 알 수 없었던 한계 극복.
+   - `get_adapt_name()` 헬퍼를 추가하여 실제 가변 트레일링 스텝 스펙(예: `P2.0T0.5|P2.0T0.3`)을 상세 문자열로 결과 CSV(`Adapt` 열)에 기록하도록 로깅 체계 보완.
+   - 변경 사항 검증용 단위 테스트 및 구문 컴파일 검증 성공 후 최적화 태스크(Task-78) 재기동 완료.
+
+---
+
 # Trading Session Log (2026-06-08) - Milestone: Align Mega Optimizer with Strategy V7.0 (v13.8.1)
+
 
 ## ✅ 완료된 작업
 1. **`mega_overnight_optimizer.py` 지표 연산 최신화**:

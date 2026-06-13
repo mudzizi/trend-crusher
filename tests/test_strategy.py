@@ -253,3 +253,39 @@ def test_v7_fee_settlement_pnl(v7_config):
     strategy._close_position(110.0, pd.Timestamp.now(), is_maker=False)
     
     assert strategy.capital == pytest.approx(10195.9199)
+
+
+def test_numba_find_first_exit_sl_leakage():
+    from src.strategy_numba import numba_find_first_exit
+    import numpy as np
+
+    # Simulating a situation where ATR increases on subsequent bars
+    # Position: 1 (Long)
+    # Entry: 100.0
+    # Initial SL: 90.0
+    # max_p: 120.0 (already reached)
+    # min_p: 100.0
+    # Steps: 2 bars
+    
+    closes = np.array([115.0, 108.0])
+    lookup_indices = np.array([0, 1])
+    
+    # ATR sequence:
+    # Bar 0: ATR = 2.0. With trail mult = 4.5, trail_sl = 120.0 - 2.0*4.5 = 111.0.
+    # Bar 1: ATR = 4.0. With trail mult = 4.5, trail_sl = 120.0 - 4.0*4.5 = 102.0.
+    # If the bug is active, current_sl degrades to 102.0 at Bar 1.
+    # Since close is 108.0 (which is > 102.0 but < 111.0), it won't exit if it leaks.
+    # If trailing SL works correctly (preserves 111.0), it should exit at Bar 1 because 108.0 <= 111.0.
+    
+    atrs = np.array([2.0, 4.0])
+    adaptive_steps_arr = np.zeros((0, 2))
+    
+    # We pass use_adaptive = False, be_guard_threshold = 0.0
+    exit_idx, max_p, min_p = numba_find_first_exit(
+        closes, lookup_indices, 1, 100.0, 120.0, 100.0, 90.0,
+        atrs, 4.5, False, adaptive_steps_arr, 0.0
+    )
+    
+    # Expected: Exit at index 1 because the correct trailing stop is 111.0 and 108.0 <= 111.0.
+    assert exit_idx == 1
+

@@ -21,5 +21,42 @@ def test_config_env_override(monkeypatch):
     assert config["SEED"] == 99999.0
     assert config["DRY_RUN"] is False
 
+def test_xrp_trump_config_overrides():
+    config = load_config()
+    assert "SYMBOL_SETTINGS" in config
+    settings = config["SYMBOL_SETTINGS"]
+    
+    # XRP Assertions
+    assert "XRP/USDT" in settings
+    xrp = settings["XRP/USDT"]
+    assert xrp["USE_SNIPER"] is True
+    assert xrp["USE_RETEST_MAKER"] is False
+    assert xrp["RISK_PER_TRADE"] == 0.08
+    assert xrp["VOL_MULTIPLIER"] == 2.2
+    assert xrp["TRAILING_ATR_MULT"] == 3.5
+    assert xrp["ADX_FILTER_LEVEL"] == 20
+    assert xrp["DONCHIAN_PERIOD"] == 20
+    assert xrp["USE_ADAPTIVE_TRAIL"] is False
+    assert xrp["INITIAL_SL_ATR"] == 2.0
+    assert xrp["BE_GUARD_THRESHOLD"] == 3.0
+    assert xrp["CHAOS_THRESHOLD"] == 20.0
+    assert xrp["EMA_TREND_PERIOD"] == 150
+
+    # TRUMP Assertions
+    assert "TRUMP/USDT" in settings
+    trump = settings["TRUMP/USDT"]
+    assert trump["USE_SNIPER"] is False
+    assert trump["USE_RETEST_MAKER"] is False
+    assert trump["RISK_PER_TRADE"] == 0.10
+    assert trump["VOL_MULTIPLIER"] == 1.5
+    assert trump["TRAILING_ATR_MULT"] == 4.5
+    assert trump["ADX_FILTER_LEVEL"] == 30
+    assert trump["DONCHIAN_PERIOD"] == 20
+    assert trump["USE_ADAPTIVE_TRAIL"] is True
+    assert trump["INITIAL_SL_ATR"] == 2.0
+    assert trump["BE_GUARD_THRESHOLD"] == 2.0
+    assert trump["CHAOS_THRESHOLD"] == 15.0
+    assert trump["EMA_TREND_PERIOD"] == 150
+
 if __name__ == "__main__":
     pytest.main([__file__])

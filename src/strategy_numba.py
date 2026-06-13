@@ -134,8 +134,8 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
                     if pnl_pct >= adaptive_steps_arr[j, 0]:
                         curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
             trail_sl = max_p - (atr * curr_atr_mult)
-            current_sl = max(sl_p, trail_sl)
-            if last_p <= current_sl: return i, max_p, min_p
+            sl_p = max(sl_p, trail_sl)
+            if last_p <= sl_p: return i, max_p, min_p
         else:
             min_p = min_p if min_p < last_p else last_p
             curr_atr_mult = atr_trail_mult
@@ -144,6 +144,6 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
                     if pnl_pct >= adaptive_steps_arr[j, 0]:
                         curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
             trail_sl = min_p + (atr * curr_atr_mult)
-            current_sl = min(sl_p, trail_sl) if sl_p > 0 else trail_sl
-            if last_p >= current_sl: return i, max_p, min_p
+            sl_p = min(sl_p, trail_sl) if sl_p > 0 else trail_sl
+            if last_p >= sl_p: return i, max_p, min_p
     return -1, max_p, min_p

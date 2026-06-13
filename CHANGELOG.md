@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.8.4] - 2026-06-12
+### **⚡ Fix Trailing Stop Loss Degradation in Backtest Engine**
+- **Trailing SL Degradation Fix**: Updated `numba_find_first_exit` in `src/strategy_numba.py` to continuously persist and update `sl_p` in the minute-by-minute evaluation loop. This ensures that the active Stop Loss never degrades even when the ATR value increases on subsequent bars, matching the live trading bot execution logic.
+- **Added Regression Test**: Created `test_numba_find_first_exit_sl_leakage` in `tests/test_strategy.py` to verify the fix, simulating volatile ATR expansions and proving that the correct trailing SL holds.
+
 ## [13.8.1] - 2026-06-08
 ### **⚡ Align Mega Optimizer with Strategy V7.0 Indicators**
 - **Unified Indicator Engine**: Refactored `scripts/mega_overnight_optimizer.py` to calculate indicators via `TrendCrusherV2.calculate_indicators` instead of duplicating math logic locally, guaranteeing full compatibility with newer Momentum V7.0 filters (`chop`, `chaos`, `squeeze`, `ema_slope`, `adx_4h`).
