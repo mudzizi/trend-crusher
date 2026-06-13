@@ -33,8 +33,8 @@ def test_xrp_trump_config_overrides():
     assert xrp["USE_RETEST_MAKER"] is False
     assert xrp["RISK_PER_TRADE"] == 0.08
     assert xrp["VOL_MULTIPLIER"] == 2.2
-    assert xrp["TRAILING_ATR_MULT"] == 3.5
-    assert xrp["ADX_FILTER_LEVEL"] == 20
+    assert xrp["TRAILING_ATR_MULT"] == 3.0
+    assert xrp["ADX_FILTER_LEVEL"] == 18
     assert xrp["DONCHIAN_PERIOD"] == 20
     assert xrp["USE_ADAPTIVE_TRAIL"] is False
     assert xrp["INITIAL_SL_ATR"] == 2.0
@@ -48,15 +48,31 @@ def test_xrp_trump_config_overrides():
     assert trump["USE_SNIPER"] is False
     assert trump["USE_RETEST_MAKER"] is False
     assert trump["RISK_PER_TRADE"] == 0.10
-    assert trump["VOL_MULTIPLIER"] == 1.5
-    assert trump["TRAILING_ATR_MULT"] == 4.5
-    assert trump["ADX_FILTER_LEVEL"] == 30
+    assert trump["VOL_MULTIPLIER"] == 1.3
+    assert trump["TRAILING_ATR_MULT"] == 5.0
+    assert trump["ADX_FILTER_LEVEL"] == 35
     assert trump["DONCHIAN_PERIOD"] == 20
     assert trump["USE_ADAPTIVE_TRAIL"] is True
     assert trump["INITIAL_SL_ATR"] == 2.0
-    assert trump["BE_GUARD_THRESHOLD"] == 2.0
-    assert trump["CHAOS_THRESHOLD"] == 15.0
+    assert trump["BE_GUARD_THRESHOLD"] == 1.5
+    assert trump["CHAOS_THRESHOLD"] == 10.0
     assert trump["EMA_TREND_PERIOD"] == 150
+
+    # SUI Assertions
+    assert "SUI/USDT" in settings
+    sui = settings["SUI/USDT"]
+    assert sui["USE_SNIPER"] is False
+    assert sui["USE_RETEST_MAKER"] is False
+    assert sui["RISK_PER_TRADE"] == 0.10
+    assert sui["VOL_MULTIPLIER"] == 3.0
+    assert sui["TRAILING_ATR_MULT"] == 5.0
+    assert sui["ADX_FILTER_LEVEL"] == 35
+    assert sui["DONCHIAN_PERIOD"] == 20
+    assert sui["USE_ADAPTIVE_TRAIL"] is False
+    assert sui["INITIAL_SL_ATR"] == 1.5
+    assert sui["BE_GUARD_THRESHOLD"] == 3.0
+    assert sui["CHAOS_THRESHOLD"] == 20.0
+    assert sui["EMA_TREND_PERIOD"] == 25
 
 if __name__ == "__main__":
     pytest.main([__file__])
