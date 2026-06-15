@@ -86,6 +86,38 @@ async def test_on_kline_update_new_candle_sync(mock_bot):
     mock_bot.fetch_ohlcv.assert_called_with("1h", limit=1000)
 
 @pytest.mark.asyncio
+async def test_on_kline_update_logs_correct_closed_candle(mock_bot):
+    ts_closed = pd.Timestamp.now().floor('h') - pd.Timedelta(hours=1)
+    ts_new = pd.Timestamp.now().floor('h')
+    
+    mock_bot.df_indicators = pd.DataFrame([
+        {
+            'close': 1.18, 'ema_h': 1.17, 'upper': 1.20, 'lower': 1.10,
+            'volume': 9000000.0, 'adx': 25.0, 'chaos': 20.0, 'squeeze': 0.0,
+            'ema_slope': 0.001, 'chop': 35.0, 'adx_4h': 22.0
+        },
+        {
+            'close': 1.23, 'ema_h': 1.18, 'upper': 1.25, 'lower': 1.12,
+            'volume': 150.0, 'adx': 26.0, 'chaos': 21.0, 'squeeze': 0.0,
+            'ema_slope': 0.002, 'chop': 36.0, 'adx_4h': 23.0
+        }
+    ], index=[ts_closed, ts_new])
+    
+    mock_bot.fetch_ohlcv = AsyncMock(return_value=mock_bot.ohlcv_1h)
+    mock_bot.db.log_history_1h = AsyncMock()
+    
+    kline_msg = {
+        't': int(ts_closed.timestamp() * 1000),
+        'o': '1.18', 'h': '1.20', 'l': '1.10', 'c': '1.18', 'v': '9000000', 'x': True
+    }
+    
+    await mock_bot.on_kline_update("1h", kline_msg)
+    
+    mock_bot.db.log_history_1h.assert_called_once()
+    called_args = mock_bot.db.log_history_1h.call_args[0]
+    assert called_args[6] == 9000000.0
+
+@pytest.mark.asyncio
 async def test_on_kline_update_ignore_irrelevant_tf(mock_bot):
     mock_bot.fetch_ohlcv = AsyncMock()
     mock_bot.check_entry = AsyncMock()

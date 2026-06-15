@@ -182,10 +182,40 @@ class SymbolBotAsync:
         adx_threshold = c.get('ADX_FILTER_LEVEL', 20.0)
         adx_4h_threshold = c.get('ADX_4H_THRESHOLD', 15.0)
         vol_mult = c.get('VOL_MULTIPLIER', 2.0)
-        vol_target = row['avg_vol'] * vol_mult
+        
+        is_ambushing = bool(self.active_sniper_order_id or self.active_retest_order_id)
+        
         cur_price = self.last_price if self.last_price > 0 else row['close']
         is_long = cur_price > row['ema_h']
         slope = row.get('ema_slope', 0)
+
+        # Parameter Normalization (Hysteresis)
+        v_target = vol_mult * 0.8 if is_ambushing else vol_mult
+        a_target = adx_threshold * 0.8 if is_ambushing else adx_threshold
+        a4_target = adx_4h_threshold * 0.8 if is_ambushing else adx_4h_threshold
+
+        # Dynamic Barrier (applied if chaos_threshold > 0)
+        v_mult_final = v_target
+        a_target_final = a_target
+        a4_target_final = a4_target
+        
+        chop = row.get('chop', 50.0)
+        squeeze = row.get('squeeze', 0.0)
+        
+        if chaos_threshold > 0:
+            # Choppiness Scaling
+            if chop > 61.8:
+                v_mult_final *= 1.8
+            elif chop < 38.2:
+                v_mult_final *= 0.8
+            # Squeeze scaling
+            if squeeze > 0:
+                v_mult_final *= 0.7
+            # Short position bias
+            if not is_long:
+                v_mult_final *= 0.6
+                a_target_final *= 0.7
+                a4_target_final *= 0.7
 
         # 1. Chaos gate
         if chaos_threshold > 0 and row.get('chaos', 0) >= chaos_threshold:
@@ -196,19 +226,19 @@ class SymbolBotAsync:
         if (is_long and slope > 0) or (not is_long and slope < 0):
             checks += 1
         # 3. Choppiness
-        if row.get('chop', 50) < 61.8:
+        if chop < 61.8:
             checks += 1
         # 4. ADX 1H
-        if row['adx'] >= adx_threshold:
+        if row['adx'] >= a_target_final:
             checks += 1
         # 5. ADX 4H
-        if row.get('adx_4h', 0) >= adx_4h_threshold:
+        if row.get('adx_4h', 0) >= a4_target_final:
             checks += 1
         # 6. Volume
-        if vol_target > 0 and row['volume'] >= vol_target:
+        if row['volume'] >= (row['avg_vol'] * v_mult_final):
             checks += 1
         # Squeeze bonus (adds up to ~14 points)
-        if row.get('squeeze', 0) > 0:
+        if squeeze > 0:
             checks += 1
             total += 1
         return round(checks / total * 100, 1)
@@ -261,8 +291,26 @@ class SymbolBotAsync:
                     if kline['x']:
                         self.ohlcv_1h = await self.fetch_ohlcv(tf, limit=1000)
                         self._update_indicators(is_live=True)
-                        r = self.df_indicators.iloc[-1]
-                        await _maybe_await(self.db.log_history_1h(self.symbol, self.df_indicators.index[-1].strftime("%Y-%m-%d %H:%M:%S"), float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), float(r['ema_slope']), float(r['chop']), float(r.get('adx_4h', 0))))
+                        closed_ts = pd.to_datetime(kline['t'], unit='ms')
+                        if closed_ts in self.df_indicators.index:
+                            r = self.df_indicators.loc[closed_ts]
+                            await _maybe_await(self.db.log_history_1h(
+                                self.symbol, 
+                                closed_ts.strftime("%Y-%m-%d %H:%M:%S"), 
+                                float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), 
+                                float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), 
+                                float(r['ema_slope']), float(r['chop']), float(r.get('adx_4h', 0))
+                            ))
+                        else:
+                            r = self.df_indicators.iloc[-2] if len(self.df_indicators) > 1 else self.df_indicators.iloc[-1]
+                            ts_val = self.df_indicators.index[-2] if len(self.df_indicators) > 1 else self.df_indicators.index[-1]
+                            await _maybe_await(self.db.log_history_1h(
+                                self.symbol, 
+                                ts_val.strftime("%Y-%m-%d %H:%M:%S"), 
+                                float(r['close']), float(r['ema_h']), float(r['upper']), float(r['lower']), 
+                                float(r['volume']), float(r['adx']), float(r['chaos']), float(r['squeeze']), 
+                                float(r['ema_slope']), float(r['chop']), float(r.get('adx_4h', 0))
+                            ))
                 
                 elif tf == self.settings["TREND_TIMEFRAME"]:
                     if self.ohlcv_4h is not None:

@@ -100,6 +100,7 @@ def index():
                     continue
                     
                 sym_settings = CONFIG.get("SYMBOL_SETTINGS", {}).get(sym, {})
+                vol_mult = sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.2))
                 
                 # Fetch hourly history for charting (last 48h)
                 hist_df = db.get_history_1h(sym, limit=48)
@@ -126,7 +127,12 @@ def index():
                 
                 upper_bands.append(row['upper_band'])
                 lower_bands.append(row['lower_column'])
-                volumes.append(row['vol_ratio'] * (sum(volumes)/len(volumes) if volumes else 1.0))
+                
+                # Compute actual volume multiplier relative to average volume
+                cur_vol_ratio = row['vol_ratio']
+                actual_vol_mult = (cur_vol_ratio / 100.0) * vol_mult
+                volumes.append(actual_vol_mult * (sum(volumes)/len(volumes) if volumes else 1.0))
+                
                 adx_values.append(row['adx_value'])
                 chaos_values.append(row.get('chaos_value', 0))
                 chop_values.append(row.get('chop_value', 0))
@@ -135,11 +141,14 @@ def index():
                 current_kst = datetime.now()
                 labels.append(current_kst.strftime('%m/%d %H:%M') + " (Now)")
 
+                # Fetch Bot State to check if ambushing
+                state = db.get_bot_state(sym)
+                is_ambushing = bool(state.get('sniper_order_id') or state.get('retest_order_id')) if state else False
+
                 # Per-symbol thresholds for entry readiness checklist
                 adx_limit = sym_settings.get("ADX_FILTER_LEVEL", CONFIG.get("ADX_FILTER_LEVEL", 20.0))
                 adx_4h_limit = sym_settings.get("ADX_4H_THRESHOLD", CONFIG.get("ADX_4H_THRESHOLD", 15.0))
                 chaos_limit = sym_settings.get("CHAOS_THRESHOLD", CONFIG.get("CHAOS_THRESHOLD", 20.0))
-                vol_mult = sym_settings.get("VOL_MULTIPLIER", CONFIG.get("VOL_MULTIPLIER", 2.2))
                 
                 # Compute entry readiness checklist
                 cur_adx = row['adx_value']
@@ -148,14 +157,45 @@ def index():
                 cur_chop = row.get('chop_value', 50)
                 cur_slope = row.get('slope_value', 0)
                 cur_squeeze = row.get('squeeze_value', 0)
-                cur_vol_ratio = row['vol_ratio']
                 cur_price = row['last_price']
                 cur_ema = ema_val
                 cur_upper = row['upper_band']
                 cur_lower = row['lower_column']
                 
                 is_long = cur_price > cur_ema
+
+                # Parameter Normalization (Hysteresis)
+                v_target = vol_mult * 0.8 if is_ambushing else vol_mult
+                a_target = adx_limit * 0.8 if is_ambushing else adx_limit
+                a4_target = adx_4h_limit * 0.8 if is_ambushing else adx_4h_limit
+
+                # Dynamic Barrier (applied if chaos_limit > 0)
+                v_mult_final = v_target
+                a_target_final = a_target
+                a4_target_final = a4_target
+                
+                if chaos_limit > 0:
+                    # Choppiness Scaling
+                    if cur_chop > 61.8:
+                        v_mult_final *= 1.8
+                    elif cur_chop < 38.2:
+                        v_mult_final *= 0.8
+                    # Squeeze scaling
+                    if cur_squeeze > 0:
+                        v_mult_final *= 0.7
+                    # Short position bias
+                    if not is_long:
+                        v_mult_final *= 0.6
+                        a_target_final *= 0.7
+                        a4_target_final *= 0.7
+
+                # Checks
+                chaos_ok = cur_chaos >= chaos_limit if chaos_limit > 0 else True
                 slope_ok = (cur_slope > 0 and is_long) or (cur_slope < 0 and not is_long) if chaos_limit > 0 else True
+                chop_ok = cur_chop < 61.8
+                adx_ok = cur_adx >= a_target_final
+                adx_4h_ok = cur_adx_4h >= a4_target_final
+                vol_ok = actual_vol_mult >= v_mult_final
                 
                 # Position overlay data
                 pos_data = None
@@ -166,7 +206,7 @@ def index():
 
                 live_monitors.append({
                     "symbol": sym,
-                    "vol_ratio": round(row['vol_ratio'] * 100, 1),
+                    "vol_ratio": round(actual_vol_mult, 2),
                     "adx_value": round(row['adx_value'], 1),
                     "adx_4h_value": round(cur_adx_4h, 1),
                     "chaos_value": round(cur_chaos, 1),
@@ -179,18 +219,18 @@ def index():
                     "upper": cur_upper,
                     "lower": cur_lower,
                     "mode": "Sniper" if sym_settings.get("USE_SNIPER", CONFIG.get("USE_SNIPER")) else ("Retest" if sym_settings.get("USE_RETEST_MAKER", CONFIG.get("USE_RETEST_MAKER")) else "Market"),
-                    "vol_mult": vol_mult,
-                    "adx_limit": adx_limit,
-                    "adx_4h_limit": adx_4h_limit,
+                    "vol_mult": round(v_mult_final, 2),
+                    "adx_limit": round(a_target_final, 1),
+                    "adx_4h_limit": round(a4_target_final, 1),
                     "chaos_limit": chaos_limit,
                     "direction": "LONG" if is_long else "SHORT",
                     # Entry Readiness Checklist
-                    "ready_chaos": cur_chaos >= chaos_limit if chaos_limit > 0 else True,
+                    "ready_chaos": chaos_ok,
                     "ready_slope": slope_ok,
-                    "ready_chop": cur_chop < 61.8,
-                    "ready_adx": cur_adx >= adx_limit,
-                    "ready_adx_4h": cur_adx_4h >= adx_4h_limit,
-                    "ready_vol": cur_vol_ratio >= 100,
+                    "ready_chop": chop_ok,
+                    "ready_adx": adx_ok,
+                    "ready_adx_4h": adx_4h_ok,
+                    "ready_vol": vol_ok,
                     "ready_squeeze": cur_squeeze > 0,
                     # Position overlay
                     "position": pos_data,

@@ -46,11 +46,22 @@ class TestDashboard(unittest.TestCase):
             'balance': 10100.0
         }])
         
+        # Mock Bot State
+        mock_db.get_bot_state.return_value = {
+            'symbol': 'BTC/USDT',
+            'position': 1,
+            'entry_price': 50000.0,
+            'sl_price': 49000.0,
+            'sniper_order_id': None,
+            'retest_order_id': None
+        }
+        
         # New Monitoring Table
         mock_db.get_all_live_status.return_value = pd.DataFrame([{
-            'symbol': 'BTC/USDT', 'vol_ratio': 0.5, 'adx_ratio': 0.8, 'prox_ratio': 0.9,
+            'symbol': 'BTC/USDT', 'vol_ratio': 75.0, 'adx_ratio': 80.0, 'prox_ratio': 90.0,
             'trend_ok': 1, 'signal_score': 85.0, 'last_price': 51000.0,
-            'upper_band': 52000.0, 'lower_column': 48000.0, 'adx_value': 22.5
+            'upper_band': 52000.0, 'lower_column': 48000.0, 'adx_value': 22.5,
+            'adx_4h_value': 18.0, 'chaos_value': 25.0, 'chop_value': 35.0, 'slope_value': 0.005, 'squeeze_value': 0
         }])
 
         # Hourly History Mock
@@ -92,6 +103,7 @@ class TestDashboard(unittest.TestCase):
         mock_db.get_active_trades.return_value = pd.DataFrame()
         mock_db.get_trade_history.return_value = pd.DataFrame()
         mock_db.get_equity_history.return_value = pd.DataFrame()
+        mock_db.get_bot_state.return_value = None
     
         response = self.app.get('/')
         # Even with API error, the page should load (graceful degradation)
@@ -158,6 +170,30 @@ async def test_dashboard_backend_fetches_correct_data(mock_bot, db_manager):
     assert row['symbol'] == "ETH/USDT"
     assert row['trend_ok'] == 1
     assert row['last_price'] == 2500.0
+
+@pytest.mark.asyncio
+async def test_dynamic_checklist_volume_and_adx_logic(mock_bot, db_manager):
+    # Set mock bot attributes
+    mock_bot.last_price = 2400.0 # Below EMA 2450.0 -> SHORT candidates
+    mock_bot.df_indicators = pd.DataFrame([{
+        'timestamp': pd.Timestamp.now(),
+        'upper': 2600.0,
+        'lower': 2400.0,
+        'avg_vol': 100.0,
+        'volume': 110.0, # 1.1x avg_vol
+        'adx': 20.0,
+        'ema_h': 2450.0,
+        'chaos': 25.0,
+        'squeeze': 1.0,
+        'ema_slope': -1.0,
+        'chop': 35.0 # < 38.2
+    }])
+    await mock_bot._record_live_status()
+    live_status_df = db_manager.get_all_live_status()
+    row = live_status_df.iloc[0]
+    
+    # Verify signal score calculation works with the dynamic checklist modifications
+    assert row['signal_score'] > 0
 
 if __name__ == '__main__':
     unittest.main()

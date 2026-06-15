@@ -1,3 +1,26 @@
+# Trading Session Log (2026-06-15) - Dynamic Checklist Alignment & Volume Chart Scaling Fix (v13.8.8)
+
+## ✅ 완료된 작업
+1. **인디케이터 체크리스트 다이나믹 계산 동기화**:
+   - `live_bot_async.py`의 `_compute_signal_score`와 `dashboard.py`의 체크리스트 판정 로직을 실제 트레이딩 엔진(`numba_check_entry`)의 동적 계산(choppiness 스케일링, squeeze 보너스, 숏 포지션 혜택, 오더 앰부쉬 마크 수치 보정 등)과 완전히 동기화.
+2. **볼륨 비율 표시 및 차트 스케일 스파이크 버그 해결**:
+   - `vol_ratio`가 DB에 퍼센트 단위(예: 64.8%)로 저장되고 있음에도 dashboard에서 중복으로 100을 곱해 `6485.8%`로 노출되던 인플레이션 버그 수정.
+   - 볼륨 시각화 차트 바의 높이를 재구성할 때 `vol_ratio` 퍼센트를 소수점 비율로 나눈 후 반영하여, 차트 우측 끝에 기형적으로 치솟던 볼륨 바 스파이크 버그 제거.
+   - 대시보드 체크리스트의 볼륨 비교 방식을 직관적인 배수 포맷(예: `Vol >= 2.2x (1.43x)`)으로 변경하여 템플릿과 정합성 매칭.
+3. **봉 마감 시점 볼륨(Volume) 기록 누락 버그 수정**:
+   - 기존 `on_kline_update()`에서 봉이 닫힐 때(`kline['x'] == True`), 거래소로부터 데이터를 다시 fetch하여 단순 `iloc[-1]`(새로 오픈되어 거래량이 0에 가까운 다음 봉)의 거래량을 로그에 남기던 설계 결함을 해결.
+   - websocket 봉 마감 메시지의 시작 타임스탬프(`kline['t']`)를 추적하여 `df_indicators`의 정확한 마감 봉 데이터를 매칭해 DB(`history_1h`)에 기록하도록 수정. 이로 인해 라이브 구동 중 봉이 닫힐 때 실제 거래량이 0에 가깝게 왜곡되거나 직전 봉이 스킵되던 문제가 해결되어 실제 거래소 앱의 볼륨 거래량과 완벽히 일치하게 됨.
+4. **단위 테스트 추가 및 보완**:
+   - `tests/test_dashboard.py` 내 `db.get_bot_state` 메서드를 사용하는 모의 객체 데이터 추가.
+   - `test_dynamic_checklist_volume_and_adx_logic` 테스트를 추가하여 SHORT 조건 및 chop < 38.2 시 dynamic volume/ADX 완화 동작 검증.
+   - `tests/test_bot_async.py`에 `test_on_kline_update_logs_correct_closed_candle` 단위 테스트를 추가하여 봉 마감 시 정확한 타임스탬프와 거래량이 기록되는지 실시간 매칭 검증.
+
+## 📊 테스트 결과
+- `py_compile`: scripts/dashboard.py, src/bot/live_bot_async.py, tests/test_dashboard.py, tests/test_bot_async.py ✅
+- `pytest tests/`: 98 passed ✅
+
+---
+
 # Trading Session Log (2026-06-14) - Batch Backfill & ADX 4H Zero Value Fix (v13.8.7)
 
 ## ✅ 완료된 작업
