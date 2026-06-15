@@ -131,7 +131,8 @@ def index():
                 # Compute actual volume multiplier relative to average volume
                 cur_vol_ratio = row['vol_ratio']
                 actual_vol_mult = (cur_vol_ratio / 100.0) * vol_mult
-                volumes.append(actual_vol_mult * (sum(volumes)/len(volumes) if volumes else 1.0))
+                avg_vol_20 = sum(volumes[-20:]) / len(volumes[-20:]) if volumes else 1.0
+                volumes.append(actual_vol_mult * avg_vol_20)
                 
                 adx_values.append(row['adx_value'])
                 chaos_values.append(row.get('chaos_value', 0))
