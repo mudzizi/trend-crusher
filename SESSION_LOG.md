@@ -10,7 +10,10 @@
 3. **봉 마감 시점 볼륨(Volume) 기록 누락 버그 수정**:
    - 기존 `on_kline_update()`에서 봉이 닫힐 때(`kline['x'] == True`), 거래소로부터 데이터를 다시 fetch하여 단순 `iloc[-1]`(새로 오픈되어 거래량이 0에 가까운 다음 봉)의 거래량을 로그에 남기던 설계 결함을 해결.
    - websocket 봉 마감 메시지의 시작 타임스탬프(`kline['t']`)를 추적하여 `df_indicators`의 정확한 마감 봉 데이터를 매칭해 DB(`history_1h`)에 기록하도록 수정. 이로 인해 라이브 구동 중 봉이 닫힐 때 실제 거래량이 0에 가깝게 왜곡되거나 직전 봉이 스킵되던 문제가 해결되어 실제 거래소 앱의 볼륨 거래량과 완벽히 일치하게 됨.
-4. **단위 테스트 추가 및 보완**:
+4. **멀티패널 차트 세로 정렬 정합성 보완 (Vertical Alignment)**:
+   - 가격 패널과 ADX/Chaos 패널의 y축 값 자릿수 차이 및 볼륨 패널의 y축 미표시로 인해 차트 가로폭이 달라져 그리드선(시간축)이 세로로 어긋나던 문제를 해결.
+   - 4개 패널(Price, ADX, Chaos, Volume)의 모든 Y축에 `afterFit` 콜백 속성을 추가하여 너비를 70px로 균일 고정하고, 네 차트의 가로 그리드선 및 데이터 포인트 위치가 완벽히 일렬 정렬되도록 UI 수정.
+5. **단위 테스트 추가 및 보완**:
    - `tests/test_dashboard.py` 내 `db.get_bot_state` 메서드를 사용하는 모의 객체 데이터 추가.
    - `test_dynamic_checklist_volume_and_adx_logic` 테스트를 추가하여 SHORT 조건 및 chop < 38.2 시 dynamic volume/ADX 완화 동작 검증.
    - `tests/test_bot_async.py`에 `test_on_kline_update_logs_correct_closed_candle` 단위 테스트를 추가하여 봉 마감 시 정확한 타임스탬프와 거래량이 기록되는지 실시간 매칭 검증.

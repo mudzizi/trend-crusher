@@ -417,7 +417,8 @@
                     scales: {
                         x: xAxisHidden,
                         y: { display: true, position: 'right', grid: { color: gridColor },
-                             ticks: { color: '#94a3b8', font: { size: 9 }, callback: function(v) { return '$' + v.toLocaleString(); } } }
+                             ticks: { color: '#94a3b8', font: { size: 9 }, callback: function(v) { return '$' + v.toLocaleString(); } },
+                             afterFit: function(scale) { scale.width = 70; } }
                     }
                 }
             });
@@ -450,7 +451,8 @@
                         x: xAxisHidden,
                         y: { display: true, position: 'right', min: 0, max: 60,
                              grid: { color: gridColor },
-                             ticks: { color: tickColor, font: tickFont, stepSize: 20 } }
+                             ticks: { color: tickColor, font: tickFont, stepSize: 20 },
+                             afterFit: function(scale) { scale.width = 70; } }
                     }
                 }
             });
@@ -487,7 +489,8 @@
                         x: xAxisHidden,
                         y: { display: true, position: 'right', min: 0, max: 80,
                              grid: { color: gridColor },
-                             ticks: { color: tickColor, font: tickFont, stepSize: 20 } }
+                             ticks: { color: tickColor, font: tickFont, stepSize: 20 },
+                             afterFit: function(scale) { scale.width = 70; } }
                     }
                 }
             });
@@ -513,14 +516,17 @@
                     scales: {
                         x: { display: true, grid: { display: false },
                              ticks: { color: tickColor, font: tickFont, maxTicksLimit: 10,
-                                 callback: function(val) {
-                                     const lbl = this.getLabelForValue(val);
-                                     const parts = lbl.split(' ');
-                                     return parts.length > 1 ? parts[1] : parts[0];
-                                 }
+                                  callback: function(val) {
+                                      const lbl = this.getLabelForValue(val);
+                                      const parts = lbl.split(' ');
+                                      return parts.length > 1 ? parts[1] : parts[0];
+                                  }
                              }
                         },
-                        y: { display: false, beginAtZero: true }
+                        y: { display: true, position: 'right', beginAtZero: true,
+                             grid: { display: false, drawBorder: false },
+                             ticks: { display: false },
+                             afterFit: function(scale) { scale.width = 70; } }
                     }
                 }
             });
