@@ -113,11 +113,18 @@ class BacktestEngine:
             r_squeeze = i_squeeze[idx]
             
             if strategy.position != 0:
-                rel_idx, max_p, min_p = numba_find_first_exit(
-                    m_closes[i:], valid_lookup_idx[i:], strategy.position, strategy.entry_price, 
-                    strategy.max_price_seen, strategy.min_price_seen, strategy.sl_price, 
-                    i_atr, a_t_m, u_a, steps_arr, b_g_t
-                )
+                if hasattr(strategy, 'find_first_exit'):
+                    rel_idx, max_p, min_p = strategy.find_first_exit(
+                        m_closes[i:], valid_lookup_idx[i:], strategy.position, strategy.entry_price, 
+                        strategy.max_price_seen, strategy.min_price_seen, strategy.sl_price, 
+                        i_atr, a_t_m, u_a, steps_arr, b_g_t, config
+                    )
+                else:
+                    rel_idx, max_p, min_p = numba_find_first_exit(
+                        m_closes[i:], valid_lookup_idx[i:], strategy.position, strategy.entry_price, 
+                        strategy.max_price_seen, strategy.min_price_seen, strategy.sl_price, 
+                        i_atr, a_t_m, u_a, steps_arr, b_g_t
+                    )
                 if rel_idx != -1:
                     old_i = i
                     i += rel_idx
@@ -134,11 +141,18 @@ class BacktestEngine:
                     
             if strategy.position == 0 and pd.Timestamp(m_times[i]) > strategy.last_close_time:
                 c_b_v = np.sum(m_vols[i - (i % 60) : i+1])
-                sig_t, tar_p, sl_p = numba_check_entry(
-                    last_p, r_ema_h, r_upper, r_lower, r_atr, r_adx, r_avg_vol, c_b_v, 
-                    v_m, a_t, i_s_a, u_s, r_m, p_t, False, f_s_p, r_adx_4h, a_4_t, 
-                    r_chop, r_slope, r_chaos, c_t, r_squeeze
-                )
+                if hasattr(strategy, 'check_entry'):
+                    sig_t, tar_p, sl_p = strategy.check_entry(
+                        last_p, r_ema_h, r_upper, r_lower, r_atr, r_adx, r_avg_vol, c_b_v, 
+                        v_m, a_t, i_s_a, u_s, r_m, p_t, False, f_s_p, r_adx_4h, a_4_t, 
+                        r_chop, r_slope, r_chaos, c_t, r_squeeze, config
+                    )
+                else:
+                    sig_t, tar_p, sl_p = numba_check_entry(
+                        last_p, r_ema_h, r_upper, r_lower, r_atr, r_adx, r_avg_vol, c_b_v, 
+                        v_m, a_t, i_s_a, u_s, r_m, p_t, False, f_s_p, r_adx_4h, a_4_t, 
+                        r_chop, r_slope, r_chaos, c_t, r_squeeze
+                    )
                 if sig_t == 2 and ((tar_p > r_ema_h and m_highs[i] >= tar_p) or (tar_p < r_ema_h and m_lows[i] <= tar_p)):
                     strategy._open_position((1 if tar_p > r_ema_h else -1), tar_p, sl_p, pd.Timestamp(m_times[i]), r_p, True)
                 elif sig_t == 1: 

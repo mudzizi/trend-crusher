@@ -147,3 +147,109 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
             sl_p = min(sl_p, trail_sl) if sl_p > 0 else trail_sl
             if last_p >= sl_p: return i, max_p, min_p
     return -1, max_p, min_p
+
+@njit
+def numba_check_entry_scalper(last_price, ema_h, upper, lower, atr, adx, avg_vol, volume, 
+                              vol_mult, adx_threshold, initial_sl_atr, 
+                              use_sniper, retest_maker, prox_threshold, is_ambushing=False,
+                              fixed_sl_pct=0.0, adx_4h=0.0, adx_4h_threshold=20.0,
+                              chop=50.0, ema_slope=0.0, chaos=20.0, chaos_threshold=20.0, squeeze=0.0):
+    return numba_check_entry(
+        last_price, ema_h, upper, lower, atr, adx, avg_vol, volume,
+        vol_mult, adx_threshold, initial_sl_atr,
+        use_sniper, retest_maker, prox_threshold, is_ambushing,
+        fixed_sl_pct, adx_4h, adx_4h_threshold,
+        chop, ema_slope, chaos, chaos_threshold, squeeze
+    )
+
+@njit
+def numba_check_exit_scalper(last_price, position, entry_price, max_price_seen, min_price_seen, sl_price, 
+                             atr, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0,
+                             take_profit_atr_mult=0.0, take_profit_pct=0.0):
+    pnl_pct = ((last_price / entry_price) - 1) * 100 * position
+    
+    if take_profit_pct > 0.0 and pnl_pct >= take_profit_pct:
+        return True, sl_price
+        
+    if take_profit_atr_mult > 0.0:
+        if position == 1:
+            tp_price = entry_price + (atr * take_profit_atr_mult)
+            if last_price >= tp_price:
+                return True, sl_price
+        else:
+            tp_price = entry_price - (atr * take_profit_atr_mult)
+            if last_price <= tp_price:
+                return True, sl_price
+
+    if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
+        be_sl = entry_price * (1 + 0.001 * position)
+        if position == 1: sl_price = max(sl_price, be_sl)
+        else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
+
+    curr_atr_mult = atr_trail_mult
+    if use_adaptive:
+        for i in range(len(adaptive_steps_arr)):
+            if pnl_pct >= adaptive_steps_arr[i, 0]:
+                curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[i, 1])
+
+    if position == 1:
+        trail_sl = max_price_seen - (atr * curr_atr_mult)
+        new_sl = max(sl_price, trail_sl)
+        return last_price <= new_sl, new_sl
+    else:
+        trail_sl = min_price_seen + (atr * curr_atr_mult)
+        new_sl = min(sl_price, trail_sl) if sl_price > 0 else trail_sl
+        return last_price >= new_sl, new_sl
+
+@njit
+def numba_find_first_exit_scalper(closes, lookup_indices, position, entry_price, initial_max, initial_min, initial_sl,
+                                  atrs, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0,
+                                  take_profit_atr_mult=0.0, take_profit_pct=0.0):
+    max_p, min_p, sl_p = initial_max, initial_min, initial_sl
+    for i in range(len(closes)):
+        idx = lookup_indices[i]
+        if idx == -1: continue 
+        last_p = closes[i]
+        atr = atrs[idx]
+        pnl_pct = ((last_p / entry_price) - 1) * 100 * position
+
+        if take_profit_pct > 0.0 and pnl_pct >= take_profit_pct:
+            return i, max_p, min_p
+            
+        if take_profit_atr_mult > 0.0:
+            if position == 1:
+                tp_price = entry_price + (atr * take_profit_atr_mult)
+                if last_p >= tp_price:
+                    return i, max_p, min_p
+            else:
+                tp_price = entry_price - (atr * take_profit_atr_mult)
+                if last_p <= tp_price:
+                    return i, max_p, min_p
+
+        if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
+            be_sl = entry_price * (1 + 0.001 * position)
+            if position == 1: sl_p = max(sl_p, be_sl)
+            else: sl_p = min(sl_p, be_sl) if sl_p > 0 else be_sl
+
+        if position == 1:
+            max_p = max_p if max_p > last_p else last_p
+            curr_atr_mult = atr_trail_mult
+            if use_adaptive:
+                for j in range(len(adaptive_steps_arr)):
+                    if pnl_pct >= adaptive_steps_arr[j, 0]:
+                        curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
+            trail_sl = max_p - (atr * curr_atr_mult)
+            sl_p = max(sl_p, trail_sl)
+            if last_p <= sl_p: return i, max_p, min_p
+        else:
+            min_p = min_p if min_p < last_p else last_p
+            curr_atr_mult = atr_trail_mult
+            if use_adaptive:
+                for j in range(len(adaptive_steps_arr)):
+                    if pnl_pct >= adaptive_steps_arr[j, 0]:
+                        curr_atr_mult = min(curr_atr_mult, atr_trail_mult * adaptive_steps_arr[j, 1])
+            trail_sl = min_p + (atr * curr_atr_mult)
+            sl_p = min(sl_p, trail_sl) if sl_p > 0 else trail_sl
+            if last_p >= sl_p: return i, max_p, min_p
+    return -1, max_p, min_p
+

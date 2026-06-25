@@ -8,7 +8,7 @@ import argparse
 # 프로젝트 루트를 경로에 추가 (src 임포트 가능하게 함)
 sys.path.append(os.getcwd())
 
-from src.strategy import TrendCrusherV2, get_all_base_bars
+from src.strategy import TrendCrusherV2, TrendCrusherScalper, get_all_base_bars
 from src.config import CONFIG
 from src.visualizer import TradingVisualizer
 from src.data_fetcher import BinanceDataFetcher
@@ -20,8 +20,8 @@ def calculate_mdd(equity_curve):
     drawdown = (peak - curve) / (peak + 1e-10)
     return np.max(drawdown)
 
-def run_backtest(symbol, days, mode, risk_pct=0.02, config_overrides=None):
-    print(f"\n🚀 [V7.0] Backtesting {symbol} | Mode: {mode} | Risk: {risk_pct*100}% | Last {days} Days")
+def run_backtest(symbol, days, mode, strategy_name="v2", risk_pct=0.02, config_overrides=None):
+    print(f"\n🚀 [V7.0] Backtesting {symbol} | Strategy: {strategy_name} | Mode: {mode} | Risk: {risk_pct*100}% | Last {days} Days")
     
     # 1. Sync Data
     fetcher = BinanceDataFetcher()
@@ -69,6 +69,11 @@ def run_backtest(symbol, days, mode, risk_pct=0.02, config_overrides=None):
         ]
     }
     test_config.update(v7_defaults)
+    
+    # Apply symbol-specific overrides from config.yaml as priority
+    if "SYMBOL_SETTINGS" in CONFIG and symbol in CONFIG["SYMBOL_SETTINGS"]:
+        test_config.update(CONFIG["SYMBOL_SETTINGS"][symbol])
+        
     if config_overrides:
         test_config.update(config_overrides)
     
@@ -76,7 +81,10 @@ def run_backtest(symbol, days, mode, risk_pct=0.02, config_overrides=None):
     test_config["USE_SNIPER"] = (mode == "sniper")
     test_config["USE_RETEST_MAKER"] = (mode == "retest")
     
-    strategy = TrendCrusherV2(config=test_config)
+    if strategy_name == "scalper":
+        strategy = TrendCrusherScalper(config=test_config)
+    else:
+        strategy = TrendCrusherV2(config=test_config)
     
     # 3. Run Engine
     trades, equity_curve, df_ind = strategy.run_streaming_backtest(df_1m)
@@ -114,12 +122,16 @@ def run_backtest(symbol, days, mode, risk_pct=0.02, config_overrides=None):
     ret = ((final_cap / test_config["SEED"]) - 1) * 100
     mdd = calculate_mdd(equity_curve) * 100
     
+    wins = [t for t in processed_trades if t['pnl_pct'] > 0]
+    win_rate = (len(wins) / len(processed_trades) * 100) if processed_trades else 0.0
+    
     print("\n" + "="*50)
     print(f" Result for {symbol} ({mode.upper()})")
     print("="*50)
     print(f"Total Return: {ret:+.2f}%")
     print(f"Max Drawdown: {mdd:.2f}%")
     print(f"Total Trades: {len(processed_trades)}")
+    print(f"Win Rate: {win_rate:.2f}%")
     print(f"Efficiency: {ret/(mdd+0.1):.2f}")
     print(f"Report Saved: {report_path}")
     print("="*50)
@@ -135,12 +147,13 @@ def main():
     parser.add_argument("--days", type=int, default=365, help="Backtest period")
     parser.add_argument("--mode", type=str, choices=["market", "sniper", "retest"], default="market")
     parser.add_argument("--risk", type=float, default=0.08, help="Risk per trade (default 0.08)")
+    parser.add_argument("--strategy", type=str, choices=["v2", "scalper"], default="v2", help="Strategy to run")
     
     args = parser.parse_args()
     symbols = args.symbol.split(',')
     results = []
     for s in symbols:
-        res = run_backtest(s.strip().upper(), args.days, args.mode, risk_pct=args.risk)
+        res = run_backtest(s.strip().upper(), args.days, args.mode, strategy_name=args.strategy, risk_pct=args.risk)
         if res: results.append(res)
     
     if len(results) > 1:

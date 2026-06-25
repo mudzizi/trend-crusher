@@ -1,3 +1,50 @@
+# Trading Session Log (2026-06-26) - Fix Entry Price NoneType Crash & Add Exposure Safety Lock (v13.9.1)
+
+## ✅ 완료된 작업
+1. **시장가 진입 평균단가(NoneType) 버그 수정**:
+   - `src/bot/live_bot_async.py`의 `execute_entry` 메서드에서 시장가 주문 체결 응답(`order`)의 `average`가 `None`인 경우 발생하던 `TypeError: float() argument must be a string or a real number, not 'NoneType'` 크래시 수정.
+   - 기존의 `order.get('average', self.last_price)`는 딕셔너리에 키가 존재하지만 값이 `None`인 경우 디폴트값 대신 `None`을 리턴하는 취약점이 있었음.
+   - 이를 안전하게 `order.get('average') or order.get('price') or self.last_price` 로직으로 변경하여 `average`가 비어있을 경우 `price` 또는 `self.last_price`로 안전하게 fallback하도록 교정.
+2. **연속 포지셔닝(오버필) 및 SL 미등록 이슈 해결**:
+   - 상기 `Entry error`로 인해 포지션 상태가 봇 내부에 갱신(`_on_fill_success`)되지 못해 봇은 계속 포지션이 0이라고 인지하여 매 루프 진입 시그널마다 중복 주문을 전송하였던 무한 루프 원인 제거.
+   - 내부 트랜잭션 단계가 크래시 없이 정상 완료됨에 따라 Stop Loss 주문 동기화(`sync_sl_to_exchange`) 로직도 정상 호출되도록 회복됨.
+3. **시장가 진입 전 자산 한도(Exposure Safety Limit) 체크 추가**:
+   - 시장가 진입(`execute_entry`)을 수행하기 직전, 거래소의 실시간 포지션 크기 및 대기 주문 규모를 합산하여 최대 포지션 제한(`MAX_POSITION_VALUE_USDT`)을 초과하는지 체크하는 `_is_over_safety_limit()` 가드 추가.
+   - 이를 통해 봇의 메모리/DB 오동작(포지션 착각)이 발생하더라도, 거래소에 이미 할당된 자산(seed) 한도를 초과하여 이중 진입하는 오버필 주문을 물리적으로 차단하도록 안전성 보완.
+4. **단위 테스트 추가**:
+   - `tests/test_bot_async.py`에 `test_execute_entry_none_average_fallback` 테스트 케이스 신규 도입 (None average/price 응답 처리 검증).
+   - `test_execute_entry_blocked_by_safety_limit` 테스트 케이스 신규 도입 (최대 자산 한도 초과 시 시장가 진입 주문이 전송되지 않고 안전하게 차단되는지 검증).
+
+## 📊 테스트 결과
+- `py_compile`: src/bot/live_bot_async.py, tests/test_bot_async.py ✅
+- `pytest tests/`: 105 passed ✅
+
+---
+
+# Trading Session Log (2026-06-18) - Add TrendCrusherScalper High Win Rate Strategy (v13.9.0)
+
+## ✅ 완료된 작업
+1. **TrendCrusherScalper 전략 클래스 추가**:
+   - 기존의 `TrendCrusherV2` 전략은 그대로 보존하면서, 짧은 이익 실현(Short Take Profit)과 높은 승률(High Win Rate)을 추구하는 새로운 전략 `TrendCrusherScalper`를 `src/strategy.py`에 구현 완료.
+2. **Numba 최적화 스캘핑 함수 구현**:
+   - `src/strategy_numba.py`에 `@njit` 기반의 `numba_check_entry_scalper`, `numba_check_exit_scalper`, `numba_find_first_exit_scalper` 구현.
+   - 고정 Take Profit(ATR 배수 또는 fixed PnL %) 조건을 Exit 로직에 추가하여 가격 흐름 속에서 짧게 수익을 실현하도록 설계.
+   - 스캘핑을 위한 조기 Break-even Guard 활성화를 위해 `BE_GUARD_THRESHOLD_SCALPER`를 적용.
+3. **설정값(config.yaml) 추가**:
+   - `config.yaml`에 `TAKE_PROFIT_ATR_MULT`, `TAKE_PROFIT_PCT`, `BE_GUARD_THRESHOLD_SCALPER` 파라미터를 추가하여 스캘퍼만의 상세 세팅이 가능하도록 구성.
+4. **백테스트 엔진(`backtest_engine.py` & `backtest.py`) 확장**:
+   - `BacktestEngine`이 하드코딩된 entry/exit Numba 함수를 호출하는 대신, 전략에 해당 메소드(`check_entry`, `find_first_exit`)가 있으면 동적으로 활용하도록 구조화하여 기존 `TrendCrusherV2`에는 어떠한 파급효과도 주지 않으면서 다형성(polymorphism) 지원.
+   - `scripts/backtest.py`에 `--strategy` 인자를 추가하여 `v2` 혹은 `scalper` 전략을 선택하여 백테스트를 수행할 수 있도록 개선.
+5. **단위 테스트 및 전체 테스트 보완**:
+   - `tests/test_scalper_strategy.py`를 신규 작성하여 인디케이터 연동, 고정 Take Profit (ATR & PCT), 조기 Break-even Guard, `find_first_exit` 루프의 작동 여부를 검증하는 5개의 테스트 케이스 합격.
+   - 프로젝트 전체 103개 테스트 스위트(`PYTHONPATH=. ./venv/bin/pytest`) 100% 합격 검증 완료.
+
+## 📊 테스트 결과
+- `py_compile`: src/strategy_numba.py, src/strategy.py, src/backtest_engine.py, scripts/backtest.py, tests/test_scalper_strategy.py ✅
+- `pytest tests/`: 103 passed ✅
+
+---
+
 # Trading Session Log (2026-06-15) - Dynamic Checklist Alignment & Volume Chart Scaling Fix (v13.8.8)
 
 ## ✅ 완료된 작업

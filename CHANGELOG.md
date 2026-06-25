@@ -2,6 +2,23 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.9.1] - 2026-06-26
+### **🤖 Fixed Entry Price NoneType Crash & Added Exposure Safety Lock**
+- **NoneType Average Price Fix**: Resolved an issue in `src/bot/live_bot_async.py` where `order.get('average', self.last_price)` returned `None` when the `average` key existed but had a value of `None`. This triggered a `TypeError: float() argument must be a string or a real number, not 'NoneType'` crash upon market entry execution.
+- **Resilience Fallback**: Added a robust fallback pattern `order.get('average') or order.get('price') or self.last_price` to safely handle incomplete/unset average price attributes in exchange responses.
+- **Position Overfill Prevention**: Fixed a bug where the `Entry error` prevented the bot from updating its internal state (`_on_fill_success`) and syncing the Stop Loss order (`sync_sl_to_exchange`). This caused the bot to remain at position 0 internally and continuously place market entry orders on subsequent loops.
+- **Exposure Safety Lock**: Added a safety check `_is_over_safety_limit()` immediately before placing a market entry order. This prevents overfilling if the coin's real-time position exposure on the exchange exceeds the configured `MAX_POSITION_VALUE_USDT` limit.
+- **Test Coverage**: Added `test_execute_entry_none_average_fallback` and `test_execute_entry_blocked_by_safety_limit` to `tests/test_bot_async.py` to simulate exchange response anomalies and verify safety limits. All 105 test suite cases pass successfully.
+
+## [13.9.0] - 2026-06-18
+### **🤖 TrendCrusherScalper High Win Rate Strategy**
+- **TrendCrusherScalper Class**: Added the new `TrendCrusherScalper` class in `src/strategy.py` that targets short take-profits and high win rates, leaving `TrendCrusherV2` completely unmodified.
+- **Numba Scalper Functions**: Implemented `@njit`-compiled `numba_check_entry_scalper`, `numba_check_exit_scalper`, and `numba_find_first_exit_scalper` in `src/strategy_numba.py` to optimize execution speed.
+- **Configurable Take Profit & Break-even**: Added new configurable parameters `TAKE_PROFIT_ATR_MULT`, `TAKE_PROFIT_PCT`, and `BE_GUARD_THRESHOLD_SCALPER` to `config.yaml` to customize the scalping targets.
+- **Strategy-Agnostic BacktestEngine**: Refactored `BacktestEngine` in `src/backtest_engine.py` to dynamically execute strategy-level `check_entry` and `find_first_exit` wrappers if available, preserving polymorphism without breaking legacy strategies.
+- **Backtest CLI Update**: Exposed a `--strategy` argument in `scripts/backtest.py` to easily run historical simulations using `v2` or `scalper`.
+- **New Unit Tests**: Created `tests/test_scalper_strategy.py` with 5 new test cases covering all scalper mechanics. All 103 tests in the suite pass successfully.
+
 ## [13.8.8] - 2026-06-15
 ### **📊 Dynamic Checklist Alignment & Volume Chart Scaling Fix**
 - **Dynamic Indicators Checklist**: Aligned status tracking score (`_compute_signal_score` in `live_bot_async.py`) and Web Dashboard checklist (`dashboard.py` checklist logic) with the actual dynamic criteria used by the core trading engine (`numba_check_entry`). Choppiness scaling, squeeze bonus, short bias, and order ambush hysteresis are now correctly calculated and displayed.

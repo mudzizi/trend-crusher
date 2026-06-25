@@ -289,6 +289,41 @@ async def test_execute_entry_syncs_with_exchange(mock_bot):
     mock_bot.db.log_trade_open.assert_called()
 
 @pytest.mark.asyncio
+async def test_execute_entry_none_average_fallback(mock_bot):
+    mock_bot.settings["DRY_RUN"] = False
+    # average is None, price is None. Should fallback to mock_bot.last_price (50000.0)
+    mock_bot.exchange.create_market_order.return_value = {
+        'id': '123', 'symbol': 'BTC/USDT', 'side': 'buy', 'average': None, 'price': None, 'filled': 0.1, 'status': 'closed'
+    }
+    mock_bot.exchange.create_order.return_value = {'id': 'sl_123'}
+    mock_bot.pm.calculate_order_qty.return_value = 0.1
+    mock_bot.exchange.fetch_balance = AsyncMock(return_value={'USDT': {'free': 10000.0}})
+    mock_bot.exchange.amount_to_precision = MagicMock(side_effect=lambda s, q: q)
+    mock_bot.exchange.fetch_positions = AsyncMock(return_value=[{'symbol': 'BTC/USDT', 'contracts': 0}])
+    
+    mock_bot.last_price = 50000.0
+    await mock_bot.execute_entry(1, 100.0)
+    assert mock_bot.entry_price == 50000.0
+    assert mock_bot.quantity == 0.1
+    assert mock_bot.position == 1
+    mock_bot.db.log_trade_open.assert_called()
+
+@pytest.mark.asyncio
+async def test_execute_entry_blocked_by_safety_limit(mock_bot):
+    mock_bot.settings["DRY_RUN"] = False
+    mock_bot.settings["MAX_POSITION_VALUE_USDT"] = 100.0
+    mock_bot.last_price = 50000.0
+    mock_bot.pm.calculate_order_qty.return_value = 0.1 # Value = 5000.0, well over 100 limit
+    
+    mock_bot.risk_manager.check_exposure_safety = AsyncMock(return_value=False)
+    
+    await mock_bot.execute_entry(1, 100.0)
+    
+    # The order creation should NOT be called since it is blocked by safety check
+    mock_bot.exchange.create_market_order.assert_not_called()
+    assert mock_bot.position == 0
+
+@pytest.mark.asyncio
 async def test_execute_exit_calculates_real_pnl(mock_bot):
     mock_bot.settings["DRY_RUN"] = False
     mock_bot.position = 1

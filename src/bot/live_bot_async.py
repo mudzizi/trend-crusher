@@ -576,12 +576,15 @@ class SymbolBotAsync:
             qty = await self.pm.calculate_order_qty(self.symbol, self.last_price, self.sl_price)
             if not qty or qty <= 0: return
             self.quantity = float(qty)
+            if await self._is_over_safety_limit(self.quantity * self.last_price):
+                self.logger.warning(f"⚠️ [{self.symbol}] Market entry blocked by Exposure Safety Limit check.")
+                return
             if self.settings["DRY_RUN"]:
                 self.entry_price = self.last_price
                 await self._on_fill_success(direction, price=self.entry_price)
                 return
             order = await self.adapter.create_market_order('buy' if direction == 1 else 'sell', self.quantity)
-            self.entry_price = float(order.get('average', self.last_price)) if isinstance(order, dict) else self.last_price
+            self.entry_price = float(order.get('average') or order.get('price') or self.last_price) if isinstance(order, dict) else self.last_price
             await self._on_fill_success(direction, price=self.entry_price)
         except Exception as e: self.logger.error(f"Entry error: {e}")
 
