@@ -45,7 +45,7 @@ def run_tests():
     CONFIG["DASHBOARD_PASSWORD_HASH"] = security.password_hash
     
     try:
-        resp = client.post('/login', data={'password': test_password})
+        resp = client.post('/login', data={'password': test_password}, base_url='https://localhost')
         assert resp.status_code == 302, f"Expected 302, got {resp.status_code}"
         assert resp.headers['Location'] == '/', f"Expected redirect to /, got {resp.headers.get('Location')}"
         
@@ -74,7 +74,7 @@ def run_tests():
         dashboard.exchange.fetch_ticker = lambda symbol: {"last": 1.0, "percentage": 0.0}
         
         try:
-            resp = client.get('/')
+            resp = client.get('/', base_url='https://localhost')
             assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
             assert b"Live Strategy Monitoring" in resp.data, "Expected dashboard content"
             print("  -> Passed (Access granted)")
@@ -85,7 +85,7 @@ def run_tests():
         print("Test 6: Testing session renewal for token with age <= 1 day...")
         # Since we just generated the token, its age is 0.
         # It should trigger renewal and return a new Set-Cookie header.
-        resp = client.get('/')
+        resp = client.get('/', base_url='https://localhost')
         cookies = resp.headers.getlist('Set-Cookie')
         renewal_cookie = None
         for c in cookies:
@@ -109,7 +109,7 @@ def run_tests():
 
     # 9. Test GET /logout -> Should clear cookie
     print("Test 8: Requesting GET '/logout'...")
-    resp = client.get('/logout')
+    resp = client.get('/logout', base_url='https://localhost')
     assert resp.status_code == 302, f"Expected 302, got {resp.status_code}"
     cookies = resp.headers.getlist('Set-Cookie')
     logout_cookie = None

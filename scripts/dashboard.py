@@ -361,20 +361,21 @@ def serve_report(filename):
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error_msg = None
+    is_secure = request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https'
     if request.method == 'POST':
         password = request.form.get('password')
         hashed_pw = CONFIG.get("DASHBOARD_PASSWORD_HASH")
         if not hashed_pw:
             token = security.generate_token()
             resp = make_response(redirect(url_for('index')))
-            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=True, samesite='Lax')
+            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=is_secure, samesite='Lax')
             return resp
             
         from werkzeug.security import check_password_hash
         if check_password_hash(hashed_pw, password):
             token = security.generate_token()
             resp = make_response(redirect(url_for('index')))
-            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=True, samesite='Lax')
+            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=is_secure, samesite='Lax')
             return resp
         else:
             error_msg = "Invalid password. Please try again."
@@ -390,19 +391,21 @@ def login():
 @app.route('/logout')
 def logout():
     resp = make_response(redirect(url_for('login')))
+    is_secure = request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https'
     # Clear the cookie
-    resp.set_cookie('access_token', '', max_age=0, httponly=True, secure=True, samesite='Lax')
+    resp.set_cookie('access_token', '', max_age=0, httponly=True, secure=is_secure, samesite='Lax')
     return resp
 
 @app.after_request
 def set_renewed_token(response):
     if hasattr(g, 'new_token') and g.new_token:
+        is_secure = request.is_secure or request.headers.get('X-Forwarded-Proto', '').lower() == 'https'
         response.set_cookie(
             'access_token',
             g.new_token,
             max_age=7 * 24 * 3600,
             httponly=True,
-            secure=True,
+            secure=is_secure,
             samesite='Lax'
         )
     return response
