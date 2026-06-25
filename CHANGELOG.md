@@ -3,12 +3,13 @@
 All notable changes to the TrendCrusher project will be documented in this file.
 
 ## [13.9.1] - 2026-06-26
-### **🤖 Fixed Entry Price NoneType Crash & Added Exposure Safety Lock**
+### **🤖 Fixed Entry Price Crash, Added Safety Lock & Auto SL Cleanup**
 - **NoneType Average Price Fix**: Resolved an issue in `src/bot/live_bot_async.py` where `order.get('average', self.last_price)` returned `None` when the `average` key existed but had a value of `None`. This triggered a `TypeError: float() argument must be a string or a real number, not 'NoneType'` crash upon market entry execution.
 - **Resilience Fallback**: Added a robust fallback pattern `order.get('average') or order.get('price') or self.last_price` to safely handle incomplete/unset average price attributes in exchange responses.
 - **Position Overfill Prevention**: Fixed a bug where the `Entry error` prevented the bot from updating its internal state (`_on_fill_success`) and syncing the Stop Loss order (`sync_sl_to_exchange`). This caused the bot to remain at position 0 internally and continuously place market entry orders on subsequent loops.
 - **Exposure Safety Lock**: Added a safety check `_is_over_safety_limit()` immediately before placing a market entry order. This prevents overfilling if the coin's real-time position exposure on the exchange exceeds the configured `MAX_POSITION_VALUE_USDT` limit.
-- **Test Coverage**: Added `test_execute_entry_none_average_fallback` and `test_execute_entry_blocked_by_safety_limit` to `tests/test_bot_async.py` to simulate exchange response anomalies and verify safety limits. All 105 test suite cases pass successfully.
+- **Auto SL Order Cleanup on Exit**: Fixed a leak where trigger SL orders (`self.sl_order_id`) were left active on the exchange after a position was closed via market exits (`execute_exit`). Added logic in `_on_fill_success(is_exit=True)` to explicitly cancel the corresponding trigger order on the exchange using `cancel_trigger_order()`.
+- **Test Coverage**: Added `test_execute_entry_none_average_fallback`, `test_execute_entry_blocked_by_safety_limit`, and `test_execute_exit_cancels_sl_order` to `tests/test_bot_async.py` to simulate exchange response anomalies, verify safety limits, and check SL order cleanups. All 106 test suite cases pass successfully.
 
 ## [13.9.0] - 2026-06-18
 ### **🤖 TrendCrusherScalper High Win Rate Strategy**

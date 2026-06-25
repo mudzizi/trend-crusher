@@ -342,6 +342,12 @@ class SymbolBotAsync:
 
     async def _on_fill_success(self, direction, is_exit=False, price=0):
         if is_exit:
+            if self.sl_order_id and not self.settings.get("DRY_RUN"):
+                try:
+                    await self.adapter.cancel_trigger_order(self.sl_order_id)
+                    self.logger.info(f"🛡️ [{self.symbol}] Canceled SL order {self.sl_order_id} on position exit.")
+                except Exception as ex:
+                    self.logger.info(f"ℹ️ [{self.symbol}] SL order cancel request skipped/failed on exit (likely already filled/closed): {ex}")
             pnl_pct = ((price / self.entry_price) - 1) * 100 * self.position if self.entry_price != 0 else 0
             pnl_usdt = (price - self.entry_price) * self.quantity * self.position if self.entry_price != 0 else 0
             await _maybe_await(self.db.log_trade_close(self.symbol, price, pnl_pct, pnl_usdt))

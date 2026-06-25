@@ -1,4 +1,4 @@
-# Trading Session Log (2026-06-26) - Fix Entry Price NoneType Crash & Add Exposure Safety Lock (v13.9.1)
+# Trading Session Log (2026-06-26) - Fix Entry Price Crash, Add Safety Lock & Auto SL Cleanup (v13.9.1)
 
 ## ✅ 완료된 작업
 1. **시장가 진입 평균단가(NoneType) 버그 수정**:
@@ -11,13 +11,17 @@
 3. **시장가 진입 전 자산 한도(Exposure Safety Limit) 체크 추가**:
    - 시장가 진입(`execute_entry`)을 수행하기 직전, 거래소의 실시간 포지션 크기 및 대기 주문 규모를 합산하여 최대 포지션 제한(`MAX_POSITION_VALUE_USDT`)을 초과하는지 체크하는 `_is_over_safety_limit()` 가드 추가.
    - 이를 통해 봇의 메모리/DB 오동작(포지션 착각)이 발생하더라도, 거래소에 이미 할당된 자산(seed) 한도를 초과하여 이중 진입하는 오버필 주문을 물리적으로 차단하도록 안전성 보완.
-4. **단위 테스트 추가**:
+4. **청산 시 Stop Loss(SL) 미체결 주문 자동 취소**:
+   - 시장가 시그널 청산(`execute_exit`) 등으로 포지션을 종료할 때, 거래소에 미체결 상태로 남아있던 기존 Stop Loss 주문(`self.sl_order_id`)이 취소되지 않고 거래소에 방치되던 누수 결함 해결.
+   - `_on_fill_success(is_exit=True)` 실행 단계에서 기존 SL 주문이 남아있다면 `cancel_trigger_order()`를 전송하여 거래소 미체결 상태를 일괄 동기화 및 취소 처리하도록 보완.
+5. **단위 테스트 추가**:
    - `tests/test_bot_async.py`에 `test_execute_entry_none_average_fallback` 테스트 케이스 신규 도입 (None average/price 응답 처리 검증).
-   - `test_execute_entry_blocked_by_safety_limit` 테스트 케이스 신규 도입 (최대 자산 한도 초과 시 시장가 진입 주문이 전송되지 않고 안전하게 차단되는지 검증).
+   - `test_execute_entry_blocked_by_safety_limit` 테스트 케이스 신규 도입 (최대 자산 한도 초과 시 시장가 진입 주문 차단 검증).
+   - `test_execute_exit_cancels_sl_order` 테스트 케이스 신규 도입 (포지션 Exit 시 기존 SL 주문의 정상 취소 호출 검증).
 
 ## 📊 테스트 결과
 - `py_compile`: src/bot/live_bot_async.py, tests/test_bot_async.py ✅
-- `pytest tests/`: 105 passed ✅
+- `pytest tests/`: 106 passed ✅
 
 ---
 

@@ -324,6 +324,26 @@ async def test_execute_entry_blocked_by_safety_limit(mock_bot):
     assert mock_bot.position == 0
 
 @pytest.mark.asyncio
+async def test_execute_exit_cancels_sl_order(mock_bot):
+    mock_bot.settings["DRY_RUN"] = False
+    mock_bot.position = 1
+    mock_bot.entry_price = 50000.0
+    mock_bot.quantity = 0.1
+    mock_bot.last_price = 55000.0
+    mock_bot.sl_order_id = "SL_999"
+    
+    mock_bot.exchange.create_order.return_value = {
+        'average': 55000.0, 'filled': 0.1, 'fee': {'cost': 2.75}
+    }
+    mock_bot.pm.get_total_equity.return_value = 10500.0
+    
+    await mock_bot.execute_exit()
+    
+    # Check that cancel_order was called on the mock exchange with the correct SL order ID
+    mock_bot.exchange.cancel_order.assert_called_with("SL_999", "BTC/USDT", params={'trigger': True})
+    assert mock_bot.sl_order_id is None
+
+@pytest.mark.asyncio
 async def test_execute_exit_calculates_real_pnl(mock_bot):
     mock_bot.settings["DRY_RUN"] = False
     mock_bot.position = 1
