@@ -413,9 +413,15 @@ def set_renewed_token(response):
 from waitress import serve
 
 if __name__ == '__main__':
-    # Security: Use Waitress for production-grade serving with low memory overhead
-    # Bind to 127.0.0.1 for maximum security (access via SSH Tunneling)
-    logger.info("Starting TrendCrusher Dashboard with Waitress (Production)")
-    logger.info("Access locally via SSH Tunnel: ssh -L 5000:localhost:5000 user@gcp-ip")
+    cert_path = '/Users/mudzizi/project/supertrend-trade/certs/fullchain.pem'
+    key_path = '/Users/mudzizi/project/supertrend-trade/certs/privkey.pem'
     
-    serve(app, host='127.0.0.1', port=5000, threads=4)
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        logger.info("Starting TrendCrusher Dashboard with Flask Server (HTTPS Enabled)")
+        app.run(host='0.0.0.0', port=5000, ssl_context=(cert_path, key_path))
+    else:
+        # Security: Use Waitress for production-grade serving with low memory overhead
+        # Bind to 127.0.0.1 for maximum security (access via SSH Tunneling)
+        logger.info("Starting TrendCrusher Dashboard with Waitress (Production)")
+        logger.info("Access locally via SSH Tunnel: ssh -L 5000:localhost:5000 user@gcp-ip")
+        serve(app, host='127.0.0.1', port=5000, threads=4)
