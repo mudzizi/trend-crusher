@@ -1,3 +1,24 @@
+# Trading Session Log (2026-06-26) - Implement Cookie-Based Token Authentication & Logout (v13.9.2)
+
+## ✅ 완료된 작업
+1. **쿠키 기반 access token 로그인 방식 변경**:
+   - 기존 HTTP Basic Authentication 방식을 대체하여, 사용자가 직접 로그인할 수 있는 HTML 로그인 인터페이스(`templates/login.html`)를 새로 설계 및 도입.
+   - 비밀번호 검증이 통과되면 `itsdangerous.URLSafeTimedSerializer`로 서명된 access token을 발급하고, 브라우저 쿠키에 `Secure`, `HttpOnly`, `SameSite=Lax` 속성으로 안전하게 저장.
+2. **세션 연장(sliding session) 구현**:
+   - 토큰 만료 기간은 7일로 설정.
+   - 발급 후 1일 이내(즉, 생성 시점으로부터 24시간 이내)에 요청이 오면 기존 토큰을 검증한 뒤 새로운 토큰 쿠키를 발급하여 세션을 연장하도록 구현.
+3. **명시적 로그아웃 지원**:
+   - 대시보드 화면 우측 상단(네비게이션 바)에 "Sign Out" 버튼을 추가하여 명시적으로 쿠키를 만료(삭제) 및 로그아웃할 수 있도록 지원.
+4. **보안 Sentinel 및 라우트 보호 수정**:
+   - `src/security.py` 내의 `check_request`를 갱신하여 access token 쿠키가 있고 유효한지 체크. 비유효시 `/login`으로 리다이렉트 처리.
+   - 보안 탐지를 위해 `/login` 및 `/logout` 경로를 `WHITELIST_PATTERNS`에 추가하여 인증 없이 접근할 수 있도록 허용.
+
+## 📊 테스트 결과
+- `py_compile`: `src/security.py`, `scripts/dashboard.py` ✅
+- `scratch/test_auth.py` 실행 결과: 8개 테스트 케이스 모두 통과 (access token 발급, redirect 검증, 만료 1일 이내 재발급, 로그아웃 검증 완료) ✅
+
+---
+
 # Trading Session Log (2026-06-26) - Fix Entry Price Crash, Add Safety Lock & Auto SL Cleanup (v13.9.1)
 
 ## ✅ 완료된 작업

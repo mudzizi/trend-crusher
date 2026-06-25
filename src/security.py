@@ -1,8 +1,8 @@
 import logging
 import re
-import base64
-from flask import request, abort, Response
-from werkzeug.security import check_password_hash
+from datetime import datetime, timezone
+from flask import request, abort, redirect, g
+from itsdangerous import URLSafeTimedSerializer
 from src.config import CONFIG
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,8 @@ class SecuritySentinel:
     # Allowed path patterns (Regex) - Strict whitelist
     WHITELIST_PATTERNS = [
         r"^/$",                               # Root
+        r"^/login$",                          # Login page & POST request
+        r"^/logout$",                         # Logout
         r"^/static/[\w\-\./]+\.[a-z0-9]+$",   # Static files (with extension)
         r"^/reports/[\w\-\./]+\.[a-z0-9]+$",  # Report files (with extension)
         r"^/favicon\.ico$"                    # Browser icon
@@ -24,31 +26,35 @@ class SecuritySentinel:
         self._compiled_whitelist = [re.compile(p) for p in self.WHITELIST_PATTERNS]
         # Store the hash from config
         self.password_hash = CONFIG.get("DASHBOARD_PASSWORD_HASH")
+        # Use password hash as secret key for token signing to persist sessions across restarts
+        secret_key = self.password_hash or "default_fallback_secret_key_12345"
+        self.serializer = URLSafeTimedSerializer(secret_key)
 
-    def check_auth(self, auth):
-        """Verifies Basic Auth credentials using hashing."""
+    def generate_token(self):
+        """Generates a signed access token."""
+        return self.serializer.dumps({"authenticated": True})
+
+    def check_token(self, token):
+        """Verifies the access token. Returns (is_valid, should_renew)."""
         if not self.password_hash:
-            return True # No password set, allow access
+            return True, False # No password set, allow access
             
-        if not auth or not auth.startswith('Basic '):
-            return False
-        
+        if not token:
+            return False, False
+            
         try:
-            encoded_credentials = auth.split(' ')[1]
-            decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-            username, password = decoded_credentials.split(':')
-            # Username is ignored, only password matters
-            return check_password_hash(self.password_hash, password)
-        except:
-            return False
-
-    def authenticate(self):
-        """Sends a 401 response that enables basic auth."""
-        return Response(
-            'Could not verify your access level for that URL.\n'
-            'You have to login with proper credentials', 401,
-            {'WWW-Authenticate': 'Basic realm="Login Required"'}
-        )
+            # Token duration is 7 days
+            max_age = 7 * 24 * 3600
+            payload, timestamp = self.serializer.loads(token, max_age=max_age, return_timestamp=True)
+            
+            # Check if requested within 1 day (86400 seconds) of issuance to renew session
+            now = datetime.now(timezone.utc)
+            age = (now - timestamp).total_seconds()
+            
+            should_renew = (0 <= age <= 86400)
+            return True, should_renew
+        except Exception:
+            return False, False
 
     def is_whitelisted(self, path):
         """Checks if the path is in the allowed whitelist and prevents traversal."""
@@ -83,10 +89,13 @@ class SecuritySentinel:
             
             abort(403, description="Access Denied: Unauthorized request pattern.")
 
-        # 3. Hashed Auth Check (Only for root/main page or sensitive reports)
+        # 3. Access Token Check (Only for root/main page or sensitive reports)
         if path == "/" or path.startswith("/reports/"):
-            auth = request.headers.get('Authorization')
-            if not self.check_auth(auth):
-                return self.authenticate()
+            token = request.cookies.get('access_token')
+            is_valid, should_renew = self.check_token(token)
+            if not is_valid:
+                return redirect('/login')
+            if should_renew:
+                g.new_token = self.generate_token()
 
         return None # Proceed to route handler

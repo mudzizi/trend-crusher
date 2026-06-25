@@ -1,8 +1,8 @@
-# TrendCrusher Configuration (v13.8.7)
+# TrendCrusher Configuration (v13.9.2)
 # Copy this file to config.yaml and update your settings.
 
 # --- VERSION ---
-VERSION: "13.8.7"
+VERSION: "13.9.2"
 
 # --- API KEYS ---
 # OVERRIDE: Environment variables will override these values if they exist.

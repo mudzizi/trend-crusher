@@ -2,6 +2,15 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.9.2] - 2026-06-26
+### **🔒 Implemented Cookie-Based Token Authentication & Logout**
+- **Token Authentication**: Replaced legacy HTTP Basic Authentication with custom cookie-based Access Token authentication. Access tokens are generated and signed using `itsdangerous.URLSafeTimedSerializer` with the password hash as the secret key.
+- **Secure Cookies**: Issued the `access_token` cookie with strict `HttpOnly`, `Secure`, and `SameSite=Lax` flags to prevent client-side script access and CSRF.
+- **Sliding Session Renewal**: Configured a 7-day token validity. If a request is received using a valid token within 1 day of its issuance, a new token is generated and sent via cookie to extend the session.
+- **Login and Logout Interfaces**: Created a beautiful, dark-themed login template `templates/login.html` and integrated a "Sign Out" button inside the `templates/index.html` navbar. Clicking Sign Out clears the cookie and redirects the user to the login page.
+- **Safety Sentinel Updates**: Added `/login` and `/logout` to the whitelist patterns in `src/security.py` and updated `check_request()` to intercept dashboard and report requests using cookie verification.
+- **Auth Verification Suite**: Added `scratch/test_auth.py` to programmatically test unauthenticated redirects, login failure/success, cookie flags, session renewal, and logout clearing. All tests pass successfully.
+
 ## [13.9.1] - 2026-06-26
 ### **🤖 Fixed Entry Price Crash, Added Safety Lock & Auto SL Cleanup**
 - **NoneType Average Price Fix**: Resolved an issue in `src/bot/live_bot_async.py` where `order.get('average', self.last_price)` returned `None` when the `average` key existed but had a value of `None`. This triggered a `TypeError: float() argument must be a string or a real number, not 'NoneType'` crash upon market entry execution.

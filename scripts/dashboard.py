@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_from_directory, request, abort
+from flask import Flask, render_template, send_from_directory, request, abort, g, redirect, url_for, make_response
 from src.db_manager import DBManager
 from src.security import SecuritySentinel
 from src.visualizer import TradingVisualizer
@@ -357,6 +357,55 @@ def serve_report(filename):
         return "File Not Found", 404
         
     return send_from_directory(os.path.dirname(target_path), os.path.basename(target_path))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error_msg = None
+    if request.method == 'POST':
+        password = request.form.get('password')
+        hashed_pw = CONFIG.get("DASHBOARD_PASSWORD_HASH")
+        if not hashed_pw:
+            token = security.generate_token()
+            resp = make_response(redirect(url_for('index')))
+            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=True, samesite='Lax')
+            return resp
+            
+        from werkzeug.security import check_password_hash
+        if check_password_hash(hashed_pw, password):
+            token = security.generate_token()
+            resp = make_response(redirect(url_for('index')))
+            resp.set_cookie('access_token', token, max_age=7*24*3600, httponly=True, secure=True, samesite='Lax')
+            return resp
+        else:
+            error_msg = "Invalid password. Please try again."
+            
+    # GET: If already logged in, redirect to index
+    token = request.cookies.get('access_token')
+    is_valid, _ = security.check_token(token)
+    if is_valid:
+        return redirect(url_for('index'))
+        
+    return render_template('login.html', error=error_msg, version=CONFIG.get("VERSION", "N/A"))
+
+@app.route('/logout')
+def logout():
+    resp = make_response(redirect(url_for('login')))
+    # Clear the cookie
+    resp.set_cookie('access_token', '', max_age=0, httponly=True, secure=True, samesite='Lax')
+    return resp
+
+@app.after_request
+def set_renewed_token(response):
+    if hasattr(g, 'new_token') and g.new_token:
+        response.set_cookie(
+            'access_token',
+            g.new_token,
+            max_age=7 * 24 * 3600,
+            httponly=True,
+            secure=True,
+            samesite='Lax'
+        )
+    return response
 
 from waitress import serve
 
