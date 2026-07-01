@@ -1,7 +1,9 @@
 #!/bin/bash
 # Certbot deploy hook for TrendCrusher Dashboard
 
-PROJECT_DIR="/Users/mudzizi/project/supertrend-trade"
+# Dynamically resolve the project root directory based on the script location
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$( dirname "$SCRIPT_DIR" )"
 PROJECT_CERT_DIR="$PROJECT_DIR/certs"
 LE_DIR="/etc/letsencrypt/live/autotradehub.duckdns.org"
 

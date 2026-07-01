@@ -17,6 +17,7 @@ static/
 *.db
 *.csv
 nohup.out
+*.log
 tags
 
 # Secrets

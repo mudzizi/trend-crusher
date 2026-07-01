@@ -423,8 +423,8 @@ def set_renewed_token(response):
 from waitress import serve
 
 if __name__ == '__main__':
-    cert_path = '/Users/mudzizi/project/supertrend-trade/certs/fullchain.pem'
-    key_path = '/Users/mudzizi/project/supertrend-trade/certs/privkey.pem'
+    cert_path = os.path.join(project_root, 'certs', 'fullchain.pem')
+    key_path = os.path.join(project_root, 'certs', 'privkey.pem')
     
     if os.path.exists(cert_path) and os.path.exists(key_path):
         logger.info("Starting TrendCrusher Dashboard with Flask Server (HTTPS Enabled)")
