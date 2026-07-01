@@ -2,6 +2,14 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.9.6] - 2026-06-30
+### **📊 Scalper Strategy Scenario & 12-Month Chronological Breakdown Backtesting**
+- **Scenario Testing Script**: Created a new test utility `scripts/test_scalper_scenarios.py` to systematically evaluate a multi-parameter grid for `TrendCrusherScalper`.
+- **Monthly Breakdown Script**: Developed `scripts/test_scalper_monthly.py` to run continuous 30-day chronological segment simulations over 1 year (365 days) on 1m OHLCV.
+- **Viability Evaluation**: Executed 12-month interval backtests on `TRUMP/USDT` using the optimal parameters (`TP_ATR=1.5`, `SL_ATR=1.0`, `Risk=2.0%`).
+- **Discovered Regime Vulnerability**: Revealed that the scalping strategy is **not sustainably viable** as it only profit-generated in 3 out of 12 months (25% Win Months), resulting in an average monthly return of **-22.59%** and two occurrences of total capital liquidation (**-100% MDD**).
+- **Asset Suitability Insights**: Verified that while scalping thrives in high-volatility, single-direction breakouts, long-term performance is destroyed by chop and range-bound fakeouts.
+
 ## [13.9.2] - 2026-06-26
 ### **🔒 Implemented Cookie-Based Token Authentication & Logout**
 - **Token Authentication**: Replaced legacy HTTP Basic Authentication with custom cookie-based Access Token authentication. Access tokens are generated and signed using `itsdangerous.URLSafeTimedSerializer` with the password hash as the secret key.

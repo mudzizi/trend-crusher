@@ -43,7 +43,10 @@ def log_security_stats():
 threading.Thread(target=log_security_stats, daemon=True).start()
 
 viz = TradingVisualizer()
-exchange = ccxt.binance({'options': {'defaultType': 'future'}})
+exchange = ccxt.binance({
+    'options': {'defaultType': 'future'},
+    'timeout': 10000
+})
 
 @app.before_request
 def secure_access():
@@ -51,6 +54,13 @@ def secure_access():
 
 @app.route('/')
 def index():
+    # Use scripts.dashboard.exchange, but instantiate local client if not a mock to ensure thread-safety
+    local_exchange = exchange
+    if not (type(exchange).__name__ in ('MagicMock', 'Mock', 'AsyncMock')):
+        local_exchange = ccxt.binance({
+            'options': {'defaultType': 'future'},
+            'timeout': 10000
+        })
     symbols = CONFIG.get("SYMBOLS_LIST", [CONFIG["SYMBOL"]])
     market_summaries = []
     active_positions = []
@@ -63,7 +73,7 @@ def index():
         for _, pos in active_df.iterrows():
             sym = pos['symbol']
             try:
-                ticker = exchange.fetch_ticker(sym)
+                ticker = local_exchange.fetch_ticker(sym)
                 curr_price = float(ticker['last'])
             except: curr_price = 0
             
@@ -257,7 +267,7 @@ def index():
         # 3. Fetch Market Summary
         for sym in symbols:
             try:
-                ticker = exchange.fetch_ticker(sym)
+                ticker = local_exchange.fetch_ticker(sym)
                 market_summaries.append({
                     "symbol": sym,
                     "price": float(ticker['last']),

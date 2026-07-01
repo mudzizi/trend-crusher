@@ -8,7 +8,9 @@ class DBManager:
         self._create_tables()
 
     def _get_connection(self):
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=30.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        return conn
 
     def _create_tables(self):
         with self._get_connection() as conn:

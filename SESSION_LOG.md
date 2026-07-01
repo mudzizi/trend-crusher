@@ -1,3 +1,101 @@
+# Trading Session Log (2026-06-30) - Scalper Strategy Scenario & Monthly Breakdown Backtesting (v13.9.6)
+
+## ✅ 완료된 작업
+1. **Scalper 전략 시나리오 백테스팅 스크립트 작성 및 다중 종목 검증**:
+   - `scripts/test_scalper_scenarios.py`를 신규 작성하여 다중 종목(`ETH/USDT`, `XRP/USDT`, `TRUMP/USDT`)에 대해 리스크 비율, 익절 ATR 배수, 초기 손절 ATR 배수, Sniper 진입 여부 등 다양한 파라미터 조합(총 32개 그리드)을 일괄적으로 백테스팅함.
+   - 단기 30일 테스트에서 `TRUMP/USDT`가 압도적인 효율성(Return +78.79%, MDD 12.59%, Eff 6.21)을 보여줌을 확인함.
+2. **TRUMP/USDT 대상 1년 월별 분할 백테스팅 수행**:
+   - `scripts/test_scalper_monthly.py`를 신규 구현하여 최근 1년(365일)을 30일씩 12개 구간으로 나누어 독립 백테스트를 실행함.
+   - **분석 결과**: 12개월 중 단 **3개월만 수익(25.0% 수익 월)**을 냈으며, **평균 월간 수익률 -22.59%**, **최대 월간 MDD -100%**(2회 파산)를 기록하여 전략의 **지속 불가능성(High Risk)** 및 **과적합성(Regime Overfitting)**을 규명해 냄.
+   - 최근 폭발적인 대형 상승 추세 구간(5~6월, 1월)에서는 고효율을 냈으나, 횡보/조정 및 하락세가 지속된 9개월 동안은 잦은 손절(1.0 ATR)로 자금이 고갈되는 현상이 입증됨.
+3. **자금 관리 리스크 개선 가이드 제안**:
+   - 건당 리스크 비율 하향(0.5% 이하), 횡보장 필터(Chop/Chaos 임계값) 강화, 상위 시간대 EMA 추세 필터의 연동 필요성을 가이드라인으로 정리함.
+
+## 📊 테스트 결과
+- `python3 scripts/test_scalper_scenarios.py` (32개 조합 검증 완료) ✅
+- `python3 scripts/test_scalper_monthly.py` (12개월 연속 백테스트 완료) ✅
+
+---
+
+# Trading Session Log (2026-06-26) - Add EMA Trend Filter & 4-Year Backtesting (v13.9.5)
+
+## ✅ 완료된 작업
+1. **EMA 트렌드 필터(EMA Trend Filter) 구현**:
+   - `src/strategy_macd.py`의 `TrendCrusherMACD` 전략에 long-term EMA 필터 기능(`USE_EMA_FILTER`, `EMA_FILTER_SPAN`) 구현.
+   - 직전 봉 종가(`close_prev`)와 직전 봉 EMA 필터값(`ema_filter_prev`)을 기준으로 가격이 EMA 위에 있을 때는 롱(Long) 진입만, 아래에 있을 때는 숏(Short) 진입만 허용하도록 `check_entry_signal` 로직 수정.
+   - 백테스트 엔진(`run_streaming_backtest`)이 `check_entry_signal`을 호출하여 모든 필터 조건을 일괄 적용하도록 리팩토링 및 동기화 완료.
+2. **백테스트 CLI 옵션 추가**:
+   - `scripts/backtest_macd.py` 스크립트에 `--use-ema` 및 `--ema-span` 파라미터를 추가하여 명령어 인자로 동적 테스트할 수 있도록 지원.
+3. **단위 테스트 추가 및 보완**:
+   - `tests/test_macd_strategy.py`에 `test_ema_filter` 테스트 케이스를 신규 작성하여, EMA 필터의 롱/숏 필터링 로직이 정상 작동하는지 검증 완료.
+   - 전체 110개 단위 테스트가 **100% 합격** (Zero Regression)함을 확인.
+4. **EMA 필터를 활성화한 4개년 백테스팅 및 분석**:
+   - **연도별 결과 비교**:
+     - **Year 1 (최근 1년)**: +80.02% $\rightarrow$ **+54.64%** (거래 감소 및 강세장 일부 필터링)
+     - **Year 2 (2년 전)**: +14.24% $\rightarrow$ **+84.24%** (수익 대폭 향상, MDD 28.98% $\rightarrow$ 15.41%)
+     - **Year 3 (3년 전)**: -31.48% $\rightarrow$ **-5.66%** (손실 대폭 개선, MDD 47.35% $\rightarrow$ 21.20%)
+     - **Year 4 (4년 전)**: -51.28% $\rightarrow$ **-15.91%** (손실 대폭 개선, MDD 60.43% $\rightarrow$ 41.05%)
+     - **4년 전체 누적**: -34.47% $\rightarrow$ **+128.81% (누적 수익 전환 성공!)**, MDD 78.28% $\rightarrow$ **48.23%**
+   - **총평**: 대형 EMA 필터(200 span) 추가로 인해 하락장/횡보장의 불필요한 페이크 아웃 진입이 극적으로 차단되었고, 거래 횟수가 **43.3% 감소**(722회 $\rightarrow$ 409회)하여 수수료/슬리피지 비용을 대폭 아끼며 누적 수익을 대성공적으로 전환함.
+
+## 📊 테스트 결과
+- `pytest tests/`: 110 passed (Zero Regression) ✅
+
+---
+
+# Trading Session Log (2026-06-26) - Multi-Year MACD Backtesting Comparison (v13.9.4)
+
+## ✅ 완료된 작업
+1. **MACD 전략 3년 전 및 4년 전 1개년 백테스팅 수행**:
+   - `scripts/backtest_macd.py`를 활용하여 `ETH/USDT` (4h 봉) 3년 전 및 4년 전 개별 1개년 기간 백테스트 수행.
+   - 최적 다중 필터 조합(ADX 20, CHOP 50, Squeeze 필터 활성화, 2.0x ATR SL) 사용.
+   - **3년 전 (2023-06-26 ~ 2024-06-26)**: 수익률 **-31.48%**, MDD **47.35%** (총 거래 170회, 승률 30.59%).
+   - **4년 전 (2022-06-26 ~ 2023-06-26)**: 수익률 **-51.28%**, MDD **60.43%** (총 거래 203회, 승률 24.63%).
+2. **4개년 전체 누적 백테스팅 및 분석**:
+   - **4년 전체 누적 (2022-06-26 ~ 2026-06-26)**: 누적 수익률 **-34.47%**, MDD **78.28%** (총 거래 722회, 승률 31.58%).
+   - **시장 국면(Regime)에 따른 성과 편차 분석**:
+     - 상승장(2025-2026)에서는 **+80.02%**로 탁월한 성과를 보였으나, 횡보/조정 및 하락세가 강했던 2022~2024년 기간에는 잦은 페이크 아웃 진입으로 인해 큰 손실 발생.
+     - 매크로 추세 필터(예: 일봉 기준 200일 EMA 필터)가 누락되어 하락/박스권 장세에서 롱 진입 필터링이 안 된 것이 누적 손실의 원인으로 파악됨.
+3. **Walkthrough 문서 업데이트**:
+   - `walkthrough.md`에 다년도(4개년) 백테스트 결과 및 분석 리포트 내용 추가 완료.
+
+## 📊 테스트 결과
+- `pytest tests/`: 110 passed (Zero Regression) ✅
+
+---
+
+# Trading Session Log (2026-06-26) - Implement MACD Strategy & 1-Year Backtesting (v13.9.3)
+
+## ✅ 완료된 작업
+1. **MACD 기반 모멘텀 반전 전략 구현**:
+   - `src/strategy_macd.py`에 `TrendCrusherMACD` 전략 클래스를 `BaseStrategy` 상속 구조로 신규 구현.
+   - 12/26일선 EMA 기반의 MACD 라인을 산출하고, 신호 발생 타이밍(`MACD(t-2) - MACD(t-1)`) 조건에 따라 Long(음수)/Short(양수) 시그널을 계산.
+   - 진입 시점은 새로운 봉(candle)이 생성되어 시가(Open)로 시작하는 시점으로 고정하여 실시간 감지 모델 구현.
+   - 기존의 거래소 Taker 수수료(0.05%) 및 시장가 슬리피지(0.05%) 슬라이딩 윈도우를 반영한 물리 거래 연동 시뮬레이션 적용.
+   - **변동성 연동 ATR 손절 라인 및 ADX/CHOP/SQUEEZE 다중 필터 추가**: 
+     - ATR(14)을 활용한 동적 손절 가격 계산(`ATR_SL_MULT` 기본 2.0) 추가.
+     - ADX(14) 값을 활용한 추세 강도 필터(`ADX_THRESHOLD` 기본 20.0 미만 시 진입 제한) 구현.
+     - **Choppiness Index 필터 추가**: `CHOP_THRESHOLD` (기본 50.0)를 초과하는 지저분한 박스권에서 신규 롱/숏 진입 원천 차단.
+     - **Volatility Squeeze 필터 추가**: 볼린저 밴드가 켈트너 채널 내에 완전히 압축된 초저변동성 응축 상태(`USE_SQUEEZE_FILTER` 기본 False, 사용 가능)일 때 신규 진입 제한.
+2. **독립 백테스트 CLI 스크립트 작성 (장기 백테스트 고속화)**:
+   - `scripts/backtest_macd.py`에 MACD 전용 백테스트 실행 스크립트 추가.
+   - `--symbol`, `--timeframe`, `--days`, `--sl-pct`, `--atr-mult`, `--adx-threshold`, `--chop-threshold`, `--use-squeeze` 파라미터를 추가 반영.
+   - **시간 단위 고속 동기화**: 장기(2년 등) 백테스팅 시 1분 봉을 전체 다운로드할 경우 발생하는 극심한 속도 저하 및 API Rate Limit 초과 문제를 해결하기 위해, 1시간 봉(`_1h.csv`)을 기본 데이터 소스로 연동하고 필요 시 CCXT로 초고속 동기화하도록 로직 최적화.
+3. **단위 테스트 작성 및 무중단 회귀 검증**:
+   - `tests/test_macd_strategy.py`를 설계하여 MACD 계산, 시그널 방향, SL 작동 테스트 및 무중단 회귀 검증 완료.
+   - 전체 110개 테스트 케이스(`pytest`)를 수행하여 **100% 합격** (Zero Regression) 검증 완료.
+4. **1년 & 2년 장기 백테스팅 수행 및 분석**:
+   - **4시간 봉(4h) + ATR 손절(2.0x) + ADX(20) + CHOP(50) + SQUEEZE 결합 필터** 백테스트 수행.
+   - **1년 ETH/USDT**: **+80.02% 수익, MDD 23.89%** 달성.
+   - **2년 ETH/USDT (730일 장기 검증)**: **+68.71% 수익, MDD 23.89%, 승률 36.56%, Efficiency 2.86** 달성. 여러 시장 사이클(상승/하락/횡보)을 거치면서도 매우 안정적인 장기 우상향 리스크 대비 성과 입증.
+   - **BTC/USDT (-26.90% 수익, MDD 33.56%)** 역시 기존 대비 손실률과 최대 낙폭을 절반 이하로 안정적으로 제어함.
+
+## 📊 테스트 결과
+- `py_compile`: `src/strategy_macd.py`, `scripts/backtest_macd.py`, `tests/test_macd_strategy.py` ✅
+- `pytest tests/`: 110 passed (Zero Regression) ✅
+
+---
+
 # Trading Session Log (2026-06-26) - Implement Cookie-Based Token Authentication & Logout (v13.9.2)
 
 ## ✅ 완료된 작업
