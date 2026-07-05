@@ -43,8 +43,10 @@ class UnifiedOptimizerV7:
         
         mode_choice = trial.suggest_categorical("mode", ["market", "sniper"])
         
+        strategy = TrendCrusherV2(config=CONFIG)
+        
         # 2. Run Backtest
-        trades, equity_curve, _ = self.strategy.run_streaming_backtest(
+        trades, equity_curve, _ = strategy.run_streaming_backtest(
             self.df_1m,
             vol_mult=vol, atr_trail_mult=trail, risk_pct=0.02,
             adx_threshold=adx_val, adx_4h_threshold=adx_4h_val,
@@ -57,7 +59,7 @@ class UnifiedOptimizerV7:
             pre_calculated_ind=self.ind_cache[(don, ep)]
         )
         
-        ret = ((self.strategy.capital / CONFIG["SEED"]) - 1) * 100
+        ret = ((strategy.capital / CONFIG["SEED"]) - 1) * 100
         mdd = calculate_mdd(equity_curve) * 100
         
         # Extreme relaxation: just one full trade to be valid
@@ -112,7 +114,8 @@ def run_optimization(symbol, days, trials):
             
             df_ind['ema_h'] = calculate_ema(df_ind, ep * 4)
             df_ind['ema_slope'] = df_ind['ema_h'].diff(3)
-            ind_cache[(dp, ep)] = df_ind[df_ind['timestamp'] >= cutoff].dropna()
+            df_ind = df_ind.set_index('timestamp')
+            ind_cache[(dp, ep)] = df_ind[df_ind.index >= cutoff].dropna()
 
     study = optuna.create_study(directions=["maximize", "minimize"])
     optimizer = UnifiedOptimizerV7(df_1m_test, ind_cache, days)

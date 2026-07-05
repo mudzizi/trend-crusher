@@ -51,44 +51,68 @@ SNIPER_PROXIMITY_PCT: 0.005 # 0.5% proximity to trigger Sniper ambush
 # These values are based on 1-year historical backtest optimizations.
 SYMBOL_SETTINGS:
   "BTC/USDT":
-    USE_SNIPER: false
-    USE_RETEST_MAKER: true # Wait for retest on BTC for safer, zero-slippage entry
-    ALLOCATED_SEED: 10000.0
-    VOL_MULTIPLIER: 1.5    # BTC has high baseline volume, lower multiplier is okay
-    EMA_TREND_PERIOD: 200  # Conservative macro filter
-    TRAILING_ATR_MULT: 4.5
+    USE_SNIPER: true
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.02
+    VOL_MULTIPLIER: 1.4
+    EMA_TREND_PERIOD: 50
+    TRAILING_ATR_MULT: 3.5
+    ADX_FILTER_LEVEL: 9
+    ADX_4H_THRESHOLD: 24
+    CHAOS_THRESHOLD: 24.0
+    DONCHIAN_PERIOD: 10
+    BE_GUARD_THRESHOLD: 5.0
   
   "ETH/USDT":
-    USE_SNIPER: true       # Sniper ambush works well for ETH breakouts
+    USE_SNIPER: false
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 10000.0
-    VOL_MULTIPLIER: 2.0
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.02
+    VOL_MULTIPLIER: 1.2
     EMA_TREND_PERIOD: 100
-    TRAILING_ATR_MULT: 4.0 # Slightly tighter exit for ETH
+    TRAILING_ATR_MULT: 3.9
+    ADX_FILTER_LEVEL: 7
+    ADX_4H_THRESHOLD: 22
+    CHAOS_THRESHOLD: 15.0
+    DONCHIAN_PERIOD: 10
+    BE_GUARD_THRESHOLD: 5.0
   
   "SOL/USDT":
     USE_SNIPER: true
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 10000.0
+    ALLOCATED_SEED: 100.0
     VOL_MULTIPLIER: 2.5    # Requires stronger momentum
     ADX_FILTER_LEVEL: 20   # Filter out choppy SOL movements
     TRAILING_ATR_MULT: 4.5
   
   "XRP/USDT":
     USE_SNIPER: false
-    USE_RETEST_MAKER: false # Use Market entry for XRP due to "wick" volatility
-    ALLOCATED_SEED: 10000.0
-    VOL_MULTIPLIER: 2.0
-    ADX_FILTER_LEVEL: 25   # XRP needs very strong trends to perform
-    TRAILING_ATR_MULT: 3.5 # Aggressive profit taking for XRP
+    USE_RETEST_MAKER: false
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.02
+    VOL_MULTIPLIER: 2.2
+    EMA_TREND_PERIOD: 50
+    TRAILING_ATR_MULT: 5.2
+    ADX_FILTER_LEVEL: 24
+    ADX_4H_THRESHOLD: 6
+    CHAOS_THRESHOLD: 10.0
+    DONCHIAN_PERIOD: 10
+    BE_GUARD_THRESHOLD: 3.0
   
   "TRUMP/USDT":
-    USE_SNIPER: false      # Volatile meme coins are better with Market entry
+    USE_SNIPER: false
     USE_RETEST_MAKER: false
-    ALLOCATED_SEED: 10000.0
-    VOL_MULTIPLIER: 3.0    # Require 3x average volume for high-risk assets
-    ADX_FILTER_LEVEL: 20
-    TRAILING_ATR_MULT: 5.0 # Let meme trends run further
+    ALLOCATED_SEED: 100.0
+    RISK_PER_TRADE: 0.02
+    VOL_MULTIPLIER: 0.9
+    EMA_TREND_PERIOD: 50
+    TRAILING_ATR_MULT: 3.6
+    ADX_FILTER_LEVEL: 22
+    ADX_4H_THRESHOLD: 11
+    CHAOS_THRESHOLD: 9.0
+    DONCHIAN_PERIOD: 20
+    BE_GUARD_THRESHOLD: 2.0
   
   "XAU/USDT":
     USE_SNIPER: true

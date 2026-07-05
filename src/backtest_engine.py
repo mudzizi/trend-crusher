@@ -45,6 +45,8 @@ class BacktestEngine:
             )
             
         if not isinstance(df_1h_ind.index, pd.DatetimeIndex): 
+            if 'timestamp' in df_1h_ind.columns:
+                df_1h_ind = df_1h_ind.set_index('timestamp')
             df_1h_ind.index = pd.to_datetime(df_1h_ind.index)
             
         m_times = df_1m['timestamp'].values.astype('datetime64[ns]')

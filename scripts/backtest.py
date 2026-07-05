@@ -41,9 +41,9 @@ def run_backtest(symbol, days, mode, strategy_name="v2", risk_pct=0.02, config_o
         print(f"Error: Data file {data_path} not found.")
         return None
 
-    df_1m = pd.read_csv(data_path, parse_dates=['timestamp'])
+    df_1m_all = pd.read_csv(data_path, parse_dates=['timestamp'])
     cutoff = datetime.now() - timedelta(days=days)
-    df_1m = df_1m[df_1m['timestamp'] >= cutoff].copy()
+    df_1m = df_1m_all[df_1m_all['timestamp'] >= cutoff].copy()
     
     if df_1m.empty:
         print(f"Error: No data for {symbol} in the requested period.")
@@ -85,9 +85,17 @@ def run_backtest(symbol, days, mode, strategy_name="v2", risk_pct=0.02, config_o
         strategy = TrendCrusherScalper(config=test_config)
     else:
         strategy = TrendCrusherV2(config=test_config)
+        
+    # Pre-calculate indicators on full dataset with warmup
+    print("📊 Pre-calculating warmed-up indicators...")
+    df_1h_all = get_all_base_bars(df_1m_all, test_config.get("SIGNAL_TIMEFRAME", "1h"), True)
+    df_4h_all = get_all_base_bars(df_1m_all, test_config.get("TREND_TIMEFRAME", "4h"), True)
+    df_ind_all = strategy.calculate_indicators(df_1h_all, df_4h_all, test_config)
+    
+    df_ind_test = df_ind_all[df_ind_all.index >= cutoff].copy()
     
     # 3. Run Engine
-    trades, equity_curve, df_ind = strategy.run_streaming_backtest(df_1m)
+    trades, equity_curve, df_ind = strategy.run_streaming_backtest(df_1m, pre_calculated_ind=df_ind_test)
     
     if not trades:
         print(f"No trades executed for {symbol}")
