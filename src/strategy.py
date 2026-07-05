@@ -64,7 +64,8 @@ class TrendCrusherV2(BaseStrategy):
         
         triggered, new_sl = numba_check_exit(
             last_price, state['position'], state['entry_price'], state['max_price_seen'], state['min_price_seen'], state['sl_price'],
-            row['atr'], config.get("TRAILING_ATR_MULT", 3.0), config.get("USE_ADAPTIVE_TRAIL", False), steps_arr, config.get("BE_GUARD_THRESHOLD", 0.0)
+            row['atr'], config.get("TRAILING_ATR_MULT", 3.0), config.get("USE_ADAPTIVE_TRAIL", False), steps_arr, 
+            config.get("BE_GUARD_THRESHOLD", 0.0), config.get("BE_GUARD_OFFSET", 0.005)
         )
         
         # Update state so live bot picks up the new protected SL
@@ -161,7 +162,7 @@ class TrendCrusherScalper(BaseStrategy):
         triggered, new_sl = numba_check_exit_scalper(
             last_price, state['position'], state['entry_price'], state['max_price_seen'], state['min_price_seen'], state['sl_price'],
             row['atr'], config.get("TRAILING_ATR_MULT", 3.0), config.get("USE_ADAPTIVE_TRAIL", False), steps_arr, 
-            be_guard, config.get("TAKE_PROFIT_ATR_MULT", 0.0), config.get("TAKE_PROFIT_PCT", 0.0)
+            be_guard, config.get("TAKE_PROFIT_ATR_MULT", 0.0), config.get("TAKE_PROFIT_PCT", 0.0), config.get("BE_GUARD_OFFSET", 0.005)
         )
         
         state['sl_price'] = new_sl
@@ -173,7 +174,7 @@ class TrendCrusherScalper(BaseStrategy):
         return numba_find_first_exit_scalper(
             closes, lookup_indices, position, entry_price, initial_max, initial_min, initial_sl,
             atrs, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard,
-            config.get("TAKE_PROFIT_ATR_MULT", 0.0), config.get("TAKE_PROFIT_PCT", 0.0)
+            config.get("TAKE_PROFIT_ATR_MULT", 0.0), config.get("TAKE_PROFIT_PCT", 0.0), config.get("BE_GUARD_OFFSET", 0.005)
         )
 
     def run_streaming_backtest(self, df_1m, **kwargs):

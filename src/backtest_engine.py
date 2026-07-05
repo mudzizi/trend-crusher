@@ -125,7 +125,7 @@ class BacktestEngine:
                     rel_idx, max_p, min_p = numba_find_first_exit(
                         m_closes[i:], valid_lookup_idx[i:], strategy.position, strategy.entry_price, 
                         strategy.max_price_seen, strategy.min_price_seen, strategy.sl_price, 
-                        i_atr, a_t_m, u_a, steps_arr, b_g_t
+                        i_atr, a_t_m, u_a, steps_arr, b_g_t, config.get("BE_GUARD_OFFSET", 0.005)
                     )
                 if rel_idx != -1:
                     old_i = i

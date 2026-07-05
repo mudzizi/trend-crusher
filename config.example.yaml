@@ -45,6 +45,7 @@ AVG_VOL_PERIOD: 20
 INITIAL_SL_ATR: 2.0
 ADX_FILTER_LEVEL: 15
 SNIPER_PROXIMITY_PCT: 0.005 # 0.5% proximity to trigger Sniper ambush
+BE_GUARD_OFFSET: 0.005      # 0.5% profit guaranteed when BE Guard triggers (0.005 = 0.5%)
 
 # --- SYMBOL SPECIFIC OVERRIDES (RECOMMENDED DEFAULTS) ---
 # You can customize ANY parameter for specific coins here.

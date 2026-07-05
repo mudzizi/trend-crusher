@@ -84,13 +84,13 @@ def numba_check_entry(last_price, ema_h, upper, lower, atr, adx, avg_vol, volume
 
 @njit
 def numba_check_exit(last_price, position, entry_price, max_price_seen, min_price_seen, sl_price, 
-                     atr, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0):
+                     atr, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0, be_guard_offset=0.001):
     curr_atr_mult = atr_trail_mult
     pnl_pct = ((last_price / entry_price) - 1) * 100 * position
 
     # 1. Break-even Guard
     if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-        be_sl = entry_price * (1 + 0.005 * position)
+        be_sl = entry_price * (1 + be_guard_offset * position)
         if position == 1: sl_price = max(sl_price, be_sl)
         else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
 
@@ -112,7 +112,7 @@ def numba_check_exit(last_price, position, entry_price, max_price_seen, min_pric
 
 @njit
 def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial_max, initial_min, initial_sl,
-                          atrs, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0):
+                          atrs, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0, be_guard_offset=0.001):
     max_p, min_p, sl_p = initial_max, initial_min, initial_sl
     for i in range(len(closes)):
         idx = lookup_indices[i]
@@ -122,7 +122,7 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
         pnl_pct = ((last_p / entry_price) - 1) * 100 * position
 
         if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-            be_sl = entry_price * (1 + 0.005 * position)
+            be_sl = entry_price * (1 + be_guard_offset * position)
             if position == 1: sl_p = max(sl_p, be_sl)
             else: sl_p = min(sl_p, be_sl) if sl_p > 0 else be_sl
 
@@ -165,7 +165,7 @@ def numba_check_entry_scalper(last_price, ema_h, upper, lower, atr, adx, avg_vol
 @njit
 def numba_check_exit_scalper(last_price, position, entry_price, max_price_seen, min_price_seen, sl_price, 
                              atr, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0,
-                             take_profit_atr_mult=0.0, take_profit_pct=0.0):
+                             take_profit_atr_mult=0.0, take_profit_pct=0.0, be_guard_offset=0.001):
     pnl_pct = ((last_price / entry_price) - 1) * 100 * position
     
     if take_profit_pct > 0.0 and pnl_pct >= take_profit_pct:
@@ -182,7 +182,7 @@ def numba_check_exit_scalper(last_price, position, entry_price, max_price_seen, 
                 return True, sl_price
 
     if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-        be_sl = entry_price * (1 + 0.005 * position)
+        be_sl = entry_price * (1 + be_guard_offset * position)
         if position == 1: sl_price = max(sl_price, be_sl)
         else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
 
@@ -204,7 +204,7 @@ def numba_check_exit_scalper(last_price, position, entry_price, max_price_seen, 
 @njit
 def numba_find_first_exit_scalper(closes, lookup_indices, position, entry_price, initial_max, initial_min, initial_sl,
                                   atrs, atr_trail_mult, use_adaptive, adaptive_steps_arr, be_guard_threshold=0.0,
-                                  take_profit_atr_mult=0.0, take_profit_pct=0.0):
+                                  take_profit_atr_mult=0.0, take_profit_pct=0.0, be_guard_offset=0.001):
     max_p, min_p, sl_p = initial_max, initial_min, initial_sl
     for i in range(len(closes)):
         idx = lookup_indices[i]
@@ -227,7 +227,7 @@ def numba_find_first_exit_scalper(closes, lookup_indices, position, entry_price,
                     return i, max_p, min_p
 
         if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-            be_sl = entry_price * (1 + 0.005 * position)
+            be_sl = entry_price * (1 + be_guard_offset * position)
             if position == 1: sl_p = max(sl_p, be_sl)
             else: sl_p = min(sl_p, be_sl) if sl_p > 0 else be_sl
 
