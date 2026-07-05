@@ -90,7 +90,7 @@ def numba_check_exit(last_price, position, entry_price, max_price_seen, min_pric
 
     # 1. Break-even Guard
     if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-        be_sl = entry_price * (1 + 0.001 * position)
+        be_sl = entry_price * (1 + 0.005 * position)
         if position == 1: sl_price = max(sl_price, be_sl)
         else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
 
@@ -122,7 +122,7 @@ def numba_find_first_exit(closes, lookup_indices, position, entry_price, initial
         pnl_pct = ((last_p / entry_price) - 1) * 100 * position
 
         if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-            be_sl = entry_price * (1 + 0.001 * position)
+            be_sl = entry_price * (1 + 0.005 * position)
             if position == 1: sl_p = max(sl_p, be_sl)
             else: sl_p = min(sl_p, be_sl) if sl_p > 0 else be_sl
 
@@ -182,7 +182,7 @@ def numba_check_exit_scalper(last_price, position, entry_price, max_price_seen, 
                 return True, sl_price
 
     if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-        be_sl = entry_price * (1 + 0.001 * position)
+        be_sl = entry_price * (1 + 0.005 * position)
         if position == 1: sl_price = max(sl_price, be_sl)
         else: sl_price = min(sl_price, be_sl) if sl_price > 0 else be_sl
 
@@ -227,7 +227,7 @@ def numba_find_first_exit_scalper(closes, lookup_indices, position, entry_price,
                     return i, max_p, min_p
 
         if be_guard_threshold > 0 and pnl_pct >= be_guard_threshold:
-            be_sl = entry_price * (1 + 0.001 * position)
+            be_sl = entry_price * (1 + 0.005 * position)
             if position == 1: sl_p = max(sl_p, be_sl)
             else: sl_p = min(sl_p, be_sl) if sl_p > 0 else be_sl
 
