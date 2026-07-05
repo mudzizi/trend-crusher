@@ -61,7 +61,7 @@ def index():
             'options': {'defaultType': 'future'},
             'timeout': 10000
         })
-    symbols = CONFIG.get("SYMBOLS_LIST", [CONFIG["SYMBOL"]])
+    symbols = CONFIG.get("SYMBOLS_LIST", [CONFIG.get("SYMBOL", "BTC/USDT")])
     market_summaries = []
     active_positions = []
     live_monitors = [] # Initialize outside try
