@@ -297,10 +297,24 @@ def index():
     # Performance Stats
     win_rate = 0
     total_pnl = 0
+    coin_pnls = {}
+    
+    # Initialize all configured symbols with 0.0 PnL
+    for sym in symbols:
+        coin_pnls[sym] = 0.0
+        
     if len(trades_list) > 0:
-        wins = [t for t in trades_list if t['pnl_pct'] > 0]
+        wins = [t for t in trades_list if t.get('pnl_pct', 0) > 0]
         win_rate = (len(wins) / len(trades_list)) * 100
-        total_pnl = sum([t['pnl_usdt'] for t in trades_list])
+        total_pnl = sum([t.get('pnl_usdt', 0) for t in trades_list])
+        
+        # Calculate cumulative PnL per coin
+        for t in trades_list:
+            sym = t.get('symbol')
+            if sym in coin_pnls:
+                coin_pnls[sym] += t.get('pnl_usdt', 0)
+            else:
+                coin_pnls[sym] = t.get('pnl_usdt', 0)
 
     # 4. Fetch Backtest Reports (Recursive Scan)
     backtest_reports = []
@@ -335,6 +349,7 @@ def index():
                            trades=trades_list,
                            balance=equity_df['balance'].iloc[-1] if not equity_df.empty else CONFIG["SEED"],
                            total_return=total_pnl,
+                           coin_pnls=coin_pnls,
                            win_rate=round(win_rate, 1),
                            chart_data=chart_data,
                            backtest_reports=backtest_reports,

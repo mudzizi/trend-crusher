@@ -329,18 +329,18 @@ class SymbolBotAsync:
                 if status == 'FILLED':
                     if oid == self.sl_order_id or (self.position != 0 and side == ('sell' if self.position == 1 else 'buy')):
                         self.logger.info(f"🛡️ SL/Exit FILLED for {self.symbol}")
-                        await self._on_fill_success(-1 if side == 'buy' else 1, is_exit=True, price=avg_p)
+                        await self._on_fill_success(-1 if side == 'buy' else 1, is_exit=True, price=avg_p, exit_order_id=oid)
                     elif oid == self.active_sniper_order_id:
                         self.logger.info(f"🎯 Sniper FILLED for {self.symbol}")
                         self.active_sniper_order_id = None
-                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p)
+                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p, entry_order_id=oid)
                     elif oid == self.active_retest_order_id:
                         self.logger.info(f"🎣 Retest FILLED for {self.symbol}")
                         self.active_retest_order_id = None
-                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p)
+                        await self._on_fill_success(1 if side == 'buy' else -1, price=avg_p, entry_order_id=oid)
             except Exception as e: self.logger.error(f"Order update error: {e}")
 
-    async def _on_fill_success(self, direction, is_exit=False, price=0):
+    async def _on_fill_success(self, direction, is_exit=False, price=0, exit_order_id=None, entry_order_id=None):
         if is_exit:
             if self.sl_order_id and not self.settings.get("DRY_RUN"):
                 try:
@@ -350,13 +350,66 @@ class SymbolBotAsync:
                     self.logger.info(f"ℹ️ [{self.symbol}] SL order cancel request skipped/failed on exit (likely already filled/closed): {ex}")
             pnl_pct = ((price / self.entry_price) - 1) * 100 * self.position if self.entry_price != 0 else 0
             pnl_usdt = (price - self.entry_price) * self.quantity * self.position if self.entry_price != 0 else 0
+            
+            # Fetch actual PnL from exchange if not DRY_RUN
+            if not self.settings.get("DRY_RUN"):
+                try:
+                    await asyncio.sleep(2)  # Give exchange a moment to process fills
+                    trades = await self.adapter.retry_api_call(self.exchange.fetch_my_trades, self.symbol, limit=15)
+                    
+                    exit_trades = []
+                    if exit_order_id:
+                        exit_trades = [t for t in trades if str(t.get('orderId')) == str(exit_order_id)]
+                    
+                    if not exit_trades:
+                        now_ms = int(time.time() * 1000)
+                        exit_trades = [t for t in trades if (now_ms - t['timestamp']) < 60000 and float(t.get('info', {}).get('realizedPnl', 0.0)) != 0.0]
+                    
+                    if exit_trades:
+                        realized_pnl = 0.0
+                        total_commission = 0.0
+                        for t in exit_trades:
+                            info = t.get('info', {})
+                            realized_pnl += float(info.get('realizedPnl', 0.0))
+                            total_commission += float(info.get('commission', 0.0))
+                        
+                        # Actual net PnL (realized PnL from exchange minus exit and entry commissions)
+                        pnl_usdt = realized_pnl - total_commission - getattr(self, 'entry_fee', 0.0)
+                        if self.entry_price != 0 and self.quantity != 0:
+                            pnl_pct = (pnl_usdt / (self.entry_price * self.quantity)) * 100
+                        self.logger.info(f"💰 [{self.symbol}] Actual Exchange PnL: Gross={realized_pnl:.4f} USDT, EntryFee={getattr(self, 'entry_fee', 0.0):.4f} USDT, ExitFee={total_commission:.4f} USDT, Net={pnl_usdt:.4f} USDT, Net PnL%={pnl_pct:.2f}%")
+                except Exception as ex:
+                    self.logger.error(f"⚠️ [{self.symbol}] Error fetching actual PnL from exchange: {ex}")
+            
             await _maybe_await(self.db.log_trade_close(self.symbol, price, pnl_pct, pnl_usdt))
             await self.pm.update_balance_after_trade(self.symbol, pnl_usdt)
             self.notifier.notify_exit(f"Async {self.symbol}", price, pnl_pct, pnl_usdt)
-            self.position, self.entry_price, self.quantity, self.sl_order_id = 0, 0, 0, None
+            self.position, self.entry_price, self.quantity, self.sl_order_id, self.entry_fee = 0, 0, 0, None, 0.0
         else:
             self.position, self.entry_price = direction, price
             self.max_price_seen = self.min_price_seen = price
+            
+            # Fetch actual entry fee from exchange if not DRY_RUN
+            self.entry_fee = 0.0
+            if not self.settings.get("DRY_RUN"):
+                try:
+                    await asyncio.sleep(2)  # Give exchange a moment to process fills
+                    trades = await self.adapter.retry_api_call(self.exchange.fetch_my_trades, self.symbol, limit=10)
+                    
+                    entry_trades = []
+                    if entry_order_id:
+                        entry_trades = [t for t in trades if str(t.get('orderId')) == str(entry_order_id)]
+                    
+                    if not entry_trades:
+                        now_ms = int(time.time() * 1000)
+                        entry_trades = [t for t in trades if (now_ms - t['timestamp']) < 60000 and float(t.get('info', {}).get('realizedPnl', 0.0)) == 0.0]
+                    
+                    if entry_trades:
+                        self.entry_fee = sum([float(t.get('info', {}).get('commission', 0.0)) for t in entry_trades])
+                        self.logger.info(f"💰 [{self.symbol}] Actual Entry Fee fetched from exchange: {self.entry_fee:.4f} USDT")
+                except Exception as ex:
+                    self.logger.error(f"⚠️ [{self.symbol}] Error fetching actual entry fee: {ex}")
+
             await _maybe_await(self.db.log_trade_open(self.symbol, ('LONG' if direction==1 else 'SHORT'), price, self.quantity, 100))
             self.notifier.notify_entry(f"Async {self.symbol}", price, self.sl_price, 100)
             await self.sync_sl_to_exchange(force_create=True)
@@ -591,7 +644,8 @@ class SymbolBotAsync:
                 return
             order = await self.adapter.create_market_order('buy' if direction == 1 else 'sell', self.quantity)
             self.entry_price = float(order.get('average') or order.get('price') or self.last_price) if isinstance(order, dict) else self.last_price
-            await self._on_fill_success(direction, price=self.entry_price)
+            entry_order_id = order.get('id') if isinstance(order, dict) else None
+            await self._on_fill_success(direction, price=self.entry_price, entry_order_id=entry_order_id)
         except Exception as e: self.logger.error(f"Entry error: {e}")
 
     async def execute_exit(self):
@@ -601,7 +655,8 @@ class SymbolBotAsync:
                 return
             order = await self.adapter.create_reduce_only_market_order('sell' if self.position == 1 else 'buy', self.quantity)
             exit_price = float(order.get('average') or order.get('price') or self.last_price) if isinstance(order, dict) else self.last_price
-            await self._on_fill_success(0, is_exit=True, price=exit_price)
+            exit_order_id = order.get('id') if isinstance(order, dict) else None
+            await self._on_fill_success(0, is_exit=True, price=exit_price, exit_order_id=exit_order_id)
         except Exception as e:
             if "-2022" in str(e):
                 self.position = 0

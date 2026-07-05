@@ -57,6 +57,10 @@
         /* Readiness Summary */
         .readiness-bar { height: 4px; border-radius: 2px; background: #334155; overflow: hidden; }
         .readiness-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+        @media (min-width: 768px) {
+            .border-md-end { border-right: 1px solid #334155 !important; }
+        }
     </style>
 </head>
 <body>
@@ -85,6 +89,34 @@
     </nav>
 
     <div class="container-fluid px-4">
+        <!-- Cumulative PnL Banner -->
+        <div class="card mb-4 shadow-sm" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155;">
+            <div class="card-body py-3 px-4">
+                <div class="row align-items-center g-3">
+                    <div class="col-12 col-md-3 border-md-end">
+                        <div class="small text-secondary fw-semibold mb-1" style="font-size: 0.75rem; letter-spacing: 0.5px;">TOTAL CUMULATIVE PNL</div>
+                        <div class="fs-3 fw-bold {% if total_return >= 0 %}text-up{% else %}text-down{% endif %}">
+                            {% if total_return >= 0 %}+{% endif %}${{ "{:,.2f}".format(total_return) }}
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-9">
+                        <div class="row row-cols-2 row-cols-sm-3 row-cols-md-4 g-2">
+                            {% for sym, pnl in coin_pnls.items() %}
+                            <div class="col">
+                                <div class="p-2 rounded" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.03);">
+                                    <div class="small text-secondary mb-1" style="font-size: 0.65rem; font-weight: 600; letter-spacing: 0.3px;">{{ sym }}</div>
+                                    <div class="small fw-bold {% if pnl >= 0 %}text-up{% else %}text-down{% endif %}" style="font-size: 0.9rem;">
+                                        {% if pnl >= 0 %}+{% endif %}${{ "{:,.2f}".format(pnl) }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Live Monitoring Section -->
         <h4 class="mb-3 d-flex align-items-center">
             <span class="me-2">🛰️</span> Live Strategy Monitoring
