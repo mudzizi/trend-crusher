@@ -125,12 +125,10 @@ SYMBOL_SETTINGS:
 # --- ADAPTIVE TRAILING STOP ---
 USE_ADAPTIVE_TRAIL: true
 ADAPTIVE_TRAIL_STEPS:
-  - pnl_pct: 2.0
-    tighten_ratio: 0.8  # Tighten to 80% of current ATR mult
-  - pnl_pct: 5.0
-    tighten_ratio: 0.6  # Tighten to 60% of current ATR mult
-  - pnl_pct: 8.0
-    tighten_ratio: 0.4  # Tighten to 40% of current ATR mult
+  - pnl_pct: 15.0
+    tighten_ratio: 0.6
+  - pnl_pct: 30.0
+    tighten_ratio: 0.3
 
 # --- MISC ---
 SIGNAL_TIMEFRAME: "1h"
