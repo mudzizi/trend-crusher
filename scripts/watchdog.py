@@ -35,6 +35,10 @@ def run_bot():
         if exit_code == 0:
             logger.info("✅ Bot stopped normally (Exit Code 0). Stopping Watchdog.")
             break
+        elif exit_code == 99:
+            logger.info("🔄 Bot requested restart (Exit Code 99). Restarting immediately...")
+            notifier.send_message("🔄 **Bot Restarting...**\n시스템을 재시작하고 지표를 갱신합니다.")
+            time.sleep(2)
         else:
             logger.error(f"🚨 Bot CRASHED with Exit Code {exit_code}!")
             error_msg = f"🆘 *[WATCHDOG]* Bot died unexpectedly (Code: {exit_code})."

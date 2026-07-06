@@ -17,6 +17,7 @@ class TelegramNotifier:
         
         commands = [
             {"command": "status", "description": "📊 Portfolio Status & PnL"},
+            {"command": "restart", "description": "🔄 Restart Bot System"},
             {"command": "retest_on", "description": "🎣 Enable Retest Maker"},
             {"command": "retest_off", "description": "🚫 Disable Retest Maker"},
             {"command": "sniper_on", "description": "🏹 Enable Sniper Ambush"},

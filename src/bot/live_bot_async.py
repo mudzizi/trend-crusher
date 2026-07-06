@@ -769,6 +769,10 @@ async def handle_commands(bots, notifier):
                         status = "📊 Bot Status:\n"
                         for b in bots.values(): status += b.get_detailed_status()
                         notifier.send_message(status)
+                    elif text == "/restart":
+                        notifier.send_message("🔄 **Bot Restart Requested...**\n프로세스를 안전하게 종료하고 재시작합니다.")
+                        await asyncio.sleep(1)
+                        os._exit(99)
                     elif text == "/close_all":
                         await asyncio.gather(*[b.force_exit() for b in bots.values()])
                         notifier.send_message("✅ Closed all."); os._exit(0)
