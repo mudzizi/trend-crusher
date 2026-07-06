@@ -58,7 +58,7 @@ class TradingVisualizer:
     def generate_comprehensive_report(self, df_ind, trades, equity_curve, symbol, params=None):
         """
         Generates a highly detailed visual report with Price, Chaos/Chop, ADX, and Equity.
-        Updated for V7.0 "Chaos & Squeeze" Engine.
+        Updated for V7.1 "Chaos & Squeeze" Engine.
         """
         plt.style.use('dark_background')
         fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(18, 24), 
@@ -74,7 +74,7 @@ class TradingVisualizer:
         ax1.plot(df['timestamp'], df['close'], label='Price', color='white', alpha=0.7, linewidth=1.5)
         ax1.plot(df['timestamp'], df['upper'], label='Donchian Upper', color='cyan', linestyle='--', alpha=0.5)
         ax1.plot(df['timestamp'], df['lower'], label='Donchian Lower', color='orange', linestyle='--', alpha=0.5)
-        ax1.plot(df['timestamp'], df['ema_h'], label='Trend EMA (V7.0)', color='yellow', alpha=0.6)
+        ax1.plot(df['timestamp'], df['ema_h'], label='Trend EMA (V7.1)', color='yellow', alpha=0.6)
         
         # Plot Trades
         for t in trades:
@@ -90,11 +90,11 @@ class TradingVisualizer:
             ax1.text(0.02, 0.95, param_text, transform=ax1.transAxes, verticalalignment='top',
                      bbox=dict(boxstyle='round', facecolor='black', alpha=0.5, edgecolor='gray'))
 
-        ax1.set_title(f"🚀 {symbol} V7.0 Chaos & Squeeze Report", fontsize=18, fontweight='bold', color='gold')
+        ax1.set_title(f"🚀 {symbol} V7.1 Chaos & Squeeze Report", fontsize=18, fontweight='bold', color='gold')
         ax1.legend(loc='upper right', frameon=False)
         ax1.grid(alpha=0.1)
 
-        # 2. Chaos & Choppiness (V7.0 Special)
+        # 2. Chaos & Choppiness (V7.1 Special)
         ax2.plot(df['timestamp'], df['chaos'], color='magenta', label='Chaos Index (Panic)', linewidth=2)
         ax2.plot(df['timestamp'], df['chop'], color='purple', label='Choppiness (Range)', alpha=0.6)
         ax2.axhline(61.8, color='red', linestyle=':', alpha=0.4, label='Chop Limit')

@@ -68,7 +68,7 @@ class UnifiedOptimizerV7:
         return ret, mdd
 
 def run_optimization(symbol, days, trials):
-    print(f"\n🚀 [V7.0-Permissive] Starting Optimization for {symbol}")
+    print(f"\n🚀 [V7.1-Permissive] Starting Optimization for {symbol}")
     print(f"📅 Period: {days} Days | Warmup: 60 Days | Trials: {trials}")
     
     fetcher = BinanceDataFetcher()

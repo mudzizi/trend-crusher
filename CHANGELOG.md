@@ -2,6 +2,24 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.10.0] - 2026-07-06
+### **🔄 Graceful Remote Restart, Parameterized BE Guard, and SUI/SOL Optimizations**
+- **Graceful Remote Restart via Telegram**:
+  - Added a `/restart` menu command to the Telegram user interface.
+  - Integrated command catcher in `src/bot/live_bot_async.py` which triggers process termination with exit code `99`.
+  - Updated `scripts/watchdog.py` to recognize exit code `99` as a graceful restart request, immediately rebooting the bot in 2 seconds without sending fake crash alerts.
+- **Parameterized Break-Even Offset**:
+  - Parameterized the hardcoded break-even profit offset using a new config setting `BE_GUARD_OFFSET` (default: 0.005, providing a 0.5% profit protection).
+  - Modified Numba exit checkers in `src/strategy_numba.py` to receive `be_guard_offset` as a parameter.
+  - Updated `src/strategy.py` and `src/backtest_engine.py` to dynamically fetch and pass the parameter.
+- **Optimal SUI and SOL Overrides**:
+  - Executed 100-trial parameter searches for SUI and SOL on 365 days of 1-minute historical data.
+  - Applied SUI and SOL optimal parameter overrides in both `config.yaml` and `config.example.yaml`:
+    - **SUI/USDT** (`Return: +132.28%`, `MDD: 28.32%`): Market entry, `vol_mult=1.0`, `trail_atr_mult=5.5`, `ema=50`, `be_guard=5.0%`.
+    - **SOL/USDT** (`Return: +86.93%`, `MDD: 22.78%`): Sniper entry, `vol_mult=2.5`, `trail_atr_mult=4.5`, `ema=50`, `be_guard=2.0%`.
+- **Minor Version Incrementation**:
+  - Upgraded unified backtester, parameter optimizer, and visual report generator versions from `V7.0` to `V7.1`.
+
 ## [13.9.6] - 2026-06-30
 ### **📊 Scalper Strategy Scenario & 12-Month Chronological Breakdown Backtesting**
 - **Scenario Testing Script**: Created a new test utility `scripts/test_scalper_scenarios.py` to systematically evaluate a multi-parameter grid for `TrendCrusherScalper`.

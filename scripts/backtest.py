@@ -21,7 +21,7 @@ def calculate_mdd(equity_curve):
     return np.max(drawdown)
 
 def run_backtest(symbol, days, mode, strategy_name="v2", risk_pct=0.02, config_overrides=None):
-    print(f"\n🚀 [V7.0] Backtesting {symbol} | Strategy: {strategy_name} | Mode: {mode} | Risk: {risk_pct*100}% | Last {days} Days")
+    print(f"\n🚀 [V7.1] Backtesting {symbol} | Strategy: {strategy_name} | Mode: {mode} | Risk: {risk_pct*100}% | Last {days} Days")
     
     # 1. Sync Data
     fetcher = BinanceDataFetcher()
@@ -150,7 +150,7 @@ def run_backtest(symbol, days, mode, strategy_name="v2", risk_pct=0.02, config_o
     }
 
 def main():
-    parser = argparse.ArgumentParser(description="TrendCrusher V7.0 Unified Backtester")
+    parser = argparse.ArgumentParser(description="TrendCrusher V7.1 Unified Backtester")
     parser.add_argument("--symbol", type=str, default="ETH/USDT", help="Symbol or list")
     parser.add_argument("--days", type=int, default=365, help="Backtest period")
     parser.add_argument("--mode", type=str, choices=["market", "sniper", "retest"], default="market")

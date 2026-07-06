@@ -1,3 +1,26 @@
+# Trading Session Log (2026-07-06) - Telegram Remote Restart & SUI/SOL Optimizations (v13.10.0)
+
+## ✅ 완료된 작업
+1. **텔레그램 원격 재시작(Remote Restart) 기능 구현**:
+   * 텔레그램 메인 메뉴에 `restart` 명령어를 등록하고, `/restart` 수신 시 종료 코드 `99`로 강제 종료(Exit)되도록 `live_bot_async.py`에 감지기 추가.
+   * `scripts/watchdog.py`에서 종료 코드 `99`를 인지하면 알림을 건너뛰고 2초 만에 즉시 봇을 재가동하는 Graceful Reboot 메커니즘 구축.
+2. **본절가 보존 비율(BE_GUARD_OFFSET)의 설정 매개변수화**:
+   * 기존 하드코딩되었던 0.5% 수익 보정치를 설정값 `BE_GUARD_OFFSET`로 추가하여 `config.yaml`과 `config.example.yaml`에서 동적 제어하도록 개선.
+   * Numba 함수 및 백테스터 엔진에 `be_guard_offset` 인자를 전달하도록 수정 완료.
+3. **SUI/USDT 및 SOL/USDT 파라미터 최적화 및 1년 백테스트**:
+   * Optuna를 사용하여 1분 봉 1년치 역사적 데이터 기준 100회 최적화 시뮬레이션을 수행.
+   * **SUI/USDT**: 수익률 **+132.28%** / MDD **28.32%** (Market 모드, `vol_mult=1.0`, `trail_atr_mult=5.5`, `ema=50`, `be_guard=5.0%`)
+   * **SOL/USDT**: 수익률 **+86.93%** / MDD **22.78%** (Sniper 모드, `vol_mult=2.5`, `trail_atr_mult=4.5`, `ema=50`, `be_guard=2.0%`)
+   * 최적 설정값을 config 파일에 동기화하고 asset growth 차트를 리포트에 등록.
+4. **마이너 버전 업데이트**:
+   * 백테스터, 파라미터 최적화 스크립트, 그리고 Matplotlib 보고서 생성기의 식별 버전을 `V7.0`에서 `V7.1`로 상향 조정.
+
+## 📊 테스트 결과
+- `python3 scripts/backtest.py --symbol SUI/USDT --days 365` (최적화 세팅 백테스트 완료, 수익 +132.28%) ✅
+- `python3 scripts/backtest.py --symbol SOL/USDT --days 365 --mode sniper` (최적화 세팅 백테스트 완료, 수익 +86.93%) ✅
+
+---
+
 # Trading Session Log (2026-06-30) - Scalper Strategy Scenario & Monthly Breakdown Backtesting (v13.9.6)
 
 ## ✅ 완료된 작업
