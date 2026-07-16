@@ -2,6 +2,11 @@
 
 All notable changes to the TrendCrusher project will be documented in this file.
 
+## [13.10.1] - 2026-07-17
+### **🐛 Fix Infinite Telegram Restart Loop**
+- **Startup Queue Flush**: Added a startup flush routine in `handle_commands` to retrieve and immediately confirm (acknowledge) any pending updates before beginning the polling loop. This prevents the bot from processing stale commands sent while it was offline.
+- **Explicit Command Acknowledgement**: Added explicit offset confirmations (`notifier.get_updates(offset)`) immediately prior to calling `os._exit()` in both `/restart` and `/close_all` command handlers. This guarantees that Telegram marks the triggering messages as processed/read, preventing the bot from fetching the same message and restarting endlessly upon startup.
+
 ## [13.10.0] - 2026-07-06
 ### **🔄 Graceful Remote Restart, Parameterized BE Guard, and SUI/SOL Optimizations**
 - **Graceful Remote Restart via Telegram**:

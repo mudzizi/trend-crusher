@@ -1,3 +1,15 @@
+# Trading Session Log (2026-07-17) - Fix Telegram Infinite Restart Loop (v13.10.1)
+
+## ✅ 완료된 작업
+1. **텔레그램 무한 재부팅 루프 버그 수정**:
+   * **원인**: `/restart` 명령어로 봇이 강제 종료(`os._exit`)될 때, Telegram API에 해당 메시지의 수신 완료 확인(Acknowledgement)을 전송하지 못하여 대기열에 `/restart` 명령어가 계속 미처리 상태로 남아있었음. 이로 인해 봇이 재기동될 때마다 동일한 `/restart` 메시지를 다시 읽어 무한 재부팅을 유발함.
+   * **해결책 1 (송신 처리 시 확인)**: `/restart` 및 `/close_all` 처리 루프 내에서 종료 코드를 실행하기 전 `notifier.get_updates(offset)`를 즉시 강제 호출하여 Telegram 서버 측에 수신 완료 처리를 확정지음.
+   * **해결책 2 (시작 시 대기열 청소)**: 봇이 부팅될 때 `handle_commands` 시작부에서 미처리 상태로 쌓여있던 모든 이전 텔레그램 명령들을 한 번 일괄 조회한 뒤, 강제로 확인 오프셋을 증가시켜 대기열을 완전히 비우는(Flush) 초기화 로직 구현.
+2. **버전 및 Git 동기화**:
+   * 변경 사항을 `CHANGELOG.md` 및 `SESSION_LOG.md`에 기록하고 원격 리포지토리에 푸시함.
+
+---
+
 # Trading Session Log (2026-07-06) - Telegram Remote Restart & SUI/SOL Optimizations (v13.10.0)
 
 ## ✅ 완료된 작업

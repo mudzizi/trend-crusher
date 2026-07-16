@@ -757,6 +757,16 @@ class SymbolBotAsync:
             )
 
 async def handle_commands(bots, notifier):
+    # Flush existing updates on startup to avoid processing old command queue
+    try:
+        updates = notifier.get_updates()
+        if updates and updates.get("ok") and updates.get("result"):
+            latest_update_id = updates["result"][-1]["update_id"]
+            notifier.get_updates(latest_update_id + 1)
+            logger.info(f"🧹 Flushed {len(updates['result'])} pending Telegram updates on startup.")
+    except Exception as e:
+        logger.error(f"Failed to flush Telegram updates on startup: {e}")
+
     offset = None
     while True:
         try:
@@ -770,10 +780,12 @@ async def handle_commands(bots, notifier):
                         for b in bots.values(): status += b.get_detailed_status()
                         notifier.send_message(status)
                     elif text == "/restart":
+                        notifier.get_updates(offset) # Acknowledge /restart update
                         notifier.send_message("🔄 **Bot Restart Requested...**\n프로세스를 안전하게 종료하고 재시작합니다.")
                         await asyncio.sleep(1)
                         os._exit(99)
                     elif text == "/close_all":
+                        notifier.get_updates(offset) # Acknowledge /close_all update
                         await asyncio.gather(*[b.force_exit() for b in bots.values()])
                         notifier.send_message("✅ Closed all."); os._exit(0)
         except Exception as e: logger.error(f"Cmd error: {e}")
